@@ -1,0 +1,99 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-purelink}
+      POSTGRES_USER: ${POSTGRES_USER:-purelink}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-purelink}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-purelink} -d ${POSTGRES_DB:-purelink}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    working_dir: /app
+    command: >
+      sh -c "alembic upgrade head &&
+      uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    environment:
+      APP_NAME: ${APP_NAME:-PureLink}
+      APP_ENV: ${APP_ENV:-development}
+      APP_DEBUG: ${APP_DEBUG:-false}
+      APP_VERSION: ${APP_VERSION:-0.1.0}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      AUTH_SECRET_KEY: ${AUTH_SECRET_KEY:-purelink-dev-secret-key-change-me}
+      AUTH_ALGORITHM: ${AUTH_ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-purelink}:${POSTGRES_PASSWORD:-purelink}@db:5432/${POSTGRES_DB:-purelink}
+      DB_ECHO: ${DB_ECHO:-false}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-*}
+      CORS_ALLOW_METHODS: ${CORS_ALLOW_METHODS:-*}
+      CORS_ALLOW_HEADERS: ${CORS_ALLOW_HEADERS:-*}
+      CORS_ALLOW_CREDENTIALS: ${CORS_ALLOW_CREDENTIALS:-false}
+      UPLOAD_DIR: data/uploads
+      PARSED_DIR: data/parsed
+      CHUNK_DIR: data/chunks
+      VECTOR_STORE_DIR: data/vector_store
+      LLM_PROVIDER: ${LLM_PROVIDER:-heuristic}
+      LLM_API_BASE: ${LLM_API_BASE:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3).read()",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  worker:
+    build:
+      context: .
+      dockerfile: worker-go/Dockerfile
+    restart: unless-stopped
+    working_dir: /app
+    environment:
+      PURELINK_BASE_DIR: /app
+      DATABASE_URL: postgres://${POSTGRES_USER:-purelink}:${POSTGRES_PASSWORD:-purelink}@db:5432/${POSTGRES_DB:-purelink}
+      UPLOAD_DIR: data/uploads
+      PARSED_DIR: data/parsed
+      CHUNK_DIR: data/chunks
+      VECTOR_STORE_DIR: data/vector_store
+      WORKER_POLL_INTERVAL: ${WORKER_POLL_INTERVAL:-5s}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

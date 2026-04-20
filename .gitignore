@@ -1,0 +1,27 @@
+# Local environment and secrets
+.env
+.env.local
+
+# Python runtime
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Runtime artifacts
+data/uploads/
+data/parsed/
+data/chunks/
+data/vector_store/
+logs/
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/
+
+# Local stray files
+=0.0.9,
+
+# Go build outputs
+worker-go/parse-worker

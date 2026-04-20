@@ -1,0 +1,3 @@
+PureLink is an AI-powered knowledge platform.
+It supports personal and team knowledge bases.
+This file is used for E2E testing of the personal flow.

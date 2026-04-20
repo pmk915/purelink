@@ -1,0 +1,42 @@
+name: smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare environment
+        run: cp .env.example .env
+
+      - name: Run smoke flow
+        run: make KEEP_STACK_UP=1 smoke
+
+      - name: Show compose status
+        if: always()
+        run: docker compose ps
+
+      - name: Show API logs
+        if: always()
+        run: docker compose logs --tail=200 api
+
+      - name: Show worker logs
+        if: always()
+        run: docker compose logs --tail=200 worker
+
+      - name: Show DB logs
+        if: always()
+        run: docker compose logs --tail=120 db
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose down

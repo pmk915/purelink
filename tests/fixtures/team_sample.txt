@@ -1,0 +1,3 @@
+This is a team knowledge document.
+It explains internal engineering onboarding.
+Only approved team documents should enter retrieval.

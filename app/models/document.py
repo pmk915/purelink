@@ -1,0 +1,95 @@
+from __future__ import annotations
+
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from sqlalchemy import BigInteger, DateTime, Enum as SAEnum, ForeignKey, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base
+from app.models.enums import DocumentProcessingStatus, DocumentReviewStatus, enum_values
+from app.models.mixins import PrimaryKeyMixin, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.document_task import DocumentTask
+    from app.models.knowledge_base import KnowledgeBase
+    from app.models.user import User
+
+
+class Document(PrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "documents"
+
+    knowledge_base_id: Mapped[int] = mapped_column(
+        ForeignKey("knowledge_bases.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    owner_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    submitted_by: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    file_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    review_status: Mapped[DocumentReviewStatus] = mapped_column(
+        SAEnum(
+            DocumentReviewStatus,
+            name="document_review_status",
+            native_enum=False,
+            create_constraint=True,
+            validate_strings=True,
+            values_callable=enum_values,
+        ),
+        default=DocumentReviewStatus.NOT_REQUIRED,
+        server_default=DocumentReviewStatus.NOT_REQUIRED.value,
+        nullable=False,
+    )
+    processing_status: Mapped[DocumentProcessingStatus] = mapped_column(
+        SAEnum(
+            DocumentProcessingStatus,
+            name="document_processing_status",
+            native_enum=False,
+            create_constraint=True,
+            validate_strings=True,
+            values_callable=enum_values,
+        ),
+        default=DocumentProcessingStatus.UPLOADED,
+        server_default=DocumentProcessingStatus.UPLOADED.value,
+        nullable=False,
+    )
+    reviewed_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    review_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    knowledge_base: Mapped["KnowledgeBase"] = relationship(back_populates="documents")
+    owner: Mapped["User"] = relationship(
+        back_populates="documents",
+        foreign_keys=[owner_id],
+    )
+    submitted_by_user: Mapped["User"] = relationship(
+        back_populates="submitted_documents",
+        foreign_keys=[submitted_by],
+    )
+    reviewed_by_user: Mapped["User | None"] = relationship(
+        back_populates="reviewed_documents",
+        foreign_keys=[reviewed_by],
+    )
+    tasks: Mapped[list["DocumentTask"]] = relationship(
+        back_populates="document",
+        cascade="all, delete-orphan",
+    )
