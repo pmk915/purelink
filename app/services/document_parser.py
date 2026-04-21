@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import logging
 from pathlib import Path
 
 from app.models.document import Document
@@ -12,6 +13,8 @@ SUPPORTED_PARSE_SUFFIXES = {
     ".txt": "plain_text",
     ".md": "markdown",
 }
+
+logger = logging.getLogger("purelink.documents")
 
 
 class DocumentParseError(ValueError):
@@ -41,18 +44,55 @@ def parse_document_to_local_result(
     team_id: int | None = None,
 ) -> ParsedDocumentResult:
     source_path = upload_root / document.storage_path
+    logger.info(
+        "parse start document_id=%s knowledge_base_id=%s scope=%s team_id=%s source_path=%s",
+        document.id,
+        document.knowledge_base_id,
+        scope.value,
+        team_id,
+        source_path,
+    )
     if not source_path.exists():
+        logger.error(
+            "parse source missing document_id=%s source_path=%s",
+            document.id,
+            source_path,
+        )
         raise DocumentParseError("Document source file does not exist.")
+
+    logger.info(
+        "parse source located document_id=%s source_path=%s size_bytes=%s",
+        document.id,
+        source_path,
+        source_path.stat().st_size,
+    )
 
     suffix = Path(document.original_filename).suffix.lower()
     parser = SUPPORTED_PARSE_SUFFIXES.get(suffix)
     if parser is None:
+        logger.error(
+            "parse unsupported suffix document_id=%s original_filename=%s",
+            document.id,
+            document.original_filename,
+        )
         raise DocumentParseError("Only .txt and .md documents are supported for parsing.")
 
     try:
         extracted_text = source_path.read_text(encoding="utf-8")
     except UnicodeDecodeError as exc:
+        logger.exception(
+            "parse decode failed document_id=%s source_path=%s",
+            document.id,
+            source_path,
+        )
         raise DocumentParseError("Document could not be decoded as UTF-8 text.") from exc
+
+    logger.info(
+        "parse extracted text document_id=%s parser=%s extracted_char_count=%s",
+        document.id,
+        parser,
+        len(extracted_text),
+    )
 
     relative_path = build_parsed_relative_path(
         scope=scope,
@@ -76,6 +116,11 @@ def parse_document_to_local_result(
     destination.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
+    )
+    logger.info(
+        "parse completed document_id=%s destination=%s",
+        document.id,
+        destination,
     )
     return ParsedDocumentResult(
         parsed_path=relative_path.as_posix(),

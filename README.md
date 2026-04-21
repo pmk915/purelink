@@ -45,6 +45,8 @@ This repository is suitable for local development, technical demos, portfolio pr
   团队文档必须先审核通过，才能进入检索链路
 - Parse -> chunk -> embed / index task chain  
   支持 parse -> chunk -> embed / index 任务链
+- Frontend-triggered processing uses synchronous `parse -> chunk -> embed` by default  
+  前端“开始处理”默认直接走同步 `parse -> chunk -> embed` 闭环，本地联调不强依赖 worker
 - Local runtime artifacts stored in `data/uploads`, `data/parsed`, `data/chunks`, `data/vector_store`  
   中间产物本地落盘，路径清晰可检查
 
@@ -67,6 +69,8 @@ This repository is suitable for local development, technical demos, portfolio pr
   Go worker 负责 parse / chunk / embed / index 任务
 - Docker Compose local stack  
   Docker Compose 本地一键启动
+- Next.js frontend MVP in `frontend/`  
+  `frontend/` 目录下提供了可运行的 Next.js 前端 MVP
 - Bash E2E scripts for demo and smoke verification  
   Bash E2E 脚本可直接用于演示和冒烟验证
 - GitHub Actions CI + smoke workflow  
@@ -143,25 +147,51 @@ python -m uvicorn app.main:app --reload
 You still need PostgreSQL available through `DATABASE_URL`.  
 这种方式仍然要求你本地有可用的 PostgreSQL，并且 `DATABASE_URL` 配置正确。
 
+### Frontend MVP | 前端 MVP 启动
+
+```bash
+cd /home/pmk/projects/purelink/frontend
+cp .env.example .env.local
+npm install
+npm run dev
+```
+
+Then open:  
+启动后访问：
+
+- Frontend: `http://127.0.0.1:3000`
+- Backend API: `http://127.0.0.1:8000/api/v1`
+
 ## Verification | 验证方式
 
 ### Local Tests | 本地测试
 
 ```bash
+cd /home/pmk/projects/purelink
 make test
 ```
 
 ### Minimal Smoke Flow | 最小冒烟验证
 
 ```bash
+cd /home/pmk/projects/purelink
 make smoke
 ```
 
 ### Full End-to-End Validation | 完整 E2E 验证
 
 ```bash
+cd /home/pmk/projects/purelink
 make e2e
 ```
+
+Recommended command sets:  
+推荐按下面两种场景执行：
+
+- Manual frontend-backend verification: start `api` and `frontend`, then register, create a knowledge base, upload a `.txt` or `.md`, click `开始处理`, and verify retrieval / ask. This path does not require the Go worker by default.  
+  手动前后端联调：启动 `api` 和 `frontend` 后，注册、创建知识库、上传 `.txt/.md`、点击“开始处理”、再验证检索和问答。这条路径默认不强依赖 Go worker。
+- Full scripted E2E and worker verification: use `make smoke` or `make e2e`, which both expect the full `db / api / worker` stack from `docker compose`.  
+  脚本式全流程和 worker 验证：使用 `make smoke` 或 `make e2e`，这两条命令都依赖 `docker compose` 拉起完整的 `db / api / worker` 环境。
 
 Current E2E coverage:  
 当前 E2E 覆盖：
@@ -181,6 +211,7 @@ Current E2E coverage:
 purelink/
 ├── app/                 # FastAPI app, models, schemas, services
 ├── alembic/             # Database migrations
+├── frontend/            # Next.js frontend MVP
 ├── worker-go/           # Go worker
 ├── scripts/e2e/         # Bash end-to-end test scripts
 ├── tests/               # Python tests and fixtures
@@ -197,6 +228,10 @@ purelink/
 
 - [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md): full milestone history and implementation notes  
   开发日志，包含详细里程碑、接口说明和实现记录
+- [test.md](test.md): practical frontend-backend and full-flow verification guide  
+  前后端联调与全流程验证手册
+- [frontend/README.md](frontend/README.md): frontend setup and local run guide  
+  前端启动说明
 - [PLAN.md](PLAN.md): roadmap and milestone planning  
   路线图和阶段计划
 - [CONTRIBUTING.md](CONTRIBUTING.md): contribution workflow  

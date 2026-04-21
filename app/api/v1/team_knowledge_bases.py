@@ -454,6 +454,11 @@ async def chunk_team_document_endpoint(
             team_id=team_id,
         )
     except DocumentChunkError as exc:
+        update_document_processing_status(
+            db,
+            document=document,
+            processing_status=DocumentProcessingStatus.FAILED,
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),

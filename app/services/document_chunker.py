@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import logging
 from pathlib import Path
 import re
 
@@ -11,6 +12,8 @@ from app.services.document_parser import build_parsed_relative_path
 
 
 DEFAULT_CHUNK_SIZE = 500
+
+logger = logging.getLogger("purelink.documents")
 
 
 class DocumentChunkError(ValueError):
@@ -48,16 +51,40 @@ def chunk_document_from_parsed_result(
         team_id=team_id,
     )
     parsed_source = parsed_root / parsed_relative_path
+    logger.info(
+        "chunk start document_id=%s knowledge_base_id=%s scope=%s team_id=%s parsed_source=%s chunk_size=%s",
+        document.id,
+        document.knowledge_base_id,
+        scope.value,
+        team_id,
+        parsed_source,
+        chunk_size,
+    )
     if not parsed_source.exists():
+        logger.error(
+            "chunk parsed source missing document_id=%s parsed_source=%s",
+            document.id,
+            parsed_source,
+        )
         raise DocumentChunkError("Parsed document result does not exist.")
 
     try:
         parsed_payload = json.loads(parsed_source.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
+        logger.exception(
+            "chunk parsed payload invalid document_id=%s parsed_source=%s",
+            document.id,
+            parsed_source,
+        )
         raise DocumentChunkError("Parsed document result is not valid JSON.") from exc
 
     content = parsed_payload.get("content")
     if not isinstance(content, str):
+        logger.error(
+            "chunk parsed payload missing content document_id=%s parsed_source=%s",
+            document.id,
+            parsed_source,
+        )
         raise DocumentChunkError("Parsed document result does not contain text content.")
 
     chunks = split_text_into_chunks(content, chunk_size=chunk_size)
@@ -94,6 +121,12 @@ def chunk_document_from_parsed_result(
     destination.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
+    )
+    logger.info(
+        "chunk completed document_id=%s destination=%s chunk_count=%s",
+        document.id,
+        destination,
+        len(chunks),
     )
     return ChunkedDocumentResult(
         chunked_path=relative_path.as_posix(),

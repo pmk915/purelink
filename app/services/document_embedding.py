@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import logging
 import math
 from pathlib import Path
 import re
@@ -15,6 +16,8 @@ from app.services.document_chunker import build_chunk_relative_path
 EMBEDDING_DIMENSION = 128
 EMBEDDING_SCHEME = "hashed_bow_v1"
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9]+|[\u4e00-\u9fff]")
+
+logger = logging.getLogger("purelink.documents")
 
 
 class DocumentEmbeddingError(ValueError):
@@ -62,16 +65,40 @@ def embed_document_chunks(
         team_id=team_id,
     )
     chunk_source = chunks_root / chunk_relative_path
+    logger.info(
+        "embed start document_id=%s knowledge_base_id=%s scope=%s team_id=%s chunk_source=%s dimension=%s",
+        document.id,
+        document.knowledge_base_id,
+        scope.value,
+        team_id,
+        chunk_source,
+        dimension,
+    )
     if not chunk_source.exists():
+        logger.error(
+            "embed chunk source missing document_id=%s chunk_source=%s",
+            document.id,
+            chunk_source,
+        )
         raise DocumentEmbeddingError("Document chunk result does not exist.")
 
     try:
         chunk_payload = json.loads(chunk_source.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
+        logger.exception(
+            "embed chunk payload invalid document_id=%s chunk_source=%s",
+            document.id,
+            chunk_source,
+        )
         raise DocumentEmbeddingError("Document chunk result is not valid JSON.") from exc
 
     chunks = chunk_payload.get("chunks")
     if not isinstance(chunks, list) or not chunks:
+        logger.error(
+            "embed chunk payload missing chunks document_id=%s chunk_source=%s",
+            document.id,
+            chunk_source,
+        )
         raise DocumentEmbeddingError("Document chunk result does not contain chunks.")
 
     entries: list[dict[str, object]] = []
@@ -126,6 +153,12 @@ def embed_document_chunks(
     destination.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
+    )
+    logger.info(
+        "embed completed document_id=%s destination=%s embedded_chunk_count=%s",
+        document.id,
+        destination,
+        len(entries),
     )
 
     return EmbeddedDocumentResult(

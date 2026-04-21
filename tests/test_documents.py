@@ -746,6 +746,57 @@ async def test_unsupported_document_parse_marks_processing_failed(
 
 
 @pytest.mark.anyio
+async def test_invalid_chunk_input_marks_processing_failed(
+    document_client: AsyncClient,
+    tmp_path: Path,
+) -> None:
+    alice = await _register_and_login(
+        document_client,
+        email="chunk-fail@example.com",
+        username="chunk-fail",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+
+    knowledge_base_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(alice["access_token"]),
+        name="Chunk Fail KB",
+    )
+    upload_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=alice_headers,
+        files={"file": ("chunk-fail.txt", b"valid content", "text/plain")},
+    )
+    assert upload_response.status_code == 201
+    document_id = upload_response.json()["id"]
+
+    parse_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}/parse",
+        headers=alice_headers,
+    )
+    assert parse_response.status_code == 200
+
+    parsed_file = tmp_path / "parsed" / parse_response.json()["parsed_path"]
+    parsed_file.write_text(
+        json.dumps({"content": ""}),
+        encoding="utf-8",
+    )
+
+    chunk_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}/chunk",
+        headers=alice_headers,
+    )
+    assert chunk_response.status_code == 400
+
+    list_response = await document_client.get(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=alice_headers,
+    )
+    assert list_response.status_code == 200
+    assert list_response.json()[0]["processing_status"] == "failed"
+
+
+@pytest.mark.anyio
 async def test_personal_document_parse_task_creation_and_status_query(
     document_client: AsyncClient,
 ) -> None:
