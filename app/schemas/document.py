@@ -2,9 +2,20 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.models.enums import DocumentProcessingStatus, DocumentReviewStatus
+from app.models.enums import (
+    DocumentProcessingStatus,
+    DocumentReviewStatus,
+    ProcessingJobType,
+    ProcessingJobStatus,
+    ProcessingJobTrigger,
+)
+from app.schemas.source_locator import (
+    PreviewTargetRead,
+    SourceLocatorRead,
+    normalize_locator_fields,
+)
 
 
 class DocumentRead(BaseModel):
@@ -24,6 +35,14 @@ class DocumentRead(BaseModel):
     reviewed_by: int | None
     reviewed_at: datetime | None
     review_comment: str | None
+    error_message: str | None
+    processed_at: datetime | None
+    latest_processing_job_id: int | None = None
+    latest_processing_job_status: ProcessingJobStatus | None = None
+    latest_processing_job_type: ProcessingJobType | None = None
+    latest_processing_job_step: str | None = None
+    latest_processing_job_trigger: ProcessingJobTrigger | None = None
+    latest_processing_job_attempt_number: int | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -87,8 +106,25 @@ class RetrievedChunkRead(BaseModel):
     knowledge_base_id: int
     scope: str
     team_id: int | None
+    document_name: str
+    snippet: str
     text: str
+    source_type: str | None = None
+    char_start: int | None = None
+    char_end: int | None = None
+    page_number: int | None = None
+    start_time: float | None = None
+    end_time: float | None = None
+    section_title: str | None = None
+    source_locator: SourceLocatorRead | None = None
+    preview_target: PreviewTargetRead | None = None
+    heading_path: list[str] | None = None
     score: float
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legacy_source_locator(cls, value: object) -> object:
+        return normalize_locator_fields(value)
 
 
 class RetrievalResponse(BaseModel):

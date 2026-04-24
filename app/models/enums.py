@@ -21,8 +21,10 @@ class DocumentReviewStatus(StrEnum):
 
 class DocumentProcessingStatus(StrEnum):
     UPLOADED = "uploaded"
+    PROCESSING = "processing"
     PARSED = "parsed"
     INDEXED = "indexed"
+    READY = "ready"
     FAILED = "failed"
 
 
@@ -39,6 +41,25 @@ class DocumentTaskType(StrEnum):
 class DocumentTaskStatus(StrEnum):
     PENDING = "pending"
     PROCESSING = "processing"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class ProcessingJobType(StrEnum):
+    DOCUMENT_PROCESS = "document_process"
+    DOCUMENT_INDEX = "document_index"
+
+
+class ProcessingJobTrigger(StrEnum):
+    PROCESS = "process"
+    RETRY = "retry"
+    REPROCESS = "reprocess"
+    INDEX = "index"
+
+
+class ProcessingJobStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
 

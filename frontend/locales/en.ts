@@ -149,9 +149,9 @@ export const en = {
       "The current user may not have access to this workspace.",
     uploadTitle: "Upload document",
     uploadDescriptionPersonal:
-      "Supported formats: .txt and .md. After upload, PureLink can prepare the document for search and Q&A.",
+      "Supported formats: .txt, .md, .pdf, .docx, .mp3, .wav, .m4a, .mp4, .mov, .m4v, .png, .jpg, and .jpeg. After upload, PureLink can prepare the document for search and Q&A.",
     uploadDescriptionTeam:
-      "Supported formats: .txt and .md. Team documents must be approved before they become searchable.",
+      "Supported formats: .txt, .md, .pdf, .docx, .mp3, .wav, .m4a, .mp4, .mov, .m4v, .png, .jpg, and .jpeg. Team documents must be approved before they become searchable.",
     documentsTitle: "Documents",
     documentsDescription:
       "Track each document, confirm whether it is ready, and process it when needed.",
@@ -164,9 +164,9 @@ export const en = {
       "This panel polls the most recent task triggered from the workspace."
   },
   documents: {
-    chooseFileError: "Choose a .txt or .md file first.",
-    unsupportedFileType: "Only .txt and .md files are currently supported in the product UI.",
-    supportedFormats: "Supported formats: .txt, .md",
+    chooseFileError: "Choose a .txt, .md, .pdf, .docx, .mp3, .wav, .m4a, .mp4, .mov, .m4v, .png, .jpg, or .jpeg file first.",
+    unsupportedFileType: "Only .txt, .md, .pdf, .docx, .mp3, .wav, .m4a, .mp4, .mov, .m4v, .png, .jpg, and .jpeg files are currently supported in the product UI.",
+    supportedFormats: "Supported formats: .txt, .md, .pdf, .docx, .mp3, .wav, .m4a, .mp4, .mov, .m4v, .png, .jpg, .jpeg",
     uploadSubmit: "Upload document",
     uploading: "Uploading...",
     uploadFailed: "Upload failed.",
@@ -176,6 +176,8 @@ export const en = {
       `${filename} was uploaded and submitted for review.`,
     uploadProcessingStarted: (filename: string) =>
       `${filename} was uploaded. PureLink is preparing it for search and Q&A.`,
+    processingSubmitted: (filename: string) =>
+      `${filename} was queued for background processing. Refresh in a moment to see the latest status.`,
     uploadReady: (filename: string) =>
       `${filename} is ready for search and Q&A.`,
     uploadedAt: "Uploaded",
@@ -208,7 +210,7 @@ export const en = {
       "Something went wrong while preparing this document. Try again.",
     statusUnsupported: "Unsupported format",
     statusUnsupportedHint:
-      "This document cannot be prepared from the current UI because only .txt and .md are supported.",
+      "This document cannot be prepared from the current UI because only .txt, .md, .pdf, .docx, .mp3, .wav, .m4a, .mp4, .mov, .m4v, .png, .jpg, and .jpeg are supported.",
     statusReadyToContinue: "Ready to continue",
     statusReadyToContinueHint:
       "The document was partially prepared and can continue to the final step."
@@ -236,6 +238,13 @@ export const en = {
       "Relevant document excerpts for the current answer stay visible here.",
     citationsEmpty:
       "No citations yet. Run retrieval or ask a question.",
+    citationPage: (page: number) => `Page ${page}`,
+    citationSection: (section: string) => `Section ${section}`,
+    citationHeadingPath: (path: string) => `Heading ${path}`,
+    citationCharRange: (start: number, end: number) => `Characters ${start}-${end}`,
+    citationImageRegion: "OCR text region",
+    citationTimeRange: (start: string, end: string) => `${start} - ${end}`,
+    citationScore: (score: number) => `Score ${score.toFixed(3)}`,
     openConversation: (id: number) => `Open conversation #${id}`
   },
   teams: {

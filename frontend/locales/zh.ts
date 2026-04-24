@@ -149,9 +149,9 @@ export const zh: Messages = {
       "当前用户可能没有权限访问这个工作区。",
     uploadTitle: "上传文档",
     uploadDescriptionPersonal:
-      "当前支持 .txt 和 .md。上传后 PureLink 可以将文档准备为可搜索、可问答的内容。",
+      "当前支持 .txt、.md、.pdf、.docx、.mp3、.wav、.m4a、.mp4、.mov、.m4v、.png、.jpg 和 .jpeg。上传后 PureLink 可以将文档准备为可搜索、可问答的内容。",
     uploadDescriptionTeam:
-      "当前支持 .txt 和 .md。团队文档需要先审核通过，之后才能进入知识库搜索。",
+      "当前支持 .txt、.md、.pdf、.docx、.mp3、.wav、.m4a、.mp4、.mov、.m4v、.png、.jpg 和 .jpeg。团队文档需要先审核通过，之后才能进入知识库搜索。",
     documentsTitle: "文档",
     documentsDescription: "查看每个文档的状态，并在需要时继续处理。",
     noDocuments: "还没有文档。",
@@ -162,9 +162,9 @@ export const zh: Messages = {
       "这个面板会轮询最近一次从工作区触发的任务状态。"
   },
   documents: {
-    chooseFileError: "请先选择一个 .txt 或 .md 文件。",
-    unsupportedFileType: "当前产品界面只支持上传 .txt 和 .md 文件。",
-    supportedFormats: "支持格式：.txt、.md",
+    chooseFileError: "请先选择一个 .txt、.md、.pdf、.docx、.mp3、.wav、.m4a、.mp4、.mov、.m4v、.png、.jpg 或 .jpeg 文件。",
+    unsupportedFileType: "当前产品界面只支持上传 .txt、.md、.pdf、.docx、.mp3、.wav、.m4a、.mp4、.mov、.m4v、.png、.jpg 和 .jpeg 文件。",
+    supportedFormats: "支持格式：.txt、.md、.pdf、.docx、.mp3、.wav、.m4a、.mp4、.mov、.m4v、.png、.jpg、.jpeg",
     uploadSubmit: "上传文档",
     uploading: "上传中...",
     uploadFailed: "上传失败。",
@@ -173,6 +173,8 @@ export const zh: Messages = {
       `${filename} 已上传，并已提交审核。`,
     uploadProcessingStarted: (filename: string) =>
       `${filename} 已上传，PureLink 正在为搜索和问答做准备。`,
+    processingSubmitted: (filename: string) =>
+      `${filename} 已提交到后台处理，请稍后刷新查看最新状态。`,
     uploadReady: (filename: string) =>
       `${filename} 已可用于搜索和问答。`,
     uploadedAt: "上传于",
@@ -203,7 +205,7 @@ export const zh: Messages = {
       "准备过程中出现问题，请重新尝试。",
     statusUnsupported: "暂不支持",
     statusUnsupportedHint:
-      "当前界面只支持将 .txt 和 .md 文档继续处理为可搜索内容。",
+      "当前界面只支持将 .txt、.md、.pdf、.docx、.mp3、.wav、.m4a、.mp4、.mov、.m4v、.png、.jpg 和 .jpeg 文档继续处理为可搜索内容。",
     statusReadyToContinue: "待继续处理",
     statusReadyToContinueHint:
       "该文档已完成部分准备，可以继续进入最后一步。"
@@ -230,6 +232,13 @@ export const zh: Messages = {
     citationsDescription:
       "当前回答对应的相关文档片段会显示在这里。",
     citationsEmpty: "还没有引用。先检索或直接提问。",
+    citationPage: (page: number) => `第 ${page} 页`,
+    citationSection: (section: string) => `章节：${section}`,
+    citationHeadingPath: (path: string) => `标题：${path}`,
+    citationCharRange: (start: number, end: number) => `字符 ${start}-${end}`,
+    citationImageRegion: "OCR 文本区域",
+    citationTimeRange: (start: string, end: string) => `${start} - ${end}`,
+    citationScore: (score: number) => `分数 ${score.toFixed(3)}`,
     openConversation: (id: number) => `打开会话 #${id}`
   },
   teams: {

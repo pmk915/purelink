@@ -11,8 +11,10 @@ from app.models.enums import DocumentProcessingStatus, DocumentReviewStatus, enu
 from app.models.mixins import PrimaryKeyMixin, TimestampMixin
 
 if TYPE_CHECKING:
+    from app.models.document_chunk import DocumentChunk
     from app.models.document_task import DocumentTask
     from app.models.knowledge_base import KnowledgeBase
+    from app.models.processing_job import ProcessingJob
     from app.models.user import User
 
 
@@ -75,6 +77,11 @@ class Document(PrimaryKeyMixin, TimestampMixin, Base):
         nullable=True,
     )
     review_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    processed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     knowledge_base: Mapped["KnowledgeBase"] = relationship(back_populates="documents")
     owner: Mapped["User"] = relationship(
@@ -93,3 +100,60 @@ class Document(PrimaryKeyMixin, TimestampMixin, Base):
         back_populates="document",
         cascade="all, delete-orphan",
     )
+    chunks: Mapped[list["DocumentChunk"]] = relationship(
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="DocumentChunk.chunk_index",
+    )
+    processing_jobs: Mapped[list["ProcessingJob"]] = relationship(
+        back_populates="document",
+        cascade="all, delete-orphan",
+    )
+
+    @property
+    def latest_processing_job(self) -> "ProcessingJob | None":
+        if not self.processing_jobs:
+            return None
+        return max(self.processing_jobs, key=lambda job: job.id)
+
+    @property
+    def latest_processing_job_id(self) -> int | None:
+        latest_job = self.latest_processing_job
+        if latest_job is None:
+            return None
+        return latest_job.id
+
+    @property
+    def latest_processing_job_status(self):
+        latest_job = self.latest_processing_job
+        if latest_job is None:
+            return None
+        return latest_job.status
+
+    @property
+    def latest_processing_job_type(self):
+        latest_job = self.latest_processing_job
+        if latest_job is None:
+            return None
+        return latest_job.job_type
+
+    @property
+    def latest_processing_job_step(self) -> str | None:
+        latest_job = self.latest_processing_job
+        if latest_job is None:
+            return None
+        return latest_job.current_step
+
+    @property
+    def latest_processing_job_trigger(self):
+        latest_job = self.latest_processing_job
+        if latest_job is None:
+            return None
+        return latest_job.trigger_type
+
+    @property
+    def latest_processing_job_attempt_number(self) -> int | None:
+        latest_job = self.latest_processing_job
+        if latest_job is None:
+            return None
+        return latest_job.attempt_number

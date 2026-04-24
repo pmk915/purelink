@@ -17,8 +17,8 @@ This repository is suitable for local development, technical demos, portfolio pr
   支持团队知识库、邀请码入队和成员管理
 - Team document review workflow before retrieval  
   支持团队文档审核流，审核通过后才能进入检索链路
-- Local document processing pipeline for `.txt` and `.md`  
-  支持 `.txt` 和 `.md` 文件的本地文档处理流水线
+- Local document processing pipeline for `.txt`, `.md`, `.pdf`, `.docx`, `.mp3`, `.wav`, `.m4a`, `.mp4`, `.mov`, `.m4v`, `.png`, `.jpg`, and `.jpeg`
+  支持 `.txt`、`.md`、`.pdf`、`.docx`、`.mp3`、`.wav`、`.m4a`、`.mp4`、`.mov`、`.m4v`、`.png`、`.jpg` 和 `.jpeg` 文件的本地文档处理流水线
 - Conversation and message persistence for Q&A history  
   支持问答会话与消息持久化，便于后续历史展示
 - Unified `document_tasks` model with Python API + Go worker  
@@ -45,8 +45,8 @@ This repository is suitable for local development, technical demos, portfolio pr
   团队文档必须先审核通过，才能进入检索链路
 - Parse -> chunk -> embed / index task chain  
   支持 parse -> chunk -> embed / index 任务链
-- Frontend-triggered processing uses synchronous `parse -> chunk -> embed` by default  
-  前端“开始处理”默认直接走同步 `parse -> chunk -> embed` 闭环，本地联调不强依赖 worker
+- Frontend-triggered `.txt`, `.md`, `.pdf`, `.docx`, `.mp3`, `.wav`, `.m4a`, `.mp4`, `.mov`, `.m4v`, `.png`, `.jpg`, and `.jpeg` processing uses the standard `/process` entry that saves chunks and marks the document `ready`; image files go through OCR, scanned PDFs fall back to OCR when needed, audio files go through ASR, and video files extract an audio track before ASR, while the legacy synchronous `parse -> chunk -> embed` flow remains available for compatibility and worker-driven tasks
+  前端“开始处理”对 `.txt`、`.md`、`.pdf`、`.docx`、`.mp3`、`.wav`、`.m4a`、`.mp4`、`.mov`、`.m4v`、`.png`、`.jpg` 和 `.jpeg` 默认走 `/process` 标准入口；图片先 OCR、扫描版 PDF 在需要时走 OCR、音频先 ASR 转写、视频先抽音再 ASR，再统一落最小 chunk 并进入 `ready`；旧的同步 `parse -> chunk -> embed` 闭环继续保留，用于兼容链路和 worker 任务
 - Local runtime artifacts stored in `data/uploads`, `data/parsed`, `data/chunks`, `data/vector_store`  
   中间产物本地落盘，路径清晰可检查
 
@@ -56,6 +56,8 @@ This repository is suitable for local development, technical demos, portfolio pr
   最小本地 embedding 与检索层
 - Minimal ask API with citations  
   最小问答接口，返回 answer 和 citations
+- Citations return structured `source_locator` and `preview_target` data for text ranges, PDF pages, image OCR regions, and audio/video time ranges
+  引用结果返回结构化 `source_locator` 与 `preview_target`，覆盖文本范围、PDF 页码、图片 OCR 区域以及音视频时间段
 - Conversation and message persistence with citation metadata  
   回答消息可持久化 citations 元数据
 - Switchable answer generator: heuristic or OpenAI-compatible LLM  
@@ -147,6 +149,9 @@ python -m uvicorn app.main:app --reload
 You still need PostgreSQL available through `DATABASE_URL`.  
 这种方式仍然要求你本地有可用的 PostgreSQL，并且 `DATABASE_URL` 配置正确。
 
+If you want to process image OCR, scanned PDF OCR, audio transcription, or video transcription locally without Docker, install local `tesseract` and `ffmpeg` binaries, keep the default OCR / ASR settings from `.env.example` (`OCR_PROVIDER=tesseract`, `OCR_TESSERACT_COMMAND=tesseract`, `ASR_PROVIDER=vosk`, `ASR_FFMPEG_COMMAND=ffmpeg`), and make sure `ASR_VOSK_MODEL_PATH` points to a downloaded Vosk model directory. The Python environment also needs the packages from `requirements.txt`, including `pypdfium2` for PDF page rendering and `vosk` for ASR.
+如果你希望在非 Docker 模式下处理图片 OCR、扫描版 PDF OCR、音频转写或视频转写，需要本机安装 `tesseract` 和 `ffmpeg` 二进制，并保留 `.env.example` 里的默认 OCR / ASR 配置（`OCR_PROVIDER=tesseract`、`OCR_TESSERACT_COMMAND=tesseract`、`ASR_PROVIDER=vosk`、`ASR_FFMPEG_COMMAND=ffmpeg`），同时确保 `ASR_VOSK_MODEL_PATH` 指向已下载好的 Vosk 模型目录。Python 环境也需要安装 `requirements.txt` 里的依赖，其中 `pypdfium2` 用于 PDF 页渲染，`vosk` 用于 ASR。
+
 ### Frontend MVP | 前端 MVP 启动
 
 ```bash
@@ -188,8 +193,8 @@ make e2e
 Recommended command sets:  
 推荐按下面两种场景执行：
 
-- Manual frontend-backend verification: start `api` and `frontend`, then register, create a knowledge base, upload a `.txt` or `.md`, click `开始处理`, and verify retrieval / ask. This path does not require the Go worker by default.  
-  手动前后端联调：启动 `api` 和 `frontend` 后，注册、创建知识库、上传 `.txt/.md`、点击“开始处理”、再验证检索和问答。这条路径默认不强依赖 Go worker。
+- Manual frontend-backend verification: start `api` and `frontend`, then register, create a knowledge base, upload a `.txt`, `.md`, `.pdf`, `.docx`, `.mp3`, `.wav`, `.m4a`, `.mp4`, `.mov`, `.m4v`, `.png`, `.jpg`, or `.jpeg`, click `开始处理`, and verify retrieval / ask. Citation cards should show structured location cues such as PDF pages, OCR regions, or media time ranges.
+  手动前后端联调：启动 `api` 和 `frontend` 后，注册、创建知识库、上传 `.txt/.md/.pdf/.docx/.mp3/.wav/.m4a/.mp4/.mov/.m4v/.png/.jpg/.jpeg`、点击“开始处理”、再验证检索和问答。引用卡片应显示 PDF 页码、OCR 区域或音视频时间段等结构化定位信息。
 - Full scripted E2E and worker verification: use `make smoke` or `make e2e`, which both expect the full `db / api / worker` stack from `docker compose`.  
   脚本式全流程和 worker 验证：使用 `make smoke` 或 `make e2e`，这两条命令都依赖 `docker compose` 拉起完整的 `db / api / worker` 环境。
 

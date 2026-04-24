@@ -8,7 +8,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { useI18n } from "@/hooks/use-i18n";
 
-const SUPPORTED_EXTENSIONS = [".txt", ".md"] as const;
+const SUPPORTED_EXTENSIONS = [
+  ".txt",
+  ".md",
+  ".pdf",
+  ".docx",
+  ".mp3",
+  ".wav",
+  ".m4a",
+  ".mp4",
+  ".mov",
+  ".m4v",
+  ".png",
+  ".jpg",
+  ".jpeg"
+] as const;
 
 function isSupportedDocumentFile(fileName: string) {
   const normalized = fileName.toLowerCase();
@@ -41,7 +55,7 @@ export function DocumentUploadCard({
         <Input
           ref={inputRef}
           type="file"
-          accept=".txt,.TXT,.md,.MD,text/plain,text/markdown"
+          accept=".txt,.TXT,.md,.MD,.pdf,.PDF,.docx,.DOCX,.mp3,.MP3,.wav,.WAV,.m4a,.M4A,.mp4,.MP4,.mov,.MOV,.m4v,.M4V,.png,.PNG,.jpg,.JPG,.jpeg,.JPEG,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/wave,audio/mp4,audio/x-m4a,audio/m4a,video/mp4,video/quicktime,video/x-m4v,image/png,image/jpeg"
           onChange={(event) => {
             const nextFile = event.target.files?.[0] ?? null;
             if (nextFile && !isSupportedDocumentFile(nextFile.name)) {

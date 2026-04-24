@@ -20,6 +20,17 @@ services:
       timeout: 5s
       retries: 20
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   api:
     build:
       context: .
@@ -39,6 +50,7 @@ services:
       AUTH_ALGORITHM: ${AUTH_ALGORITHM:-HS256}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-purelink}:${POSTGRES_PASSWORD:-purelink}@db:5432/${POSTGRES_DB:-purelink}
+      REDIS_URL: redis://redis:6379/0
       DB_ECHO: ${DB_ECHO:-false}
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-*}
       CORS_ALLOW_METHODS: ${CORS_ALLOW_METHODS:-*}
@@ -48,6 +60,22 @@ services:
       PARSED_DIR: data/parsed
       CHUNK_DIR: data/chunks
       VECTOR_STORE_DIR: data/vector_store
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local_hashed_bow}
+      EMBEDDING_API_BASE: ${EMBEDDING_API_BASE:-}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
+      EMBEDDING_TIMEOUT_SECONDS: ${EMBEDDING_TIMEOUT_SECONDS:-30}
+      EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE:-32}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-}
+      OCR_PROVIDER: ${OCR_PROVIDER:-tesseract}
+      OCR_TESSERACT_COMMAND: ${OCR_TESSERACT_COMMAND:-tesseract}
+      OCR_LANGUAGE: ${OCR_LANGUAGE:-eng}
+      OCR_TESSERACT_PSM: ${OCR_TESSERACT_PSM:-6}
+      ASR_PROVIDER: ${ASR_PROVIDER:-vosk}
+      ASR_FFMPEG_COMMAND: ${ASR_FFMPEG_COMMAND:-ffmpeg}
+      ASR_VOSK_MODEL_PATH: ${ASR_VOSK_MODEL_PATH:-/opt/vosk/vosk-model-small-en-us-0.15}
+      RERANKER_ENABLED: ${RERANKER_ENABLED:-true}
+      RERANKER_PROVIDER: ${RERANKER_PROVIDER:-local_rule_reranker}
       LLM_PROVIDER: ${LLM_PROVIDER:-heuristic}
       LLM_API_BASE: ${LLM_API_BASE:-}
       LLM_API_KEY: ${LLM_API_KEY:-}
@@ -57,8 +85,12 @@ services:
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test:
@@ -75,22 +107,47 @@ services:
   worker:
     build:
       context: .
-      dockerfile: worker-go/Dockerfile
+      dockerfile: Dockerfile
     restart: unless-stopped
     working_dir: /app
+    command: python -m app.workers.processing_worker_main
     environment:
-      PURELINK_BASE_DIR: /app
-      DATABASE_URL: postgres://${POSTGRES_USER:-purelink}:${POSTGRES_PASSWORD:-purelink}@db:5432/${POSTGRES_DB:-purelink}
+      APP_NAME: ${APP_NAME:-PureLink}
+      APP_ENV: ${APP_ENV:-development}
+      APP_DEBUG: ${APP_DEBUG:-false}
+      APP_VERSION: ${APP_VERSION:-0.1.0}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-purelink}:${POSTGRES_PASSWORD:-purelink}@db:5432/${POSTGRES_DB:-purelink}
+      REDIS_URL: redis://redis:6379/0
       UPLOAD_DIR: data/uploads
       PARSED_DIR: data/parsed
       CHUNK_DIR: data/chunks
       VECTOR_STORE_DIR: data/vector_store
-      WORKER_POLL_INTERVAL: ${WORKER_POLL_INTERVAL:-5s}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local_hashed_bow}
+      EMBEDDING_API_BASE: ${EMBEDDING_API_BASE:-}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
+      EMBEDDING_TIMEOUT_SECONDS: ${EMBEDDING_TIMEOUT_SECONDS:-30}
+      EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE:-32}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-}
+      OCR_PROVIDER: ${OCR_PROVIDER:-tesseract}
+      OCR_TESSERACT_COMMAND: ${OCR_TESSERACT_COMMAND:-tesseract}
+      OCR_LANGUAGE: ${OCR_LANGUAGE:-eng}
+      OCR_TESSERACT_PSM: ${OCR_TESSERACT_PSM:-6}
+      ASR_PROVIDER: ${ASR_PROVIDER:-vosk}
+      ASR_FFMPEG_COMMAND: ${ASR_FFMPEG_COMMAND:-ffmpeg}
+      ASR_VOSK_MODEL_PATH: ${ASR_VOSK_MODEL_PATH:-/opt/vosk/vosk-model-small-en-us-0.15}
+      RERANKER_ENABLED: ${RERANKER_ENABLED:-true}
+      RERANKER_PROVIDER: ${RERANKER_PROVIDER:-local_rule_reranker}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       api:
         condition: service_healthy

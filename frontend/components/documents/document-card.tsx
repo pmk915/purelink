@@ -11,7 +11,21 @@ import { formatBytes, formatDate } from "@/lib/utils";
 
 function supportsDocumentPreparation(filename: string) {
   const normalized = filename.toLowerCase();
-  return normalized.endsWith(".txt") || normalized.endsWith(".md");
+  return (
+    normalized.endsWith(".txt") ||
+    normalized.endsWith(".md") ||
+    normalized.endsWith(".pdf") ||
+    normalized.endsWith(".docx") ||
+    normalized.endsWith(".mp3") ||
+    normalized.endsWith(".wav") ||
+    normalized.endsWith(".m4a") ||
+    normalized.endsWith(".mp4") ||
+    normalized.endsWith(".mov") ||
+    normalized.endsWith(".m4v") ||
+    normalized.endsWith(".png") ||
+    normalized.endsWith(".jpg") ||
+    normalized.endsWith(".jpeg")
+  );
 }
 
 export function DocumentCard({
@@ -25,9 +39,16 @@ export function DocumentCard({
 }) {
   const { messages } = useI18n();
   const isSupported = supportsDocumentPreparation(document.original_filename);
+  const hasActiveProcessingJob =
+    (document.latest_processing_job_status === "queued" ||
+      document.latest_processing_job_status === "running") &&
+    document.latest_processing_job_type === "document_process";
+  const hasActiveJob =
+    document.latest_processing_job_status === "queued" ||
+    document.latest_processing_job_status === "running";
 
   const status = (() => {
-    if (isProcessing) {
+    if (isProcessing || hasActiveProcessingJob) {
       return {
         label: messages.documents.statusProcessing,
         description: messages.documents.statusProcessingHint,
@@ -59,11 +80,22 @@ export function DocumentCard({
       };
     }
 
-    if (document.processing_status === "indexed") {
+    if (
+      document.processing_status === "ready" ||
+      document.processing_status === "indexed"
+    ) {
       return {
         label: messages.documents.statusAvailable,
         description: messages.documents.statusAvailableHint,
         variant: "success" as const
+      };
+    }
+
+    if (document.processing_status === "processing") {
+      return {
+        label: messages.documents.statusProcessing,
+        description: messages.documents.statusProcessingHint,
+        variant: "warning" as const
       };
     }
 
@@ -102,6 +134,9 @@ export function DocumentCard({
     isSupported &&
     document.review_status !== "pending_review" &&
     document.review_status !== "rejected" &&
+    !hasActiveJob &&
+    document.processing_status !== "processing" &&
+    document.processing_status !== "ready" &&
     document.processing_status !== "indexed";
 
   return (
@@ -129,10 +164,20 @@ export function DocumentCard({
           </div>
         ) : null}
 
+        {document.processing_status === "failed" && document.error_message ? (
+          <div className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {document.error_message}
+          </div>
+        ) : null}
+
         {canProcess ? (
-          <Button disabled={isProcessing} onClick={onProcess ?? undefined}>
-            {isProcessing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-            {isProcessing ? messages.documents.processingNow : processButtonLabel}
+          <Button disabled={isProcessing || hasActiveProcessingJob} onClick={onProcess ?? undefined}>
+            {isProcessing || hasActiveProcessingJob ? (
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+            ) : null}
+            {isProcessing || hasActiveProcessingJob
+              ? messages.documents.processingNow
+              : processButtonLabel}
           </Button>
         ) : null}
       </CardContent>

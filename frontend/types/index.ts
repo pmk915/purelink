@@ -9,11 +9,16 @@ export type DocumentReviewStatus =
   | "rejected";
 export type DocumentProcessingStatus =
   | "uploaded"
+  | "processing"
   | "parsed"
   | "indexed"
+  | "ready"
   | "failed";
 export type DocumentTaskType = "parse" | "chunk" | "embed" | "index";
 export type DocumentTaskStatus = "pending" | "processing" | "succeeded" | "failed";
+export type ProcessingJobType = "document_process" | "document_index";
+export type ProcessingJobStatus = "queued" | "running" | "succeeded" | "failed";
+export type ProcessingJobTrigger = "process" | "retry" | "reprocess" | "index";
 export type MessageRole = "system" | "user" | "assistant";
 
 export interface ApiErrorPayload {
@@ -102,8 +107,26 @@ export interface Document {
   reviewed_by: number | null;
   reviewed_at: string | null;
   review_comment: string | null;
+  error_message: string | null;
+  processed_at: string | null;
+  latest_processing_job_id: number | null;
+  latest_processing_job_status: ProcessingJobStatus | null;
+  latest_processing_job_type: ProcessingJobType | null;
+  latest_processing_job_step: string | null;
+  latest_processing_job_trigger: ProcessingJobTrigger | null;
+  latest_processing_job_attempt_number: number | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ProcessingJobSubmission {
+  document_id: number;
+  document_status: DocumentProcessingStatus;
+  job_id: number;
+  job_type: ProcessingJobType;
+  job_status: ProcessingJobStatus;
+  trigger_type: ProcessingJobTrigger;
+  attempt_number: number;
 }
 
 export interface DocumentTask {
@@ -119,13 +142,67 @@ export interface DocumentTask {
   finished_at: string | null;
 }
 
-export interface RetrievalResult {
+export interface CitationLike {
   chunk_id: string;
   document_id: number;
   knowledge_base_id: number;
   scope: string;
   team_id: number | null;
+  document_name: string | null;
+  snippet: string | null;
   text: string;
+  source_type: string | null;
+  char_start: number | null;
+  char_end: number | null;
+  page_number: number | null;
+  start_time: number | null;
+  end_time: number | null;
+  section_title: string | null;
+  source_locator: SourceLocator | null;
+  preview_target: PreviewTarget | null;
+  heading_path: string[] | null;
+}
+
+export type SourceLocatorKind =
+  | "text_range"
+  | "pdf_page"
+  | "image_region"
+  | "time_range"
+  | "unknown";
+
+export interface SourceLocator {
+  kind: SourceLocatorKind;
+  document_id: number;
+  source_type: string | null;
+  source_locator_text: string | null;
+  char_start: number | null;
+  char_end: number | null;
+  section_title: string | null;
+  heading_path: string[] | null;
+  page_number: number | null;
+  page_region: Record<string, unknown> | null;
+  bbox: Record<string, unknown> | null;
+  region_hint: string | null;
+  ocr_provider: string | null;
+  start_time: number | null;
+  end_time: number | null;
+}
+
+export interface PreviewTarget {
+  kind: "document_preview";
+  document_id: number;
+  source_type: string | null;
+  locator_kind: SourceLocatorKind;
+  source_locator_text: string | null;
+  char_start: number | null;
+  char_end: number | null;
+  section_title: string | null;
+  page_number: number | null;
+  start_time: number | null;
+  end_time: number | null;
+}
+
+export interface RetrievalResult extends CitationLike {
   score: number;
 }
 
@@ -135,14 +212,7 @@ export interface RetrievalResponse {
   results: RetrievalResult[];
 }
 
-export interface Citation {
-  chunk_id: string;
-  document_id: number;
-  knowledge_base_id: number;
-  scope: string;
-  team_id: number | null;
-  text: string;
-}
+export interface Citation extends CitationLike {}
 
 export interface AskResponse {
   conversation_id: number;

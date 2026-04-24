@@ -1,5 +1,5 @@
 import { apiClient } from "@/lib/api-client";
-import type { Document, DocumentTask } from "@/types";
+import type { Document, DocumentTask, ProcessingJobSubmission } from "@/types";
 
 type DocumentProcessingAction = "parse" | "chunk" | "embed";
 
@@ -93,6 +93,18 @@ export function processPersonalDocumentStep(
   );
 }
 
+export function processPersonalDocument(
+  token: string,
+  kbId: number,
+  documentId: number
+) {
+  return apiClient.post<ProcessingJobSubmission>(
+    `/knowledge-bases/${kbId}/documents/${documentId}/process`,
+    {},
+    token
+  );
+}
+
 export function processTeamDocumentStep(
   token: string,
   teamId: number,
@@ -102,6 +114,19 @@ export function processTeamDocumentStep(
 ) {
   return apiClient.post(
     `/teams/${teamId}/knowledge-bases/${kbId}/documents/${documentId}/${action}`,
+    {},
+    token
+  );
+}
+
+export function processTeamDocument(
+  token: string,
+  teamId: number,
+  kbId: number,
+  documentId: number
+) {
+  return apiClient.post<ProcessingJobSubmission>(
+    `/teams/${teamId}/knowledge-bases/${kbId}/documents/${documentId}/process`,
     {},
     token
   );

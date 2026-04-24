@@ -40,6 +40,7 @@ If your backend is running elsewhere, update `NEXT_PUBLIC_API_BASE_URL` in `.env
 
 ## Processing Behavior
 
-- The frontend `开始处理 / Start processing` action currently calls the synchronous backend `parse -> chunk -> embed` endpoints in sequence.
-- This means manual frontend verification does not require the Go worker by default.
-- The Go worker is still used for `document_tasks`, scripted E2E flows, and worker-specific verification.
+- The frontend `开始处理 / Start processing` action now sends `.txt`, `.md`, `.pdf`, `.docx`, `.mp3`, `.wav`, `.m4a`, `.mp4`, `.mov`, `.m4v`, `.png`, `.jpg`, and `.jpeg` documents to the backend `/process` entry.
+- Text, image OCR, scanned PDF OCR, audio transcription, and video transcription all converge into the same `DocumentChunk -> ready -> indexed -> retrieve / ask` pipeline.
+- Citation cards consume structured `source_locator` data so they can show PDF pages, OCR text regions, text sections, and audio/video time ranges without guessing from loose fields.
+- The legacy `parse -> chunk -> embed` path is still available for compatibility, including worker-driven `document_tasks`, scripted E2E flows, and worker-specific verification.

@@ -6,6 +6,7 @@ import { Search, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 
+import { CitationCard } from "@/components/qa/citation-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -190,17 +191,10 @@ export function AskWorkspace({
             </div>
           ) : null}
           {citations.map((citation) => (
-            <div
+            <CitationCard
               key={`${citation.chunk_id}-${citation.document_id}`}
-              className="rounded-2xl border border-border/70 bg-white/80 p-4"
-            >
-              <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                <span>{messages.common.chunk(citation.chunk_id)}</span>
-                <span>{messages.common.documentId(citation.document_id)}</span>
-                <span>{messages.common.shortKnowledgeBaseId(citation.knowledge_base_id)}</span>
-              </div>
-              <p className="mt-3 text-sm leading-6 text-foreground">{citation.text}</p>
-            </div>
+              citation={citation}
+            />
           ))}
         </CardContent>
       </Card>

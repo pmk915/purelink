@@ -5,11 +5,30 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as documentApi from "@/api/documents";
 import type { DocumentTaskType } from "@/types";
 
+
+function hasActiveProcessingJob(document: {
+  processing_status: string;
+  latest_processing_job_status: string | null;
+}) {
+  return (
+    document.processing_status === "processing" ||
+    document.latest_processing_job_status === "queued" ||
+    document.latest_processing_job_status === "running"
+  );
+}
+
 export function usePersonalDocuments(token: string | null, kbId: number) {
   return useQuery({
     queryKey: ["documents", "personal", kbId],
     queryFn: () => documentApi.listPersonalDocuments(token as string, kbId),
-    enabled: Boolean(token) && Number.isFinite(kbId)
+    enabled: Boolean(token) && Number.isFinite(kbId),
+    refetchInterval: (query) => {
+      const documents = query.state.data;
+      if (!documents?.some(hasActiveProcessingJob)) {
+        return false;
+      }
+      return 2500;
+    }
   });
 }
 
@@ -17,7 +36,14 @@ export function useTeamDocuments(token: string | null, teamId: number, kbId: num
   return useQuery({
     queryKey: ["documents", "team", teamId, kbId],
     queryFn: () => documentApi.listTeamDocuments(token as string, teamId, kbId),
-    enabled: Boolean(token) && Number.isFinite(teamId) && Number.isFinite(kbId)
+    enabled: Boolean(token) && Number.isFinite(teamId) && Number.isFinite(kbId),
+    refetchInterval: (query) => {
+      const documents = query.state.data;
+      if (!documents?.some(hasActiveProcessingJob)) {
+        return false;
+      }
+      return 2500;
+    }
   });
 }
 

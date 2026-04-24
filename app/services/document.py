@@ -16,6 +16,71 @@ from app.models.enums import (
 from app.models.knowledge_base import KnowledgeBase
 
 
+UNSET = object()
+SUPPORTED_DOCUMENT_SUFFIXES = {
+    ".txt",
+    ".md",
+    ".pdf",
+    ".docx",
+    ".mp3",
+    ".wav",
+    ".m4a",
+    ".mp4",
+    ".mov",
+    ".m4v",
+    ".png",
+    ".jpg",
+    ".jpeg",
+}
+SUPPORTED_DOCUMENT_MIME_TYPES = {
+    "text/plain",
+    "text/markdown",
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "audio/mpeg",
+    "audio/mp3",
+    "audio/wav",
+    "audio/x-wav",
+    "audio/wave",
+    "audio/mp4",
+    "audio/x-m4a",
+    "audio/m4a",
+    "video/mp4",
+    "video/quicktime",
+    "video/x-m4v",
+    "image/png",
+    "image/jpeg",
+}
+SUPPORTED_DOCUMENT_FORMAT_HINT = (
+    ".txt, .md, .pdf, .docx, .mp3, .wav, .m4a, .mp4, .mov, .m4v, .png, .jpg, and .jpeg"
+)
+
+
+def is_supported_document_upload(
+    *,
+    filename: str,
+    mime_type: str | None = None,
+) -> bool:
+    suffix = Path(filename).suffix.lower()
+    if suffix in SUPPORTED_DOCUMENT_SUFFIXES:
+        return True
+
+    normalized_mime_type = (mime_type or "").strip().lower()
+    return normalized_mime_type in SUPPORTED_DOCUMENT_MIME_TYPES
+
+
+def ensure_supported_document_upload(
+    *,
+    filename: str,
+    mime_type: str | None = None,
+) -> None:
+    if is_supported_document_upload(filename=filename, mime_type=mime_type):
+        return
+    raise ValueError(
+        f"Only {SUPPORTED_DOCUMENT_FORMAT_HINT} documents are supported."
+    )
+
+
 def create_document(
     db: Session,
     *,
@@ -146,8 +211,14 @@ def update_document_processing_status(
     *,
     document: Document,
     processing_status: DocumentProcessingStatus,
+    error_message: str | None | object = UNSET,
+    processed_at: datetime | None | object = UNSET,
 ) -> Document:
     document.processing_status = processing_status
+    if error_message is not UNSET:
+        document.error_message = error_message
+    if processed_at is not UNSET:
+        document.processed_at = processed_at
     db.commit()
     db.refresh(document)
     return document

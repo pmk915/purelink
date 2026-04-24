@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from app.models.conversation import Conversation
     from app.models.document import Document
     from app.models.knowledge_base import KnowledgeBase
+    from app.models.processing_job import ProcessingJob
     from app.models.team import Team, TeamInvite, TeamMember
 
 
@@ -66,4 +67,8 @@ class User(PrimaryKeyMixin, TimestampMixin, Base):
     used_team_invites: Mapped[list["TeamInvite"]] = relationship(
         back_populates="used_by_user",
         foreign_keys="TeamInvite.used_by",
+    )
+    triggered_processing_jobs: Mapped[list["ProcessingJob"]] = relationship(
+        back_populates="triggered_by_user",
+        foreign_keys="ProcessingJob.triggered_by_id",
     )

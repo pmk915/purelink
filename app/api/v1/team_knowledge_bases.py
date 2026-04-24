@@ -9,11 +9,11 @@ from app.models.enums import (
     DocumentReviewStatus,
     DocumentTaskType,
     KnowledgeBaseScope,
+    ProcessingJobTrigger,
     TeamMemberRole,
 )
 from app.schemas.document import (
     DocumentChunkRead,
-    DocumentEmbedRead,
     DocumentParseRead,
     DocumentRead,
     RetrievalQueryRequest,
@@ -22,6 +22,7 @@ from app.schemas.document import (
 )
 from app.schemas.qa import QuestionAnswerRequest, QuestionAnswerResponse
 from app.schemas.document_task import DocumentTaskRead
+from app.schemas.processing_job import ProcessingJobRead, ProcessingJobSubmissionRead
 from app.schemas.knowledge_base import (
     KnowledgeBaseRead,
     TeamKnowledgeBaseCreateRequest,
@@ -29,6 +30,7 @@ from app.schemas.knowledge_base import (
 )
 from app.services.document import (
     create_document,
+    ensure_supported_document_upload,
     get_document_for_knowledge_base,
     list_documents_for_knowledge_base,
     resolve_upload_root,
@@ -42,7 +44,6 @@ from app.services.document_chunker import (
 )
 from app.services.document_embedding import (
     DocumentEmbeddingError,
-    embed_document_chunks,
     resolve_vector_store_root,
 )
 from app.services.document_parser import (
@@ -58,11 +59,21 @@ from app.services.conversation import (
 )
 from app.services.qa import AnswerGenerationError, answer_question
 from app.services.retrieval import retrieve_chunks_for_documents
+from app.services.source_locator import (
+    build_preview_target_for_chunk,
+    build_source_locator_for_chunk,
+)
 from app.services.document_task import (
     ActiveDocumentTaskExistsError,
     DocumentTaskEligibilityError,
     create_document_task_for_document,
 )
+from app.services.processing_job import (
+    ActiveProcessingJobExistsError,
+    ProcessingJobEligibilityError,
+    list_processing_jobs_for_document,
+)
+from app.services import processing_worker
 from app.services.knowledge_base import (
     UNSET,
     create_team_knowledge_base,
@@ -75,6 +86,18 @@ from app.services.team import get_team_membership
 
 
 router = APIRouter(prefix="/teams/{team_id}/knowledge-bases", tags=["team-knowledge-bases"])
+
+
+def _build_processing_job_submission(job) -> ProcessingJobSubmissionRead:
+    return ProcessingJobSubmissionRead(
+        document_id=job.document_id,
+        document_status=job.document.processing_status,
+        job_id=job.id,
+        job_type=job.job_type,
+        job_status=job.status,
+        trigger_type=job.trigger_type,
+        attempt_number=job.attempt_number,
+    )
 
 
 def _get_active_membership_or_404(
@@ -267,6 +290,16 @@ async def upload_document_to_team_knowledge_base_endpoint(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Uploaded file must have a filename.",
         )
+    try:
+        ensure_supported_document_upload(
+            filename=file.filename,
+            mime_type=file.content_type,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
 
     content = await file.read()
     if not content:
@@ -326,6 +359,216 @@ async def list_team_knowledge_base_documents_endpoint(
 
 
 @router.post(
+    "/{knowledge_base_id}/documents/{document_id}/process",
+    response_model=ProcessingJobSubmissionRead,
+)
+async def process_team_document_endpoint(
+    team_id: int,
+    knowledge_base_id: int,
+    document_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+) -> ProcessingJobSubmissionRead:
+    _get_active_membership_or_404(
+        db,
+        team_id=team_id,
+        user_id=current_user.id,
+    )
+    knowledge_base = _get_team_knowledge_base_or_404(
+        db,
+        team_id=team_id,
+        knowledge_base_id=knowledge_base_id,
+    )
+    document = get_document_for_knowledge_base(
+        db,
+        knowledge_base_id=knowledge_base.id,
+        document_id=document_id,
+    )
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found.",
+        )
+    if document.review_status != DocumentReviewStatus.APPROVED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Document is not eligible for processing.",
+        )
+
+    try:
+        job = processing_worker.create_and_submit_processing_job(
+            db,
+            document=document,
+            triggered_by_id=current_user.id,
+        )
+    except (ActiveProcessingJobExistsError, ProcessingJobEligibilityError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from exc
+
+    return _build_processing_job_submission(job)
+
+
+@router.get(
+    "/{knowledge_base_id}/documents/{document_id}/processing-jobs",
+    response_model=list[ProcessingJobRead],
+)
+async def list_team_document_processing_jobs_endpoint(
+    team_id: int,
+    knowledge_base_id: int,
+    document_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+) -> list[ProcessingJobRead]:
+    _get_active_membership_or_404(
+        db,
+        team_id=team_id,
+        user_id=current_user.id,
+    )
+    knowledge_base = _get_team_knowledge_base_or_404(
+        db,
+        team_id=team_id,
+        knowledge_base_id=knowledge_base_id,
+    )
+    document = get_document_for_knowledge_base(
+        db,
+        knowledge_base_id=knowledge_base.id,
+        document_id=document_id,
+    )
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found.",
+        )
+
+    jobs = list_processing_jobs_for_document(
+        db,
+        document_id=document.id,
+    )
+    return [ProcessingJobRead.model_validate(item) for item in jobs]
+
+
+@router.post(
+    "/{knowledge_base_id}/documents/{document_id}/retry-process",
+    response_model=ProcessingJobSubmissionRead,
+)
+async def retry_team_document_processing_endpoint(
+    team_id: int,
+    knowledge_base_id: int,
+    document_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+) -> ProcessingJobSubmissionRead:
+    _get_active_membership_or_404(
+        db,
+        team_id=team_id,
+        user_id=current_user.id,
+    )
+    knowledge_base = _get_team_knowledge_base_or_404(
+        db,
+        team_id=team_id,
+        knowledge_base_id=knowledge_base_id,
+    )
+    document = get_document_for_knowledge_base(
+        db,
+        knowledge_base_id=knowledge_base.id,
+        document_id=document_id,
+    )
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found.",
+        )
+    if document.review_status != DocumentReviewStatus.APPROVED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Document is not eligible for processing.",
+        )
+
+    try:
+        job = processing_worker.create_and_submit_processing_job(
+            db,
+            document=document,
+            triggered_by_id=current_user.id,
+            trigger_type=ProcessingJobTrigger.RETRY,
+        )
+    except (ActiveProcessingJobExistsError, ProcessingJobEligibilityError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from exc
+    return _build_processing_job_submission(job)
+
+
+@router.post(
+    "/{knowledge_base_id}/documents/{document_id}/reprocess",
+    response_model=ProcessingJobSubmissionRead,
+)
+async def reprocess_team_document_endpoint(
+    team_id: int,
+    knowledge_base_id: int,
+    document_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+) -> ProcessingJobSubmissionRead:
+    _get_active_membership_or_404(
+        db,
+        team_id=team_id,
+        user_id=current_user.id,
+    )
+    knowledge_base = _get_team_knowledge_base_or_404(
+        db,
+        team_id=team_id,
+        knowledge_base_id=knowledge_base_id,
+    )
+    document = get_document_for_knowledge_base(
+        db,
+        knowledge_base_id=knowledge_base.id,
+        document_id=document_id,
+    )
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found.",
+        )
+    if document.review_status != DocumentReviewStatus.APPROVED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Document is not eligible for processing.",
+        )
+
+    try:
+        job = processing_worker.create_and_submit_processing_job(
+            db,
+            document=document,
+            triggered_by_id=current_user.id,
+            trigger_type=ProcessingJobTrigger.REPROCESS,
+        )
+    except (ActiveProcessingJobExistsError, ProcessingJobEligibilityError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from exc
+    return _build_processing_job_submission(job)
+
+
+@router.post(
     "/{knowledge_base_id}/documents/{document_id}/parse",
     response_model=DocumentParseRead,
 )
@@ -379,6 +622,8 @@ async def parse_team_document_endpoint(
             db,
             document=document,
             processing_status=DocumentProcessingStatus.FAILED,
+            error_message=str(exc),
+            processed_at=None,
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -389,6 +634,7 @@ async def parse_team_document_endpoint(
         db,
         document=document,
         processing_status=DocumentProcessingStatus.PARSED,
+        error_message=None,
     )
     return DocumentParseRead(
         document_id=document.id,
@@ -458,6 +704,8 @@ async def chunk_team_document_endpoint(
             db,
             document=document,
             processing_status=DocumentProcessingStatus.FAILED,
+            error_message=str(exc),
+            processed_at=None,
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -477,7 +725,7 @@ async def chunk_team_document_endpoint(
 
 @router.post(
     "/{knowledge_base_id}/documents/{document_id}/embed",
-    response_model=DocumentEmbedRead,
+    response_model=ProcessingJobSubmissionRead,
 )
 async def embed_team_document_endpoint(
     team_id: int,
@@ -485,7 +733,7 @@ async def embed_team_document_endpoint(
     document_id: int,
     db: DBSession,
     current_user: CurrentUser,
-) -> DocumentEmbedRead:
+) -> ProcessingJobSubmissionRead:
     _get_active_membership_or_404(
         db,
         team_id=team_id,
@@ -512,49 +760,33 @@ async def embed_team_document_endpoint(
             detail="Document is not eligible for embedding.",
         )
     if document.processing_status not in {
+        DocumentProcessingStatus.READY,
         DocumentProcessingStatus.PARSED,
         DocumentProcessingStatus.INDEXED,
     }:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Document must be chunked and parsed before embedding.",
+            detail="Document must be ready or chunked before embedding.",
         )
 
-    settings = get_settings()
-    chunks_root = resolve_chunks_root(settings.chunks_dir, base_dir=BASE_DIR)
-    vector_root = resolve_vector_store_root(settings.vector_store_dir, base_dir=BASE_DIR)
     try:
-        embedded_result = embed_document_chunks(
-            document=document,
-            chunks_root=chunks_root,
-            vector_root=vector_root,
-            scope=KnowledgeBaseScope.TEAM,
-            team_id=team_id,
-        )
-    except DocumentEmbeddingError as exc:
-        update_document_processing_status(
+        job = processing_worker.create_and_submit_indexing_job(
             db,
             document=document,
-            processing_status=DocumentProcessingStatus.FAILED,
+            triggered_by_id=current_user.id,
         )
+    except (ActiveProcessingJobExistsError, ProcessingJobEligibilityError) as exc:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from exc
 
-    update_document_processing_status(
-        db,
-        document=document,
-        processing_status=DocumentProcessingStatus.INDEXED,
-    )
-    return DocumentEmbedRead(
-        document_id=document.id,
-        knowledge_base_id=document.knowledge_base_id,
-        processing_status=document.processing_status,
-        index_path=embedded_result.index_path,
-        embedded_chunk_count=embedded_result.embedded_chunk_count,
-        embedding_dimension=embedded_result.embedding_dimension,
-    )
+    return _build_processing_job_submission(job)
 
 
 @router.post(
@@ -587,6 +819,7 @@ async def retrieve_team_knowledge_base_chunks_endpoint(
     vector_root = resolve_vector_store_root(settings.vector_store_dir, base_dir=BASE_DIR)
     try:
         results = retrieve_chunks_for_documents(
+            db=db,
             documents=documents,
             vector_root=vector_root,
             scope=KnowledgeBaseScope.TEAM,
@@ -612,7 +845,19 @@ async def retrieve_team_knowledge_base_chunks_endpoint(
                 knowledge_base_id=item.knowledge_base_id,
                 scope=item.scope,
                 team_id=item.team_id,
+                document_name=item.document_name,
+                snippet=item.snippet,
                 text=item.text,
+                source_type=item.source_type,
+                char_start=item.char_start,
+                char_end=item.char_end,
+                page_number=item.page_number,
+                start_time=item.start_time,
+                end_time=item.end_time,
+                section_title=item.section_title,
+                source_locator=build_source_locator_for_chunk(item),
+                preview_target=build_preview_target_for_chunk(item),
+                heading_path=list(item.heading_path) if item.heading_path else None,
                 score=item.score,
             )
             for item in results
@@ -650,6 +895,7 @@ async def ask_team_knowledge_base_endpoint(
     vector_root = resolve_vector_store_root(settings.vector_store_dir, base_dir=BASE_DIR)
     try:
         retrieved_chunks = retrieve_chunks_for_documents(
+            db=db,
             documents=documents,
             vector_root=vector_root,
             scope=KnowledgeBaseScope.TEAM,

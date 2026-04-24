@@ -1,0 +1,38 @@
+[
+  {
+    "document_type": "txt",
+    "query_type": "keyword",
+    "query": "alpha deployment checklist",
+    "expected_signal": "top result should reference txt deployment chunk"
+  },
+  {
+    "document_type": "md",
+    "query_type": "section",
+    "query": "release notes rollback guidance",
+    "expected_signal": "rerank should favor matching section title"
+  },
+  {
+    "document_type": "pdf",
+    "query_type": "page",
+    "query": "page 2 incident summary",
+    "expected_signal": "citation should keep useful page metadata"
+  },
+  {
+    "document_type": "docx",
+    "query_type": "heading",
+    "query": "architecture worker indexing",
+    "expected_signal": "heading path should help rank the right chunk"
+  },
+  {
+    "document_type": "txt",
+    "query_type": "rewrite",
+    "query": "where do rollout checks live",
+    "expected_signal": "ask should keep concise supporting citations"
+  },
+  {
+    "document_type": "md",
+    "query_type": "mixed_language",
+    "query": "release 文档 rollback steps",
+    "expected_signal": "mixed-language query should remain retrievable"
+  }
+]

@@ -31,7 +31,21 @@ import type { Document, KnowledgeBaseScope } from "@/types";
 
 function supportsDocumentPreparation(filename: string) {
   const normalized = filename.toLowerCase();
-  return normalized.endsWith(".txt") || normalized.endsWith(".md");
+  return (
+    normalized.endsWith(".txt") ||
+    normalized.endsWith(".md") ||
+    normalized.endsWith(".pdf") ||
+    normalized.endsWith(".docx") ||
+    normalized.endsWith(".mp3") ||
+    normalized.endsWith(".wav") ||
+    normalized.endsWith(".m4a") ||
+    normalized.endsWith(".mp4") ||
+    normalized.endsWith(".mov") ||
+    normalized.endsWith(".m4v") ||
+    normalized.endsWith(".png") ||
+    normalized.endsWith(".jpg") ||
+    normalized.endsWith(".jpeg")
+  );
 }
 
 type FeedbackState = {
@@ -133,13 +147,6 @@ export function KnowledgeBaseWorkspace({
       return;
     }
 
-    const actions: Array<"parse" | "chunk" | "embed"> =
-      document.processing_status === "parsed" ? ["chunk", "embed"] : ["parse", "chunk", "embed"];
-
-    if (actions.length === 0) {
-      return;
-    }
-
     setProcessingDocumentIds((current) =>
       current.includes(document.id) ? current : [...current, document.id]
     );
@@ -151,34 +158,25 @@ export function KnowledgeBaseWorkspace({
     });
 
     try {
-      for (const action of actions) {
-        if (scope === "personal") {
-          await documentApi.processPersonalDocumentStep(
-            accessToken,
-            knowledgeBaseId,
-            document.id,
-            action
-          );
-          continue;
-        }
-
+      if (scope === "personal") {
+        await documentApi.processPersonalDocument(accessToken, knowledgeBaseId, document.id);
+      } else {
         if (!teamId) {
           throw new Error(messages.documents.processingFailed);
         }
 
-        await documentApi.processTeamDocumentStep(
+        await documentApi.processTeamDocument(
           accessToken,
           teamId,
           knowledgeBaseId,
-          document.id,
-          action
+          document.id
         );
       }
 
       await invalidateDocuments();
       setFeedback({
-        tone: "success",
-        message: messages.documents.uploadReady(document.original_filename)
+        tone: "info",
+        message: messages.documents.processingSubmitted(document.original_filename)
       });
     } catch (error) {
       console.error("document processing failed", {
@@ -305,6 +303,8 @@ export function KnowledgeBaseWorkspace({
                   document={document}
                   isProcessing={processingDocumentIds.includes(document.id)}
                   onProcess={
+                    document.processing_status === "processing" ||
+                    document.processing_status === "ready" ||
                     document.processing_status === "indexed" ||
                     document.review_status === "pending_review" ||
                     document.review_status === "rejected"

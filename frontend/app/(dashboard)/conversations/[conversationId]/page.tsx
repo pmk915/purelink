@@ -1,5 +1,6 @@
 "use client";
 
+import { CitationCard } from "@/components/qa/citation-card";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/hooks/use-auth";
@@ -81,16 +82,10 @@ export default function ConversationDetailPage({
               {message.citations.length > 0 ? (
                 <div className="mt-4 grid gap-3">
                   {message.citations.map((citation) => (
-                    <div
+                    <CitationCard
                       key={`${message.id}-${citation.chunk_id}`}
-                      className="rounded-2xl border border-border/70 bg-white/80 p-4"
-                    >
-                      <p className="text-xs text-muted-foreground">
-                        {messages.common.chunk(citation.chunk_id)} ·{" "}
-                        {messages.common.documentId(citation.document_id)}
-                      </p>
-                      <p className="mt-2 text-sm leading-6 text-foreground">{citation.text}</p>
-                    </div>
+                      citation={citation}
+                    />
                   ))}
                 </div>
               ) : null}
