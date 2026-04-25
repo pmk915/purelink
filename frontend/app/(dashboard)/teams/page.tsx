@@ -2,34 +2,20 @@
 
 import { TeamCard } from "@/components/teams/team-card";
 import { CreateTeamForm } from "@/components/teams/create-team-form";
-import { JoinTeamForm } from "@/components/teams/join-team-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/hooks/use-auth";
 import { useI18n } from "@/hooks/use-i18n";
-import { useCreateTeam, useJoinTeam, useTeams } from "@/hooks/use-teams";
+import { useCreateTeam, useTeams } from "@/hooks/use-teams";
 
 export default function TeamsPage() {
   const { accessToken } = useAuth();
   const { messages } = useI18n();
   const teamsQuery = useTeams(accessToken);
   const createTeamMutation = useCreateTeam(accessToken);
-  const joinTeamMutation = useJoinTeam(accessToken);
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 xl:grid-cols-[360px_360px_minmax(0,1fr)]">
-        <CreateTeamForm
-          onSubmit={async (values) => {
-            await createTeamMutation.mutateAsync(values);
-          }}
-          isSubmitting={createTeamMutation.isPending}
-        />
-        <JoinTeamForm
-          onSubmit={async (values) => {
-            await joinTeamMutation.mutateAsync(values);
-          }}
-          isSubmitting={joinTeamMutation.isPending}
-        />
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card>
           <CardHeader>
             <CardTitle>{messages.teams.pageTitle}</CardTitle>
@@ -56,6 +42,13 @@ export default function TeamsPage() {
             ) : null}
           </CardContent>
         </Card>
+
+        <CreateTeamForm
+          onSubmit={async (values) => {
+            await createTeamMutation.mutateAsync(values);
+          }}
+          isSubmitting={createTeamMutation.isPending}
+        />
       </div>
     </div>
   );

@@ -19,7 +19,7 @@ down:
 	$(COMPOSE) down
 
 logs:
-	$(COMPOSE) logs -f db api worker
+	$(COMPOSE) logs -f db redis api worker frontend
 
 ps:
 	$(COMPOSE) ps

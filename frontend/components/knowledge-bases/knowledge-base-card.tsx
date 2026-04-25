@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowRight, Database, Users } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useI18n } from "@/hooks/use-i18n";
 import type { KnowledgeBase } from "@/types";
@@ -42,7 +43,7 @@ export function KnowledgeBaseCard({
           </Badge>
         </div>
       </CardHeader>
-      <CardContent className="flex h-full flex-col justify-between gap-4">
+      <CardContent className="flex flex-col gap-4">
         <div className="grid gap-2 text-sm text-muted-foreground">
           <p>
             {messages.common.updatedAt} {formatDate(knowledgeBase.updated_at)}
@@ -51,7 +52,11 @@ export function KnowledgeBaseCard({
         </div>
         <Link
           href={href}
-          className="inline-flex items-center gap-2 text-sm font-medium text-primary"
+          className={buttonVariants({
+            variant: "outline",
+            size: "sm",
+            className: "w-fit rounded-xl"
+          })}
         >
           {messages.knowledgeBases.openWorkspace}
           <ArrowRight className="h-4 w-4" />

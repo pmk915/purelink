@@ -34,23 +34,13 @@ assert_code 201
 DOC_ID="$(echo "$HTTP_BODY" | json_get id)"
 [[ -n "$DOC_ID" ]] || fail "empty document id"
 
-log "create parse task"
-create_parse_task_personal "$TOKEN" "$KB_ID" "$DOC_ID"
-assert_code 201
-PARSE_TASK_ID="$(echo "$HTTP_BODY" | json_get id)"
-wait_task_succeeded "$TOKEN" "$PARSE_TASK_ID"
-
-log "create chunk task"
-create_chunk_task_personal "$TOKEN" "$KB_ID" "$DOC_ID"
-assert_code 201
-CHUNK_TASK_ID="$(echo "$HTTP_BODY" | json_get id)"
-wait_task_succeeded "$TOKEN" "$CHUNK_TASK_ID"
-
-log "create embed task"
-create_embed_task_personal "$TOKEN" "$KB_ID" "$DOC_ID"
-assert_code 201
-EMBED_TASK_ID="$(echo "$HTTP_BODY" | json_get id)"
-wait_task_succeeded "$TOKEN" "$EMBED_TASK_ID"
+log "submit document processing"
+process_personal_document "$TOKEN" "$KB_ID" "$DOC_ID"
+assert_code 200
+PROCESS_JOB_ID="$(echo "$HTTP_BODY" | json_get job_id)"
+[[ -n "$PROCESS_JOB_ID" ]] || fail "empty processing job id"
+wait_processing_job_terminal "$TOKEN" "$PROCESS_JOB_ID"
+wait_personal_document_searchable "$TOKEN" "$KB_ID" "$DOC_ID"
 
 log "retrieve"
 http_json POST "/api/v1/knowledge-bases/$KB_ID/retrieve" '{"query":"What does this document say about PureLink?","top_k":3}' "$TOKEN"

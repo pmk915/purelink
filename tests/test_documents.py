@@ -678,6 +678,54 @@ async def test_team_document_submission_is_pending_review_and_not_visible_as_app
 
 
 @pytest.mark.anyio
+async def test_team_admin_upload_is_approved_without_review_queue(
+    document_client: AsyncClient,
+    tmp_path: Path,
+) -> None:
+    admin = await _register_and_login(
+        document_client,
+        email="team-admin-upload@example.com",
+        username="team-admin-upload",
+    )
+    admin_headers = {"Authorization": f"Bearer {admin['access_token']}"}
+    team_id = await _create_team(
+        document_client,
+        access_token=str(admin["access_token"]),
+        name="Admin Upload Team",
+    )
+    knowledge_base_id = await _create_team_knowledge_base(
+        document_client,
+        access_token=str(admin["access_token"]),
+        team_id=team_id,
+        name="Admin Upload KB",
+    )
+
+    upload_response = await document_client.post(
+        f"/api/v1/teams/{team_id}/knowledge-bases/{knowledge_base_id}/documents",
+        headers=admin_headers,
+        files={"file": ("admin-runbook.txt", b"admin approved content", "text/plain")},
+    )
+
+    assert upload_response.status_code == 201
+    document_body = upload_response.json()
+    assert document_body["review_status"] == "approved"
+    assert document_body["reviewed_by"] == admin["user_id"]
+    assert document_body["reviewed_at"] is not None
+    assert document_body["processing_status"] == "uploaded"
+
+    saved_file = tmp_path / "uploads" / document_body["storage_path"]
+    assert saved_file.exists()
+    assert saved_file.read_bytes() == b"admin approved content"
+
+    review_tasks = await document_client.get(
+        f"/api/v1/teams/{team_id}/review-tasks",
+        headers=admin_headers,
+    )
+    assert review_tasks.status_code == 200
+    assert review_tasks.json() == []
+
+
+@pytest.mark.anyio
 async def test_team_document_review_permissions_and_state_transitions(
     document_client: AsyncClient,
 ) -> None:
@@ -2620,6 +2668,24 @@ async def test_personal_txt_process_endpoint_marks_ready_creates_chunks_and_supp
     assert ask_body["citations"][0]["document_name"] == "ready-notes.txt"
     assert ask_body["citations"][0]["source_type"] == "txt"
     assert ask_body["citations"][0]["snippet"]
+
+    preview_response = await document_client.get(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}/preview",
+        headers=alice_headers,
+    )
+    assert preview_response.status_code == 200
+    preview_body = preview_response.json()
+    assert preview_body["document"]["id"] == document_id
+    assert preview_body["chunks"][0]["chunk_id"] == f"{document_id}:0"
+    assert preview_body["chunks"][0]["source_locator"]["kind"] == "text_range"
+    assert preview_body["chunks"][0]["preview_target"]["locator_kind"] == "text_range"
+
+    file_response = await document_client.get(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}/file",
+        headers=alice_headers,
+    )
+    assert file_response.status_code == 200
+    assert file_response.content == b"PureLink stores product notes for the team workspace."
 
 
 @pytest.mark.anyio

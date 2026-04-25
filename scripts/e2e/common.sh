@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-BASE_URL="${BASE_URL:-http://127.0.0.1:8000}"
+BASE_URL="${BASE_URL:-http://localhost:8000}"
 TMP_DIR="${TMP_DIR:-/tmp/purelink-e2e}"
 
 mkdir -p "$TMP_DIR"
@@ -292,6 +292,134 @@ create_embed_task_team() {
   local kb_id="$3"
   local doc_id="$4"
   http_json POST "/api/v1/teams/$team_id/knowledge-bases/$kb_id/documents/$doc_id/embed-tasks" "" "$token"
+}
+
+process_personal_document() {
+  local token="$1"
+  local kb_id="$2"
+  local doc_id="$3"
+  http_json POST "/api/v1/knowledge-bases/$kb_id/documents/$doc_id/process" "" "$token"
+}
+
+process_team_document() {
+  local token="$1"
+  local team_id="$2"
+  local kb_id="$3"
+  local doc_id="$4"
+  http_json POST "/api/v1/teams/$team_id/knowledge-bases/$kb_id/documents/$doc_id/process" "" "$token"
+}
+
+wait_processing_job_terminal() {
+  local token="$1"
+  local job_id="$2"
+  local retries="${3:-60}"
+  local sleep_sec="${4:-1}"
+
+  for _ in $(seq 1 "$retries"); do
+    http_json GET "/api/v1/processing-jobs/$job_id" "" "$token"
+    assert_code 200
+    local status
+    status="$(echo "$HTTP_BODY" | json_get status)"
+    if [[ "$status" == "succeeded" ]]; then
+      return 0
+    fi
+    if [[ "$status" == "failed" ]]; then
+      echo "Processing job failed: $HTTP_BODY"
+      return 1
+    fi
+    sleep "$sleep_sec"
+  done
+
+  echo "Processing job did not finish in time: $job_id"
+  return 1
+}
+
+wait_personal_document_searchable() {
+  local token="$1"
+  local kb_id="$2"
+  local doc_id="$3"
+  local retries="${4:-60}"
+  local sleep_sec="${5:-1}"
+
+  for _ in $(seq 1 "$retries"); do
+    http_json GET "/api/v1/knowledge-bases/$kb_id/documents" "" "$token"
+    assert_code 200
+    local status
+    status="$(
+      echo "$HTTP_BODY" |
+        python3 -c 'import json, sys; doc_id = int(sys.argv[1]); print(next((document.get("processing_status") or "" for document in json.load(sys.stdin) if document.get("id") == doc_id), ""))' "$doc_id"
+    )"
+    if [[ "$status" == "ready" || "$status" == "indexed" ]]; then
+      return 0
+    fi
+    if [[ "$status" == "failed" ]]; then
+      echo "Document processing failed: $HTTP_BODY"
+      return 1
+    fi
+    sleep "$sleep_sec"
+  done
+
+  echo "Document did not become searchable in time: $doc_id"
+  return 1
+}
+
+wait_team_document_searchable() {
+  local token="$1"
+  local team_id="$2"
+  local kb_id="$3"
+  local doc_id="$4"
+  local retries="${5:-60}"
+  local sleep_sec="${6:-1}"
+
+  for _ in $(seq 1 "$retries"); do
+    http_json GET "/api/v1/teams/$team_id/knowledge-bases/$kb_id/documents" "" "$token"
+    assert_code 200
+    local status
+    status="$(
+      echo "$HTTP_BODY" |
+        python3 -c 'import json, sys; doc_id = int(sys.argv[1]); print(next((document.get("processing_status") or "" for document in json.load(sys.stdin) if document.get("id") == doc_id), ""))' "$doc_id"
+    )"
+    if [[ "$status" == "ready" || "$status" == "indexed" ]]; then
+      return 0
+    fi
+    if [[ "$status" == "failed" ]]; then
+      echo "Document processing failed: $HTTP_BODY"
+      return 1
+    fi
+    sleep "$sleep_sec"
+  done
+
+  echo "Team document did not become searchable in time: $doc_id"
+  return 1
+}
+
+wait_personal_document_indexed() {
+  local token="$1"
+  local kb_id="$2"
+  local doc_id="$3"
+  local retries="${4:-60}"
+  local sleep_sec="${5:-1}"
+
+  for _ in $(seq 1 "$retries"); do
+    http_json GET "/api/v1/knowledge-bases/$kb_id/documents" "" "$token"
+    assert_code 200
+    local status
+    status="$(
+      echo "$HTTP_BODY" |
+        python3 -c 'import json, sys; doc_id = int(sys.argv[1]); print(next((document.get("processing_status") or "" for document in json.load(sys.stdin) if document.get("id") == doc_id), ""))' "$doc_id"
+    )"
+    if [[ "$status" == "indexed" ]]; then
+      return 0
+    fi
+    if [[ "$status" == "failed" ]]; then
+      echo "Document processing failed: $HTTP_BODY"
+      return 1
+    fi
+    sleep "$sleep_sec"
+  done
+
+  echo "Document did not become indexed in time: $doc_id"
+  return 1
 }
 
 wait_task_succeeded() {

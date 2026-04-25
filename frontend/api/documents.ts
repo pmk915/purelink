@@ -1,10 +1,37 @@
 import { apiClient } from "@/lib/api-client";
-import type { Document, DocumentTask, ProcessingJobSubmission } from "@/types";
+import type {
+  Document,
+  DocumentPreview,
+  DocumentTask,
+  ProcessingJobSubmission
+} from "@/types";
 
 type DocumentProcessingAction = "parse" | "chunk" | "embed";
 
 export function listPersonalDocuments(token: string, kbId: number) {
   return apiClient.get<Document[]>(`/knowledge-bases/${kbId}/documents`, token);
+}
+
+export function getPersonalDocumentPreview(
+  token: string,
+  kbId: number,
+  documentId: number
+) {
+  return apiClient.get<DocumentPreview>(
+    `/knowledge-bases/${kbId}/documents/${documentId}/preview`,
+    token
+  );
+}
+
+export function getPersonalDocumentFile(
+  token: string,
+  kbId: number,
+  documentId: number
+) {
+  return apiClient.getBlob(
+    `/knowledge-bases/${kbId}/documents/${documentId}/file`,
+    token
+  );
 }
 
 export function uploadPersonalDocument(token: string, kbId: number, file: File) {
@@ -13,6 +40,30 @@ export function uploadPersonalDocument(token: string, kbId: number, file: File) 
 
 export function listTeamDocuments(token: string, teamId: number, kbId: number) {
   return apiClient.get<Document[]>(`/teams/${teamId}/knowledge-bases/${kbId}/documents`, token);
+}
+
+export function getTeamDocumentPreview(
+  token: string,
+  teamId: number,
+  kbId: number,
+  documentId: number
+) {
+  return apiClient.get<DocumentPreview>(
+    `/teams/${teamId}/knowledge-bases/${kbId}/documents/${documentId}/preview`,
+    token
+  );
+}
+
+export function getTeamDocumentFile(
+  token: string,
+  teamId: number,
+  kbId: number,
+  documentId: number
+) {
+  return apiClient.getBlob(
+    `/teams/${teamId}/knowledge-bases/${kbId}/documents/${documentId}/file`,
+    token
+  );
 }
 
 export function uploadTeamDocument(

@@ -32,6 +32,19 @@ export function usePersonalDocuments(token: string | null, kbId: number) {
   });
 }
 
+export function usePersonalDocumentPreview(
+  token: string | null,
+  kbId: number,
+  documentId: number
+) {
+  return useQuery({
+    queryKey: ["document-preview", "personal", kbId, documentId],
+    queryFn: () =>
+      documentApi.getPersonalDocumentPreview(token as string, kbId, documentId),
+    enabled: Boolean(token) && Number.isFinite(kbId) && Number.isFinite(documentId)
+  });
+}
+
 export function useTeamDocuments(token: string | null, teamId: number, kbId: number) {
   return useQuery({
     queryKey: ["documents", "team", teamId, kbId],
@@ -44,6 +57,24 @@ export function useTeamDocuments(token: string | null, teamId: number, kbId: num
       }
       return 2500;
     }
+  });
+}
+
+export function useTeamDocumentPreview(
+  token: string | null,
+  teamId: number,
+  kbId: number,
+  documentId: number
+) {
+  return useQuery({
+    queryKey: ["document-preview", "team", teamId, kbId, documentId],
+    queryFn: () =>
+      documentApi.getTeamDocumentPreview(token as string, teamId, kbId, documentId),
+    enabled:
+      Boolean(token) &&
+      Number.isFinite(teamId) &&
+      Number.isFinite(kbId) &&
+      Number.isFinite(documentId)
   });
 }
 

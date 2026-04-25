@@ -1,276 +1,256 @@
 # PureLink
 
-> AI-powered knowledge base and task assistant backend for internal teams  
-> 面向团队内部文档管理的 AI 知识库与任务助手后端
+![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
+![Python](https://img.shields.io/badge/python-3.12-blue.svg)
+![FastAPI](https://img.shields.io/badge/FastAPI-API-009688.svg)
+![Next.js](https://img.shields.io/badge/Next.js-frontend-black.svg)
+![Docker](https://img.shields.io/badge/Docker-ready-2496ED.svg)
 
-PureLink is a runnable backend prototype for personal and team knowledge bases. It supports document upload, review workflow, parsing, chunking, embedding, retrieval, and a minimal Q&A flow.  
-PureLink 是一个可运行的后端原型，面向个人知识库和团队知识库场景，当前已经打通文档上传、审核、解析、切块、Embedding、检索和最小问答闭环。
+PureLink is an open-source knowledge workspace for teams. It turns documents and media files into searchable, citable knowledge that can be used for retrieval and question answering.
 
-This repository is suitable for local development, technical demos, portfolio presentation, and interview walkthroughs.  
-这个仓库适合本地开发、技术演示、作品集展示，以及面试中的项目讲解。
+中文简述：PureLink 是一个团队知识工作台，可以上传文档、图片、音频和视频，经处理后进入检索、问答和来源引用链路。
 
-## Overview | 项目概览
+## Highlights
 
-- Personal knowledge bases with ownership isolation  
-  支持个人知识库，具备严格的资源归属隔离
-- Team knowledge bases with invitation and member management  
-  支持团队知识库、邀请码入队和成员管理
-- Team document review workflow before retrieval  
-  支持团队文档审核流，审核通过后才能进入检索链路
-- Local document processing pipeline for `.txt`, `.md`, `.pdf`, `.docx`, `.mp3`, `.wav`, `.m4a`, `.mp4`, `.mov`, `.m4v`, `.png`, `.jpg`, and `.jpeg`
-  支持 `.txt`、`.md`、`.pdf`、`.docx`、`.mp3`、`.wav`、`.m4a`、`.mp4`、`.mov`、`.m4v`、`.png`、`.jpg` 和 `.jpeg` 文件的本地文档处理流水线
-- Conversation and message persistence for Q&A history  
-  支持问答会话与消息持久化，便于后续历史展示
-- Unified `document_tasks` model with Python API + Go worker  
-  通过统一的 `document_tasks` 模型，把 Python API 和 Go worker 串起来
+- Personal and team knowledge bases with clear permission boundaries
+- Team invitation, member management, and role-based document review
+- Automatic document processing through `ProcessingJob`, Redis, and an independent worker service
+- Unified `DocumentChunk` storage for text, PDF, image OCR, audio transcription, and video transcription
+- `ready -> indexed` asynchronous indexing path with local fallback embedding
+- Hybrid retrieval, lightweight rerank, Q&A, and structured citations
+- Source preview pages with deep links for text ranges, PDF pages, image OCR regions, and audio/video time ranges
+- Full Docker Compose stack including PostgreSQL, Redis, FastAPI API, worker, and Next.js frontend
 
-## Features | 当前能力
+## Supported Inputs
 
-### Auth and Multi-Tenant Access | 认证与多租户访问控制
+| Type | Formats | Processing path |
+| --- | --- | --- |
+| Text | `.txt`, `.md` | Extract text, chunk, index |
+| Office / PDF | `.docx`, `.pdf` | Extract text; scanned PDFs fall back to OCR |
+| Image | `.png`, `.jpg`, `.jpeg` | OCR, chunk, index |
+| Audio | `.mp3`, `.wav`, `.m4a` | ASR transcription with timestamps |
+| Video | `.mp4`, `.mov`, `.m4v` | Extract audio, ASR transcription with timestamps |
 
-- User registration, login, JWT authentication, current-user API  
-  用户注册、登录、JWT 鉴权、当前用户查询
-- Personal knowledge base CRUD  
-  个人知识库 CRUD
-- Team creation, invitation, join flow, and member listing  
-  团队创建、邀请码生成、入队流程和成员列表
-- Team admin / member permission boundaries  
-  团队管理员与成员权限边界
+## Tech Stack
 
-### Document Pipeline | 文档处理链
+- Frontend: Next.js App Router, TypeScript, Tailwind CSS, TanStack Query
+- API: FastAPI, Pydantic, SQLAlchemy 2.0
+- Database: PostgreSQL 16
+- Queue: Redis
+- Worker: Python processing worker, plus legacy Go worker experiments
+- Migrations: Alembic
+- Retrieval: local embedding fallback, hybrid retrieval, lightweight rerank
+- Tests: pytest, Bash E2E scripts, frontend lint/build checks
+- Packaging: Docker Compose
 
-- Upload documents into personal or team knowledge bases  
-  文档可上传到个人或团队知识库
-- Team documents require admin approval before retrieval  
-  团队文档必须先审核通过，才能进入检索链路
-- Parse -> chunk -> embed / index task chain  
-  支持 parse -> chunk -> embed / index 任务链
-- Frontend-triggered `.txt`, `.md`, `.pdf`, `.docx`, `.mp3`, `.wav`, `.m4a`, `.mp4`, `.mov`, `.m4v`, `.png`, `.jpg`, and `.jpeg` processing uses the standard `/process` entry that saves chunks and marks the document `ready`; image files go through OCR, scanned PDFs fall back to OCR when needed, audio files go through ASR, and video files extract an audio track before ASR, while the legacy synchronous `parse -> chunk -> embed` flow remains available for compatibility and worker-driven tasks
-  前端“开始处理”对 `.txt`、`.md`、`.pdf`、`.docx`、`.mp3`、`.wav`、`.m4a`、`.mp4`、`.mov`、`.m4v`、`.png`、`.jpg` 和 `.jpeg` 默认走 `/process` 标准入口；图片先 OCR、扫描版 PDF 在需要时走 OCR、音频先 ASR 转写、视频先抽音再 ASR，再统一落最小 chunk 并进入 `ready`；旧的同步 `parse -> chunk -> embed` 闭环继续保留，用于兼容链路和 worker 任务
-- Local runtime artifacts stored in `data/uploads`, `data/parsed`, `data/chunks`, `data/vector_store`  
-  中间产物本地落盘，路径清晰可检查
-
-### Retrieval and Q&A | 检索与问答
-
-- Minimal local embedding and retrieval layer  
-  最小本地 embedding 与检索层
-- Minimal ask API with citations  
-  最小问答接口，返回 answer 和 citations
-- Citations return structured `source_locator` and `preview_target` data for text ranges, PDF pages, image OCR regions, and audio/video time ranges
-  引用结果返回结构化 `source_locator` 与 `preview_target`，覆盖文本范围、PDF 页码、图片 OCR 区域以及音视频时间段
-- Conversation and message persistence with citation metadata  
-  回答消息可持久化 citations 元数据
-- Switchable answer generator: heuristic or OpenAI-compatible LLM  
-  问答生成器可在 heuristic 和 OpenAI-compatible LLM 之间切换
-
-### Engineering and Delivery | 工程化与交付
-
-- FastAPI + PostgreSQL + SQLAlchemy + Alembic  
-  FastAPI + PostgreSQL + SQLAlchemy + Alembic
-- Go worker for parse / chunk / embed / index tasks  
-  Go worker 负责 parse / chunk / embed / index 任务
-- Docker Compose local stack  
-  Docker Compose 本地一键启动
-- Next.js frontend MVP in `frontend/`  
-  `frontend/` 目录下提供了可运行的 Next.js 前端 MVP
-- Bash E2E scripts for demo and smoke verification  
-  Bash E2E 脚本可直接用于演示和冒烟验证
-- GitHub Actions CI + smoke workflow  
-  已补最小 CI 与 smoke workflow
-
-## Tech Stack | 技术栈
-
-- API: FastAPI
-- Database: PostgreSQL
-- ORM / Migration: SQLAlchemy 2.0 + Alembic
-- Worker: Go
-- Storage: local filesystem
-- Testing: pytest + Bash E2E + Go test
-- Deployment: Docker / Docker Compose
-
-## Architecture | 架构说明
+## Architecture
 
 ```text
-Client
+Browser
+  -> Next.js frontend
   -> FastAPI API
-  -> PostgreSQL
-  -> document_tasks
-  -> Go worker
-  -> local artifacts (uploads / parsed / chunks / vector_store)
-  -> retrieval / ask
+  -> PostgreSQL metadata
+  -> Redis processing queue
+  -> Python worker
+  -> local file storage
+  -> DocumentChunk / index artifacts
+  -> retrieve / ask / citation / preview
 ```
 
-Key design choices:  
-核心设计取舍：
+Processing flow:
 
-- Keep the system runnable locally without heavy external infrastructure  
-  先保证本地可运行，不引入过重的外部基础设施
-- Use PostgreSQL as both business storage and task coordination source  
-  使用 PostgreSQL 同时承载业务数据和任务协调
-- Use local files as explicit intermediate artifacts for debugging and demos  
-  用本地文件保存中间产物，方便调试和演示
-- Keep worker boundaries clean for future queue or object-storage upgrades  
-  保留清晰的 worker 边界，后续便于升级到对象存储或队列系统
+```text
+upload
+  -> review if required
+  -> ProcessingJob(document_process)
+  -> extract / OCR / ASR
+  -> DocumentChunk
+  -> ready
+  -> ProcessingJob(document_index)
+  -> indexed
+  -> retrieve / ask / citation
+```
 
-## Quick Start | 快速启动
+Team review rules:
 
-### Docker Compose | Docker 一键启动
+- Personal uploads: process automatically.
+- Team admin uploads: approved immediately, then process automatically.
+- Team member uploads: wait for admin approval, then process.
+- Rejected team documents do not enter retrieval.
+
+## Quick Start
+
+### Run the full stack with Docker
 
 ```bash
-cd /home/pmk/projects/purelink
+git clone <your-fork-or-repo-url>
+cd purelink
 cp .env.example .env
-make up
+docker compose up -d --build
 ```
 
-Then open:  
-启动后访问：
+Open:
 
-- API docs: `http://127.0.0.1:8000/docs`
-- Health check: `http://127.0.0.1:8000/api/v1/health`
+- Frontend: `http://localhost:3000`
+- API docs: `http://localhost:8000/docs`
+- Health check: `http://localhost:8000/api/v1/health`
 
-Stop services:  
-停止服务：
+Stop the stack:
 
 ```bash
-make down
+docker compose down
 ```
 
-### Run Without Docker | 非 Docker 方式启动
+The Docker stack includes:
+
+- `db`: PostgreSQL
+- `redis`: processing queue
+- `api`: FastAPI service
+- `worker`: background document processing worker
+- `frontend`: production Next.js frontend
+
+### Run backend and frontend manually
+
+Backend:
 
 ```bash
-cd /home/pmk/projects/purelink
+cd purelink
 python3 -m venv .venv
 source .venv/bin/activate
-python3 -m pip install -r requirements.txt
+python -m pip install -r requirements.txt
 cp .env.example .env
-python -m uvicorn app.main:app --reload
+alembic upgrade head
+uvicorn app.main:app --reload
 ```
 
-You still need PostgreSQL available through `DATABASE_URL`.  
-这种方式仍然要求你本地有可用的 PostgreSQL，并且 `DATABASE_URL` 配置正确。
-
-If you want to process image OCR, scanned PDF OCR, audio transcription, or video transcription locally without Docker, install local `tesseract` and `ffmpeg` binaries, keep the default OCR / ASR settings from `.env.example` (`OCR_PROVIDER=tesseract`, `OCR_TESSERACT_COMMAND=tesseract`, `ASR_PROVIDER=vosk`, `ASR_FFMPEG_COMMAND=ffmpeg`), and make sure `ASR_VOSK_MODEL_PATH` points to a downloaded Vosk model directory. The Python environment also needs the packages from `requirements.txt`, including `pypdfium2` for PDF page rendering and `vosk` for ASR.
-如果你希望在非 Docker 模式下处理图片 OCR、扫描版 PDF OCR、音频转写或视频转写，需要本机安装 `tesseract` 和 `ffmpeg` 二进制，并保留 `.env.example` 里的默认 OCR / ASR 配置（`OCR_PROVIDER=tesseract`、`OCR_TESSERACT_COMMAND=tesseract`、`ASR_PROVIDER=vosk`、`ASR_FFMPEG_COMMAND=ffmpeg`），同时确保 `ASR_VOSK_MODEL_PATH` 指向已下载好的 Vosk 模型目录。Python 环境也需要安装 `requirements.txt` 里的依赖，其中 `pypdfium2` 用于 PDF 页渲染，`vosk` 用于 ASR。
-
-### Frontend MVP | 前端 MVP 启动
+Frontend:
 
 ```bash
-cd /home/pmk/projects/purelink/frontend
+cd frontend
 cp .env.example .env.local
 npm install
 npm run dev
 ```
 
-Then open:  
-启动后访问：
+Manual local mode still requires PostgreSQL and Redis to be available through `.env`.
 
-- Frontend: `http://127.0.0.1:3000`
-- Backend API: `http://127.0.0.1:8000/api/v1`
+## Configuration
 
-## Verification | 验证方式
+Copy `.env.example` to `.env` before running the stack.
 
-### Local Tests | 本地测试
+Important variables:
+
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `DATABASE_URL` | Backend database URL for non-Docker runs | local PostgreSQL |
+| `REDIS_URL` | Redis queue URL for non-Docker runs | `redis://localhost:6379/0` |
+| `APP_PORT` | Host port for API | `8000` |
+| `FRONTEND_PORT` | Host port for frontend | `3000` |
+| `NEXT_PUBLIC_API_BASE_URL` | Browser-facing API URL baked into the frontend image | `http://localhost:8000/api/v1` |
+| `EMBEDDING_PROVIDER` | Embedding provider | `local_hashed_bow` |
+| `OCR_PROVIDER` | OCR provider | `tesseract` |
+| `ASR_PROVIDER` | ASR provider | `vosk` |
+| `LLM_PROVIDER` | Answer generator | `heuristic` |
+
+Note: `NEXT_PUBLIC_API_BASE_URL` is a build-time variable in Next.js. If you change it for Docker, rebuild the frontend image:
 
 ```bash
-cd /home/pmk/projects/purelink
-make test
+docker compose up -d --build frontend
 ```
 
-### Minimal Smoke Flow | 最小冒烟验证
+## Verification
+
+Run Python tests:
 
 ```bash
-cd /home/pmk/projects/purelink
+pytest -q
+```
+
+Run frontend checks:
+
+```bash
+cd frontend
+npm run lint
+npm run build
+```
+
+Run smoke test:
+
+```bash
 make smoke
 ```
 
-### Full End-to-End Validation | 完整 E2E 验证
+Run full E2E:
 
 ```bash
-cd /home/pmk/projects/purelink
 make e2e
 ```
 
-Recommended command sets:  
-推荐按下面两种场景执行：
+Current scripted E2E coverage:
 
-- Manual frontend-backend verification: start `api` and `frontend`, then register, create a knowledge base, upload a `.txt`, `.md`, `.pdf`, `.docx`, `.mp3`, `.wav`, `.m4a`, `.mp4`, `.mov`, `.m4v`, `.png`, `.jpg`, or `.jpeg`, click `开始处理`, and verify retrieval / ask. Citation cards should show structured location cues such as PDF pages, OCR regions, or media time ranges.
-  手动前后端联调：启动 `api` 和 `frontend` 后，注册、创建知识库、上传 `.txt/.md/.pdf/.docx/.mp3/.wav/.m4a/.mp4/.mov/.m4v/.png/.jpg/.jpeg`、点击“开始处理”、再验证检索和问答。引用卡片应显示 PDF 页码、OCR 区域或音视频时间段等结构化定位信息。
-- Full scripted E2E and worker verification: use `make smoke` or `make e2e`, which both expect the full `db / api / worker` stack from `docker compose`.  
-  脚本式全流程和 worker 验证：使用 `make smoke` 或 `make e2e`，这两条命令都依赖 `docker compose` 拉起完整的 `db / api / worker` 环境。
+- Personal upload -> processing job -> retrieval -> ask -> conversation
+- Team invite -> member upload -> admin review -> processing job -> retrieval -> ask
+- Permission boundaries for team members and outsiders
+- Worker processing and source preview chunk availability
 
-Current E2E coverage:  
-当前 E2E 覆盖：
-
-- personal flow  
-  个人知识库主链路
-- team review flow  
-  团队邀请、上传、审核、检索与问答
-- permission flow  
-  权限边界验证
-- worker flow  
-  worker 执行与中间产物落盘
-
-## Project Structure | 项目结构
+## Project Structure
 
 ```text
 purelink/
-├── app/                 # FastAPI app, models, schemas, services
-├── alembic/             # Database migrations
-├── frontend/            # Next.js frontend MVP
-├── worker-go/           # Go worker
-├── scripts/e2e/         # Bash end-to-end test scripts
-├── tests/               # Python tests and fixtures
-├── docs/                # Design notes
-├── data/                # Local runtime artifacts
-├── Dockerfile
-├── docker-compose.yml
-├── Makefile
-├── README.md
-└── DEVELOPMENT_LOG.md
+├── app/                    # FastAPI app, models, schemas, services, workers
+├── alembic/                # Database migrations
+├── frontend/               # Next.js frontend and frontend Dockerfile
+├── scripts/e2e/            # Bash E2E scripts
+├── tests/                  # pytest test suite
+├── docs/                   # Design notes
+├── worker-go/              # Legacy / experimental Go worker
+├── data/                   # Local runtime artifacts, ignored in production use
+├── docker-compose.yml      # Full local stack
+├── Dockerfile              # API / worker image
+├── Makefile                # Common developer commands
+└── README.md
 ```
 
-## Documentation | 文档入口
+## Developer Commands
 
-- [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md): full milestone history and implementation notes  
-  开发日志，包含详细里程碑、接口说明和实现记录
-- [test.md](test.md): practical frontend-backend and full-flow verification guide  
-  前后端联调与全流程验证手册
-- [frontend/README.md](frontend/README.md): frontend setup and local run guide  
-  前端启动说明
-- [PLAN.md](PLAN.md): roadmap and milestone planning  
-  路线图和阶段计划
-- [CONTRIBUTING.md](CONTRIBUTING.md): contribution workflow  
-  贡献说明
-- [AGENTS.md](AGENTS.md): repository working constraints used during development  
-  仓库开发约束
+```bash
+make up              # start full Docker stack
+make down            # stop Docker stack
+make logs            # follow service logs
+make test-python     # run Python tests
+make smoke           # run minimal Docker smoke flow
+make e2e             # run all E2E scripts
+```
 
-## Why This Repo Works Well for Demo | 为什么适合演示和面试展示
+## Documentation
 
-- It has a complete backend chain instead of isolated demos  
-  它不是零散 demo，而是一条完整的后端业务链
-- It includes auth, permissions, review workflow, processing pipeline, retrieval, and Q&A  
-  它覆盖了认证、权限、审核流、处理流水线、检索和问答
-- It is runnable locally with Docker  
-  可以直接在本地拉起运行
-- It already has smoke and E2E verification  
-  已有 smoke 和 E2E 验证脚本
-- The architecture leaves room for future scale-up  
-  架构上为后续扩展预留了清晰边界
+- [PLAN.md](PLAN.md): roadmap and milestone plan
+- [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md): implementation history
+- [DEV_COMMANDS.md](DEV_COMMANDS.md): practical local commands
+- [frontend/README.md](frontend/README.md): frontend-specific setup notes
+- [CONTRIBUTING.md](CONTRIBUTING.md): contribution workflow
+- [LICENSE](LICENSE): MIT license
 
-## Roadmap | 后续方向
+## Roadmap
 
-- stronger production deployment packaging  
-  更完整的生产部署方案
-- more robust retrieval and ranking  
-  更强的检索与排序能力
-- optional external embedding and vector backends  
-  可选的外部 embedding 与向量后端
-- richer Q&A orchestration and prompt strategy  
-  更丰富的问答编排与 prompt 策略
-- eventual frontend integration  
-  后续前端接入
+- Object storage abstraction for MinIO / S3-compatible backends
+- Stronger external embedding provider support
+- More production-ready vector storage
+- Richer citation preview with PDF/image region highlighting
+- Optional audio/video playback seek from citations
+- Better deployment profiles for cloud environments
 
-## License | 许可证
+## Contributing
 
-This project is released under the MIT License. See [LICENSE](LICENSE).  
-本项目基于 MIT License 开源，见 [LICENSE](LICENSE)。
+Issues and pull requests are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting larger changes.
+
+Recommended contribution checklist:
+
+- Keep the Docker stack runnable.
+- Add or update tests for backend behavior.
+- Run frontend lint/build when touching `frontend/`.
+- Avoid breaking the `ready -> indexed -> retrieve / ask / citation` path.
+
+## License
+
+PureLink is released under the [MIT License](LICENSE).

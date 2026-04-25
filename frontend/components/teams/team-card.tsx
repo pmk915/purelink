@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowRight, Shield, Users } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useI18n } from "@/hooks/use-i18n";
 import type { Team } from "@/types";
@@ -37,7 +38,7 @@ export function TeamCard({ team }: { team: Team }) {
           </Badge>
         </div>
       </CardHeader>
-      <CardContent className="flex h-full flex-col justify-between gap-4">
+      <CardContent className="flex flex-col gap-4">
         <div className="text-sm text-muted-foreground">
           <p>{messages.common.teamId(team.id)}</p>
           <p>
@@ -46,7 +47,11 @@ export function TeamCard({ team }: { team: Team }) {
         </div>
         <Link
           href={`/teams/${team.id}`}
-          className="inline-flex items-center gap-2 text-sm font-medium text-primary"
+          className={buttonVariants({
+            variant: "outline",
+            size: "sm",
+            className: "w-fit rounded-xl"
+          })}
         >
           {messages.teams.openTeam}
           <ArrowRight className="h-4 w-4" />

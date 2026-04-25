@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
 
 from app.api.deps import CurrentUser, DBSession
@@ -15,6 +17,7 @@ from app.models.enums import (
 from app.schemas.document import (
     DocumentChunkRead,
     DocumentParseRead,
+    DocumentPreviewRead,
     DocumentRead,
     RetrievalQueryRequest,
     RetrievalResponse,
@@ -45,6 +48,10 @@ from app.services.document_chunker import (
 from app.services.document_embedding import (
     DocumentEmbeddingError,
     resolve_vector_store_root,
+)
+from app.services.document_preview import (
+    build_document_preview,
+    resolve_document_file_path,
 )
 from app.services.document_parser import (
     DocumentParseError,
@@ -274,7 +281,7 @@ async def upload_document_to_team_knowledge_base_endpoint(
     current_user: CurrentUser,
     file: UploadFile = File(...),
 ) -> DocumentRead:
-    _get_active_membership_or_404(
+    membership = _get_active_membership_or_404(
         db,
         team_id=team_id,
         user_id=current_user.id,
@@ -318,6 +325,7 @@ async def upload_document_to_team_knowledge_base_endpoint(
         original_filename=file.filename,
         content=content,
     )
+    is_admin_upload = membership.role == TeamMemberRole.ADMIN
     document = create_document(
         db,
         knowledge_base_id=knowledge_base.id,
@@ -328,9 +336,19 @@ async def upload_document_to_team_knowledge_base_endpoint(
         file_type=file.content_type or "application/octet-stream",
         file_size=len(content),
         storage_path=storage_path,
-        review_status=DocumentReviewStatus.PENDING_REVIEW,
+        review_status=(
+            DocumentReviewStatus.APPROVED
+            if is_admin_upload
+            else DocumentReviewStatus.PENDING_REVIEW
+        ),
         processing_status=DocumentProcessingStatus.UPLOADED,
     )
+    if is_admin_upload:
+        document.reviewed_by = current_user.id
+        document.reviewed_at = datetime.now(UTC)
+        document.review_comment = None
+        db.commit()
+        db.refresh(document)
     return DocumentRead.model_validate(document)
 
 
@@ -356,6 +374,88 @@ async def list_team_knowledge_base_documents_endpoint(
         knowledge_base_id=knowledge_base.id,
     )
     return [DocumentRead.model_validate(item) for item in documents]
+
+
+@router.get(
+    "/{knowledge_base_id}/documents/{document_id}/preview",
+    response_model=DocumentPreviewRead,
+)
+async def get_team_document_preview_endpoint(
+    team_id: int,
+    knowledge_base_id: int,
+    document_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+) -> DocumentPreviewRead:
+    _get_active_membership_or_404(
+        db,
+        team_id=team_id,
+        user_id=current_user.id,
+    )
+    knowledge_base = _get_team_knowledge_base_or_404(
+        db,
+        team_id=team_id,
+        knowledge_base_id=knowledge_base_id,
+    )
+    document = get_document_for_knowledge_base(
+        db,
+        knowledge_base_id=knowledge_base.id,
+        document_id=document_id,
+    )
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found.",
+        )
+
+    return build_document_preview(db, document=document)
+
+
+@router.get("/{knowledge_base_id}/documents/{document_id}/file")
+async def get_team_document_file_endpoint(
+    team_id: int,
+    knowledge_base_id: int,
+    document_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+) -> Response:
+    _get_active_membership_or_404(
+        db,
+        team_id=team_id,
+        user_id=current_user.id,
+    )
+    knowledge_base = _get_team_knowledge_base_or_404(
+        db,
+        team_id=team_id,
+        knowledge_base_id=knowledge_base_id,
+    )
+    document = get_document_for_knowledge_base(
+        db,
+        knowledge_base_id=knowledge_base.id,
+        document_id=document_id,
+    )
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found.",
+        )
+
+    settings = get_settings()
+    upload_root = resolve_upload_root(settings.upload_dir, base_dir=BASE_DIR)
+    source_path = resolve_document_file_path(upload_root=upload_root, document=document)
+    if not source_path.exists() or not source_path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document file not found.",
+        )
+
+    return Response(
+        content=source_path.read_bytes(),
+        media_type=document.file_type or "application/octet-stream",
+        headers={
+            "Content-Disposition": f'inline; filename="{document.original_filename}"',
+        },
+    )
 
 
 @router.post(

@@ -114,6 +114,37 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   return (await response.json()) as T;
 }
 
+async function requestBlob(path: string, token?: string | null): Promise<Blob> {
+  const headers = new Headers();
+
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "GET",
+    headers,
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    let detail = `Request failed with status ${response.status}.`;
+
+    try {
+      const payload = (await response.json()) as ApiErrorPayload;
+      if (payload.detail) {
+        detail = payload.detail;
+      }
+    } catch {
+      // Binary endpoints may return non-JSON error bodies.
+    }
+
+    throw new ApiClientError(detail, response.status);
+  }
+
+  return response.blob();
+}
+
 export const apiClient = {
   get: <T>(path: string, token?: string | null) =>
     request<T>(path, { method: "GET", token }),
@@ -123,6 +154,7 @@ export const apiClient = {
     request<T>(path, { method: "PATCH", json, token }),
   delete: <T>(path: string, token?: string | null) =>
     request<T>(path, { method: "DELETE", token }),
+  getBlob: (path: string, token?: string | null) => requestBlob(path, token),
   upload: <T>(path: string, file: File, token?: string | null) => {
     const formData = new FormData();
     formData.append("file", file);

@@ -1,24 +1,19 @@
 "use client";
 
+import Link from "next/link";
+import { ExternalLink } from "lucide-react";
+
+import { buttonVariants } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
+import {
+  buildPreviewUrl,
+  formatMediaTime
+} from "@/lib/preview-target";
 import type { CitationLike, RetrievalResult } from "@/types";
 
 
 function hasScore(citation: CitationLike | RetrievalResult): citation is RetrievalResult {
   return typeof (citation as RetrievalResult).score === "number";
-}
-
-
-function formatMediaTime(seconds: number) {
-  const normalized = Math.max(0, Math.floor(seconds));
-  const hours = Math.floor(normalized / 3600);
-  const minutes = Math.floor((normalized % 3600) / 60);
-  const remainingSeconds = normalized % 60;
-  const minuteSecond = `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
-  if (hours <= 0) {
-    return minuteSecond;
-  }
-  return `${hours}:${minuteSecond}`;
 }
 
 
@@ -77,6 +72,7 @@ export function CitationCard({
   const sectionTitle = locator?.section_title || citation.section_title;
   const headingPath = locator?.heading_path || citation.heading_path;
   const locationFallback = locator?.source_locator_text;
+  const previewUrl = buildPreviewUrl(citation);
   const textRangeStart = locator?.char_start;
   const textRangeEnd = locator?.char_end;
   const hasTextRange =
@@ -133,6 +129,21 @@ export function CitationCard({
         ) : null}
       </div>
       <p className="mt-3 text-sm leading-6 text-foreground">{snippet}</p>
+      {previewUrl ? (
+        <div className="mt-4">
+          <Link
+            className={buttonVariants({
+              variant: "outline",
+              size: "sm",
+              className: "rounded-xl"
+            })}
+            href={previewUrl}
+          >
+            <ExternalLink className="h-4 w-4" />
+            {messages.qa.citationViewSource}
+          </Link>
+        </div>
+      ) : null}
     </div>
   );
 }

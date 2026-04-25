@@ -4,6 +4,7 @@ import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 
+import * as documentApi from "@/api/documents";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -111,7 +112,15 @@ export default function TeamReviewsPage({
                   disabled={approveMutation.isPending}
                   onClick={async () => {
                     setActiveDocumentId(document.id);
-                    await approveMutation.mutateAsync(document.id);
+                    const approvedDocument = await approveMutation.mutateAsync(document.id);
+                    if (accessToken) {
+                      await documentApi.processTeamDocument(
+                        accessToken,
+                        teamId,
+                        approvedDocument.knowledge_base_id,
+                        approvedDocument.id
+                      );
+                    }
                   }}
                 >
                   {approveMutation.isPending && activeDocumentId === document.id

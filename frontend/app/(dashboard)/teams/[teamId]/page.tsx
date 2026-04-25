@@ -18,6 +18,7 @@ import {
   useCreateTeamKnowledgeBase,
   useTeamsKnowledgeBases
 } from "@/hooks/use-knowledge-bases";
+import { useTeamReviewTasks } from "@/hooks/use-documents";
 import { useCreateTeamInvite, useTeam, useTeamInvites, useTeamMembers } from "@/hooks/use-teams";
 import { createInviteSchema, type CreateInviteValues } from "@/schemas/teams";
 import { formatDate } from "@/lib/utils";
@@ -44,6 +45,13 @@ export default function TeamDetailPage({
 
   const team = teamQuery.data;
   const isAdmin = team?.my_role === "admin";
+  const reviewTasksQuery = useTeamReviewTasks(isAdmin ? accessToken : null, teamId);
+  const pendingReviewCount = reviewTasksQuery.data?.length ?? 0;
+  const activeInvites = (invitesQuery.data ?? []).filter(
+    (invite) =>
+      invite.status === "active" &&
+      new Date(invite.expires_at).getTime() > Date.now()
+  );
 
   return (
     <div className="space-y-6">
@@ -69,26 +77,52 @@ export default function TeamDetailPage({
         <CardContent className="flex flex-wrap gap-4 text-sm text-muted-foreground">
           <span>{messages.common.teamId(teamId)}</span>
           {team ? <span>{messages.common.updatedAt} {formatDate(team.updated_at)}</span> : null}
-          <Link href={`/teams/${teamId}/reviews`} className="font-medium text-primary">
-            {messages.teams.reviewsLink}
-          </Link>
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <div className="space-y-6">
-          {isAdmin ? (
-            <CreateKnowledgeBaseForm
-              title={messages.teams.createKbTitle}
-              description={messages.teams.createKbDescription}
-              submitLabel={messages.common.create}
-              onSubmit={async (values) => {
-                await createTeamKbMutation.mutateAsync(values);
-              }}
-              isSubmitting={createTeamKbMutation.isPending}
-            />
-          ) : null}
+      {isAdmin ? (
+        <Card className="border-amber-200 bg-amber-50/70">
+          <CardContent className="flex flex-wrap items-center justify-between gap-4 pt-6">
+            <div>
+              <p className="font-medium text-foreground">{messages.teams.reviewSummaryTitle}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {messages.teams.reviewSummaryDescription(pendingReviewCount)}
+              </p>
+            </div>
+            <Link href={`/teams/${teamId}/reviews`}>
+              <Button variant={pendingReviewCount > 0 ? "default" : "outline"}>
+                {messages.teams.reviewsLink}
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      ) : null}
 
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <Card>
+          <CardHeader>
+            <CardTitle>{messages.teams.teamKnowledgeBasesTitle}</CardTitle>
+            <CardDescription>{messages.teams.teamKnowledgeBasesDescription}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 lg:grid-cols-2">
+              {(teamKnowledgeBasesQuery.data ?? []).map((knowledgeBase) => (
+                <KnowledgeBaseCard
+                  key={knowledgeBase.id}
+                  knowledgeBase={knowledgeBase}
+                  href={`/teams/${teamId}/knowledge-bases/${knowledgeBase.id}`}
+                />
+              ))}
+            </div>
+            {teamKnowledgeBasesQuery.data?.length === 0 ? (
+              <div className="rounded-3xl bg-secondary/60 p-6 text-sm text-muted-foreground">
+                {messages.teams.teamKnowledgeBasesEmpty}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        <div className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>{messages.teams.membersTitle}</CardTitle>
@@ -113,6 +147,18 @@ export default function TeamDetailPage({
               ))}
             </CardContent>
           </Card>
+
+          {isAdmin ? (
+            <CreateKnowledgeBaseForm
+              title={messages.teams.createKbTitle}
+              description={messages.teams.createKbDescription}
+              submitLabel={messages.common.create}
+              onSubmit={async (values) => {
+                await createTeamKbMutation.mutateAsync(values);
+              }}
+              isSubmitting={createTeamKbMutation.isPending}
+            />
+          ) : null}
 
           {isAdmin ? (
             <Card>
@@ -160,7 +206,7 @@ export default function TeamDetailPage({
                 </form>
 
                 <div className="space-y-3">
-                  {(invitesQuery.data ?? []).map((invite) => (
+                  {activeInvites.map((invite) => (
                     <div key={invite.id} className="rounded-2xl bg-secondary/60 p-4">
                       <div className="flex items-center justify-between gap-4">
                         <code className="font-mono text-sm text-foreground">{invite.code}</code>
@@ -173,6 +219,11 @@ export default function TeamDetailPage({
                       </p>
                     </div>
                   ))}
+                  {activeInvites.length === 0 ? (
+                    <p className="rounded-2xl bg-secondary/60 p-4 text-sm text-muted-foreground">
+                      {messages.teams.inviteEmpty}
+                    </p>
+                  ) : null}
                 </div>
               </CardContent>
             </Card>
@@ -190,29 +241,6 @@ export default function TeamDetailPage({
             </Card>
           )}
         </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>{messages.teams.teamKnowledgeBasesTitle}</CardTitle>
-            <CardDescription>{messages.teams.teamKnowledgeBasesDescription}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 lg:grid-cols-2">
-              {(teamKnowledgeBasesQuery.data ?? []).map((knowledgeBase) => (
-                <KnowledgeBaseCard
-                  key={knowledgeBase.id}
-                  knowledgeBase={knowledgeBase}
-                  href={`/teams/${teamId}/knowledge-bases/${knowledgeBase.id}`}
-                />
-              ))}
-            </div>
-            {teamKnowledgeBasesQuery.data?.length === 0 ? (
-              <div className="rounded-3xl bg-secondary/60 p-6 text-sm text-muted-foreground">
-                {messages.teams.teamKnowledgeBasesEmpty}
-              </div>
-            ) : null}
-          </CardContent>
-        </Card>
       </div>
     </div>
   );

@@ -173,13 +173,6 @@ export default function DashboardPage() {
                 ))}
               </div>
             )}
-            <Link
-              href="/knowledge-bases"
-              className="inline-flex items-center gap-2 text-sm font-medium text-primary"
-            >
-              {messages.dashboard.managePersonal}
-              <ArrowRight className="h-4 w-4" />
-            </Link>
           </CardContent>
         </Card>
 

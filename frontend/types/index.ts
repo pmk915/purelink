@@ -142,6 +142,28 @@ export interface DocumentTask {
   finished_at: string | null;
 }
 
+export interface DocumentPreviewChunk {
+  chunk_id: string;
+  chunk_index: number;
+  text: string;
+  snippet: string;
+  source_type: string | null;
+  char_start: number | null;
+  char_end: number | null;
+  page_number: number | null;
+  start_time: number | null;
+  end_time: number | null;
+  section_title: string | null;
+  source_locator: SourceLocator | null;
+  preview_target: PreviewTarget | null;
+  heading_path: string[] | null;
+}
+
+export interface DocumentPreview {
+  document: Document;
+  chunks: DocumentPreviewChunk[];
+}
+
 export interface CitationLike {
   chunk_id: string;
   document_id: number;

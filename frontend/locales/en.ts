@@ -119,7 +119,7 @@ export const en = {
     recentTeamsDescription:
       "Shared spaces where your team uploads, reviews, and uses knowledge together.",
     recentTeamsEmpty:
-      "No teams yet. Create one or join with an invite code.",
+      "No teams yet. Create one to start shared knowledge work.",
     recentConversationsTitle: "Recent conversations",
     recentConversationsDescription:
       "Resume saved Q&A sessions without starting over.",
@@ -151,10 +151,10 @@ export const en = {
     uploadDescriptionPersonal:
       "Supported formats: .txt, .md, .pdf, .docx, .mp3, .wav, .m4a, .mp4, .mov, .m4v, .png, .jpg, and .jpeg. After upload, PureLink can prepare the document for search and Q&A.",
     uploadDescriptionTeam:
-      "Supported formats: .txt, .md, .pdf, .docx, .mp3, .wav, .m4a, .mp4, .mov, .m4v, .png, .jpg, and .jpeg. Team documents must be approved before they become searchable.",
+      "Supported formats: .txt, .md, .pdf, .docx, .mp3, .wav, .m4a, .mp4, .mov, .m4v, .png, .jpg, and .jpeg. Admin uploads start processing automatically; member uploads wait for review.",
     documentsTitle: "Documents",
     documentsDescription:
-      "Track each document, confirm whether it is ready, and process it when needed.",
+      "Track document status while PureLink advances upload, review, processing, and indexing automatically.",
     noDocuments: "No documents yet.",
     workspaceScopePersonal: "personal knowledge base",
     workspaceScopeTeam: (teamId: number) =>
@@ -201,7 +201,7 @@ export const en = {
       "This document was not approved. Review the comment and upload an updated version.",
     statusUploaded: "Uploaded",
     statusUploadedHint:
-      "The document is in the knowledge base and can be prepared for search.",
+      "The document is in the knowledge base and will be prepared automatically.",
     statusProcessing: "Processing",
     statusProcessingHint:
       "PureLink is preparing this document for search and Q&A.",
@@ -213,7 +213,20 @@ export const en = {
       "This document cannot be prepared from the current UI because only .txt, .md, .pdf, .docx, .mp3, .wav, .m4a, .mp4, .mov, .m4v, .png, .jpg, and .jpeg are supported.",
     statusReadyToContinue: "Ready to continue",
     statusReadyToContinueHint:
-      "The document was partially prepared and can continue to the final step."
+      "The document was partially prepared and can continue to the final step.",
+    previewBack: "Back to workspace",
+    previewTitle: "Source preview",
+    previewLoading: "Loading source preview...",
+    previewError: "Unable to load source preview.",
+    previewNoChunks: "No processed chunks are available for this document.",
+    previewLocation: "Location",
+    previewSnippet: "Source excerpt",
+    previewExtractedText: "Extracted text",
+    previewPdfPage: (page: number) => `PDF page ${page}`,
+    previewImageRegion: "OCR text region",
+    previewMediaRange: (range: string) => `Time range ${range}`,
+    previewOriginalImageAlt: (filename: string) => `Original image for ${filename}`,
+    previewFileUnavailable: "Original preview is not available for this file."
   },
   qa: {
     retrieveTitle: "Retrieve context",
@@ -245,6 +258,7 @@ export const en = {
     citationImageRegion: "OCR text region",
     citationTimeRange: (start: string, end: string) => `${start} - ${end}`,
     citationScore: (score: number) => `Score ${score.toFixed(3)}`,
+    citationViewSource: "View source",
     openConversation: (id: number) => `Open conversation #${id}`
   },
   teams: {
@@ -253,7 +267,7 @@ export const en = {
       "Teams expose collaboration, reviews, and shared knowledge bases.",
     pageLoading: "Loading teams...",
     pageLoadError: "Unable to load teams.",
-    pageEmpty: "No teams yet. Create one or join with an invite code.",
+    pageEmpty: "No teams yet. Create one to start a shared workspace.",
     createTitle: "Create team",
     createDescription:
       "Start a shared workspace and become its first admin.",
@@ -272,12 +286,16 @@ export const en = {
     detailLabel: "Team workspace",
     loadingTeam: "Loading team...",
     reviewsLink: "Open review queue",
+    reviewSummaryTitle: "Review queue",
+    reviewSummaryDescription: (count: number) =>
+      count === 1 ? "1 document needs admin review." : `${count} documents need admin review.`,
     membersTitle: "Team members",
     membersDescription:
       "Everyone with active membership in this team.",
     inviteTitle: "Invite teammates",
     inviteDescription:
       "Create invite codes that new members can use.",
+    inviteEmpty: "No active invite codes.",
     expiresInDays: "Expires in days",
     inviteError: "Unable to create invite.",
     teamKnowledgeBasesTitle: "Team knowledge bases",
@@ -297,7 +315,7 @@ export const en = {
     description:
       "Only team admins can approve or reject submitted documents. Approved documents can then be prepared for search and Q&A.",
     approvalNote:
-      "Approval changes the review result only. The document still needs to be prepared before it becomes searchable.",
+      "Approval starts background processing automatically. No extra prepare step is needed.",
     rejectReason: "Rejection reason",
     rejectSubmit: "Reject",
     rejecting: "Rejecting...",

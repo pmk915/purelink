@@ -133,12 +133,28 @@ def create_team_invite(
 
 
 def list_team_invites(db: Session, *, team_id: int) -> list[TeamInvite]:
+    now = datetime.now(UTC)
     statement = (
         select(TeamInvite)
         .where(TeamInvite.team_id == team_id)
         .order_by(TeamInvite.created_at.desc(), TeamInvite.id.desc())
     )
-    return list(db.scalars(statement))
+    invites = list(db.scalars(statement))
+    has_expired_updates = False
+    active_invites: list[TeamInvite] = []
+    for invite in invites:
+        expires_at = _coerce_utc_datetime(invite.expires_at)
+        if invite.status == TeamInviteStatus.ACTIVE and expires_at <= now:
+            invite.status = TeamInviteStatus.EXPIRED
+            has_expired_updates = True
+            continue
+        if invite.status == TeamInviteStatus.ACTIVE:
+            active_invites.append(invite)
+
+    if has_expired_updates:
+        db.commit()
+
+    return active_invites
 
 
 def join_team_by_invite(

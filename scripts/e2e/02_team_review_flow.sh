@@ -74,23 +74,13 @@ http_json POST "/api/v1/teams/$TEAM_ID/documents/$DOC_ID/approve" "" "$ALICE_TOK
 assert_code 200
 assert_contains "approved"
 
-log "bob creates parse task"
-create_parse_task_team "$BOB_TOKEN" "$TEAM_ID" "$KB_ID" "$DOC_ID"
-assert_code 201
-PARSE_TASK_ID="$(echo "$HTTP_BODY" | json_get id)"
-wait_task_succeeded "$BOB_TOKEN" "$PARSE_TASK_ID"
-
-log "bob creates chunk task"
-create_chunk_task_team "$BOB_TOKEN" "$TEAM_ID" "$KB_ID" "$DOC_ID"
-assert_code 201
-CHUNK_TASK_ID="$(echo "$HTTP_BODY" | json_get id)"
-wait_task_succeeded "$BOB_TOKEN" "$CHUNK_TASK_ID"
-
-log "bob creates embed task"
-create_embed_task_team "$BOB_TOKEN" "$TEAM_ID" "$KB_ID" "$DOC_ID"
-assert_code 201
-EMBED_TASK_ID="$(echo "$HTTP_BODY" | json_get id)"
-wait_task_succeeded "$BOB_TOKEN" "$EMBED_TASK_ID"
+log "submit reviewed document processing"
+process_team_document "$ALICE_TOKEN" "$TEAM_ID" "$KB_ID" "$DOC_ID"
+assert_code 200
+PROCESS_JOB_ID="$(echo "$HTTP_BODY" | json_get job_id)"
+[[ -n "$PROCESS_JOB_ID" ]] || fail "empty processing job id"
+wait_processing_job_terminal "$ALICE_TOKEN" "$PROCESS_JOB_ID"
+wait_team_document_searchable "$BOB_TOKEN" "$TEAM_ID" "$KB_ID" "$DOC_ID"
 
 log "bob retrieval"
 http_json POST "/api/v1/teams/$TEAM_ID/knowledge-bases/$KB_ID/retrieve" '{"query":"What is this team document about?","top_k":3}' "$BOB_TOKEN"

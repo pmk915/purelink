@@ -14,6 +14,7 @@ from app.models.enums import (
 from app.schemas.document import (
     DocumentChunkRead,
     DocumentParseRead,
+    DocumentPreviewRead,
     DocumentRead,
     RetrievalQueryRequest,
     RetrievalResponse,
@@ -44,6 +45,10 @@ from app.services.document_chunker import (
 from app.services.document_embedding import (
     DocumentEmbeddingError,
     resolve_vector_store_root,
+)
+from app.services.document_preview import (
+    build_document_preview,
+    resolve_document_file_path,
 )
 from app.services.document_parser import (
     DocumentParseError,
@@ -273,6 +278,76 @@ async def list_personal_knowledge_base_documents_endpoint(
         knowledge_base_id=knowledge_base.id,
     )
     return [DocumentRead.model_validate(item) for item in documents]
+
+
+@router.get(
+    "/{knowledge_base_id}/documents/{document_id}/preview",
+    response_model=DocumentPreviewRead,
+)
+async def get_personal_document_preview_endpoint(
+    knowledge_base_id: int,
+    document_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+) -> DocumentPreviewRead:
+    knowledge_base = _get_owned_knowledge_base_or_404(
+        db,
+        knowledge_base_id=knowledge_base_id,
+        user_id=current_user.id,
+    )
+    document = get_document_for_knowledge_base(
+        db,
+        knowledge_base_id=knowledge_base.id,
+        document_id=document_id,
+    )
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found.",
+        )
+
+    return build_document_preview(db, document=document)
+
+
+@router.get("/{knowledge_base_id}/documents/{document_id}/file")
+async def get_personal_document_file_endpoint(
+    knowledge_base_id: int,
+    document_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+) -> Response:
+    knowledge_base = _get_owned_knowledge_base_or_404(
+        db,
+        knowledge_base_id=knowledge_base_id,
+        user_id=current_user.id,
+    )
+    document = get_document_for_knowledge_base(
+        db,
+        knowledge_base_id=knowledge_base.id,
+        document_id=document_id,
+    )
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found.",
+        )
+
+    settings = get_settings()
+    upload_root = resolve_upload_root(settings.upload_dir, base_dir=BASE_DIR)
+    source_path = resolve_document_file_path(upload_root=upload_root, document=document)
+    if not source_path.exists() or not source_path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document file not found.",
+        )
+
+    return Response(
+        content=source_path.read_bytes(),
+        media_type=document.file_type or "application/octet-stream",
+        headers={
+            "Content-Disposition": f'inline; filename="{document.original_filename}"',
+        },
+    )
 
 
 @router.post(

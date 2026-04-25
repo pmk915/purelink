@@ -21,6 +21,7 @@ import {
   usePersonalKnowledgeBase,
   useTeamKnowledgeBase
 } from "@/hooks/use-knowledge-bases";
+import { useTeam } from "@/hooks/use-teams";
 import {
   useAskPersonal,
   useAskTeam,
@@ -82,6 +83,7 @@ export function KnowledgeBaseWorkspace({
 
   const personalKbQuery = usePersonalKnowledgeBase(accessToken, knowledgeBaseId);
   const teamKbQuery = useTeamKnowledgeBase(accessToken, teamId ?? Number.NaN, knowledgeBaseId);
+  const teamQuery = useTeam(scope === "team" ? accessToken : null, teamId ?? Number.NaN);
   const personalDocumentsQuery = usePersonalDocuments(accessToken, knowledgeBaseId);
   const teamDocumentsQuery = useTeamDocuments(accessToken, teamId ?? Number.NaN, knowledgeBaseId);
   const uploadPersonal = useUploadPersonalDocument(accessToken, knowledgeBaseId);
@@ -94,17 +96,20 @@ export function KnowledgeBaseWorkspace({
   const knowledgeBase = scope === "personal" ? personalKbQuery.data : teamKbQuery.data;
   const documents =
     scope === "personal" ? personalDocumentsQuery.data ?? [] : teamDocumentsQuery.data ?? [];
+  const isTeamAdmin = scope === "team" && teamQuery.data?.my_role === "admin";
 
   const isLoading = useMemo(
     () =>
       personalKbQuery.isLoading ||
       teamKbQuery.isLoading ||
       personalDocumentsQuery.isLoading ||
-      teamDocumentsQuery.isLoading,
+      teamDocumentsQuery.isLoading ||
+      teamQuery.isLoading,
     [
       personalDocumentsQuery.isLoading,
       personalKbQuery.isLoading,
       teamDocumentsQuery.isLoading,
+      teamQuery.isLoading,
       teamKbQuery.isLoading
     ]
   );
@@ -269,6 +274,19 @@ export function KnowledgeBaseWorkspace({
               }
 
               const uploadedDocument = await uploadTeam.mutateAsync(file);
+              if (isTeamAdmin) {
+                setFeedback({
+                  tone: "success",
+                  message: messages.documents.uploadProcessingStarted(
+                    uploadedDocument.original_filename
+                  )
+                });
+                void runProcessingPipeline(uploadedDocument, {
+                  triggeredByUpload: true
+                });
+                return;
+              }
+
               setFeedback({
                 tone: "success",
                 message: messages.documents.uploadSubmittedForReview(
@@ -303,15 +321,11 @@ export function KnowledgeBaseWorkspace({
                   document={document}
                   isProcessing={processingDocumentIds.includes(document.id)}
                   onProcess={
-                    document.processing_status === "processing" ||
-                    document.processing_status === "ready" ||
-                    document.processing_status === "indexed" ||
-                    document.review_status === "pending_review" ||
-                    document.review_status === "rejected"
-                      ? null
-                      : async () => {
+                    document.processing_status === "failed"
+                      ? async () => {
                           await runProcessingPipeline(document);
                         }
+                      : null
                   }
                 />
               ))}

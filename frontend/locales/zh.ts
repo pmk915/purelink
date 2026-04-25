@@ -120,7 +120,7 @@ export const zh: Messages = {
     recentTeamsDescription:
       "团队成员可以在这里共同上传、审核和使用知识。",
     recentTeamsEmpty:
-      "还没有团队。你可以自己创建，或者通过邀请码加入。",
+      "还没有团队。先创建一个共享工作区。",
     recentConversationsTitle: "最近会话",
     recentConversationsDescription:
       "从上次保存的位置继续，不用重新开始。",
@@ -151,9 +151,9 @@ export const zh: Messages = {
     uploadDescriptionPersonal:
       "当前支持 .txt、.md、.pdf、.docx、.mp3、.wav、.m4a、.mp4、.mov、.m4v、.png、.jpg 和 .jpeg。上传后 PureLink 可以将文档准备为可搜索、可问答的内容。",
     uploadDescriptionTeam:
-      "当前支持 .txt、.md、.pdf、.docx、.mp3、.wav、.m4a、.mp4、.mov、.m4v、.png、.jpg 和 .jpeg。团队文档需要先审核通过，之后才能进入知识库搜索。",
+      "当前支持 .txt、.md、.pdf、.docx、.mp3、.wav、.m4a、.mp4、.mov、.m4v、.png、.jpg 和 .jpeg。管理员上传后自动处理，成员上传后先进入审核。",
     documentsTitle: "文档",
-    documentsDescription: "查看每个文档的状态，并在需要时继续处理。",
+    documentsDescription: "查看每个文档的状态，PureLink 会自动推进上传、审核、处理和索引。",
     noDocuments: "还没有文档。",
     workspaceScopePersonal: "个人知识库",
     workspaceScopeTeam: (teamId: number) => `团队知识库 · team #${teamId}`,
@@ -196,7 +196,7 @@ export const zh: Messages = {
       "该文档未通过审核，请根据备注调整后重新上传。",
     statusUploaded: "已上传",
     statusUploadedHint:
-      "文档已经进入知识库，接下来可以继续处理。",
+      "文档已经进入知识库，系统会自动推进处理。",
     statusProcessing: "处理中",
     statusProcessingHint:
       "PureLink 正在准备该文档，使其可用于搜索和问答。",
@@ -208,7 +208,20 @@ export const zh: Messages = {
       "当前界面只支持将 .txt、.md、.pdf、.docx、.mp3、.wav、.m4a、.mp4、.mov、.m4v、.png、.jpg 和 .jpeg 文档继续处理为可搜索内容。",
     statusReadyToContinue: "待继续处理",
     statusReadyToContinueHint:
-      "该文档已完成部分准备，可以继续进入最后一步。"
+      "该文档已完成部分准备，可以继续进入最后一步。",
+    previewBack: "返回工作区",
+    previewTitle: "来源预览",
+    previewLoading: "正在加载来源预览...",
+    previewError: "来源预览加载失败。",
+    previewNoChunks: "该文档还没有可预览的处理片段。",
+    previewLocation: "定位",
+    previewSnippet: "来源片段",
+    previewExtractedText: "提取文本",
+    previewPdfPage: (page: number) => `PDF 第 ${page} 页`,
+    previewImageRegion: "OCR 文本区域",
+    previewMediaRange: (range: string) => `时间段 ${range}`,
+    previewOriginalImageAlt: (filename: string) => `${filename} 的原始图片`,
+    previewFileUnavailable: "当前文件无法显示原始预览。"
   },
   qa: {
     retrieveTitle: "检索上下文",
@@ -239,6 +252,7 @@ export const zh: Messages = {
     citationImageRegion: "OCR 文本区域",
     citationTimeRange: (start: string, end: string) => `${start} - ${end}`,
     citationScore: (score: number) => `分数 ${score.toFixed(3)}`,
+    citationViewSource: "查看来源",
     openConversation: (id: number) => `打开会话 #${id}`
   },
   teams: {
@@ -246,7 +260,7 @@ export const zh: Messages = {
     pageDescription: "团队模块承载协作、审核和共享知识库。",
     pageLoading: "正在加载团队...",
     pageLoadError: "加载团队失败。",
-    pageEmpty: "还没有团队。你可以自己创建，或者通过邀请码加入。",
+    pageEmpty: "还没有团队。先创建一个共享工作区。",
     createTitle: "创建团队",
     createDescription: "先创建一个共享工作区，你会自动成为第一个管理员。",
     createError: "创建团队失败。",
@@ -263,10 +277,14 @@ export const zh: Messages = {
     detailLabel: "团队工作区",
     loadingTeam: "正在加载团队...",
     reviewsLink: "进入审核队列",
+    reviewSummaryTitle: "审核队列",
+    reviewSummaryDescription: (count: number) =>
+      count === 1 ? "有 1 个文档需要管理员审核。" : `有 ${count} 个文档需要管理员审核。`,
     membersTitle: "团队成员",
     membersDescription: "当前团队中所有处于激活状态的成员。",
     inviteTitle: "邀请队友",
     inviteDescription: "创建邀请码，供新成员加入团队。",
+    inviteEmpty: "当前没有有效邀请码。",
     expiresInDays: "过期天数",
     inviteError: "创建邀请码失败。",
     teamKnowledgeBasesTitle: "团队知识库",
@@ -286,7 +304,7 @@ export const zh: Messages = {
     description:
       "只有团队管理员可以通过或拒绝团队成员提交的文档。审核通过后，文档才能继续进入知识库。",
     approvalNote:
-      "通过审核只会改变审核结果。文档仍需继续处理后，才会变成可搜索状态。",
+      "通过审核后会自动进入后台处理，不需要再手动准备。",
     rejectReason: "拒绝原因",
     rejectSubmit: "拒绝",
     rejecting: "拒绝中...",

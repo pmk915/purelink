@@ -360,3 +360,65 @@ async def test_join_validates_invite_expiry_status_and_duplicate_membership(
         expired_invite = db.scalar(select(TeamInvite).where(TeamInvite.code == third_code))
         assert expired_invite is not None
         assert expired_invite.status == TeamInviteStatus.EXPIRED
+
+
+@pytest.mark.anyio
+async def test_invite_list_hides_expired_and_inactive_codes(
+    team_client: AsyncClient,
+    test_session_factory: sessionmaker,
+) -> None:
+    alice = await _register_and_login(
+        team_client,
+        email="invite-list-owner@example.com",
+        username="invite-list-owner",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+    create_team_response = await team_client.post(
+        "/api/v1/teams",
+        headers=alice_headers,
+        json={"name": "Invite Visibility Team"},
+    )
+    team_id = create_team_response.json()["id"]
+
+    active_response = await team_client.post(
+        f"/api/v1/teams/{team_id}/invites",
+        headers=alice_headers,
+        json={"expires_in_days": 7},
+    )
+    expired_response = await team_client.post(
+        f"/api/v1/teams/{team_id}/invites",
+        headers=alice_headers,
+        json={"expires_in_days": 7},
+    )
+    revoked_response = await team_client.post(
+        f"/api/v1/teams/{team_id}/invites",
+        headers=alice_headers,
+        json={"expires_in_days": 7},
+    )
+
+    active_code = active_response.json()["code"]
+    expired_code = expired_response.json()["code"]
+    revoked_code = revoked_response.json()["code"]
+
+    with test_session_factory() as db:
+        expired_invite = db.scalar(select(TeamInvite).where(TeamInvite.code == expired_code))
+        revoked_invite = db.scalar(select(TeamInvite).where(TeamInvite.code == revoked_code))
+        assert expired_invite is not None
+        assert revoked_invite is not None
+        expired_invite.expires_at = datetime.now(UTC) - timedelta(minutes=1)
+        revoked_invite.status = TeamInviteStatus.REVOKED
+        db.commit()
+
+    list_response = await team_client.get(
+        f"/api/v1/teams/{team_id}/invites",
+        headers=alice_headers,
+    )
+
+    assert list_response.status_code == 200
+    invites = list_response.json()
+    assert [item["code"] for item in invites] == [active_code]
+
+    with test_session_factory() as db:
+        expired_invite = db.scalar(select(TeamInvite).where(TeamInvite.code == expired_code))
+        assert expired_invite is not None
+        assert expired_invite.status == TeamInviteStatus.EXPIRED

@@ -131,3 +131,30 @@ class RetrievalResponse(BaseModel):
     query: str
     top_k: int
     results: list[RetrievedChunkRead]
+
+
+class DocumentPreviewChunkRead(BaseModel):
+    chunk_id: str
+    chunk_index: int
+    text: str
+    snippet: str
+    source_type: str | None = None
+    char_start: int | None = None
+    char_end: int | None = None
+    page_number: int | None = None
+    start_time: float | None = None
+    end_time: float | None = None
+    section_title: str | None = None
+    source_locator: SourceLocatorRead | None = None
+    preview_target: PreviewTargetRead | None = None
+    heading_path: list[str] | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legacy_source_locator(cls, value: object) -> object:
+        return normalize_locator_fields(value)
+
+
+class DocumentPreviewRead(BaseModel):
+    document: DocumentRead
+    chunks: list[DocumentPreviewChunkRead]

@@ -30,38 +30,25 @@ http_upload "/api/v1/knowledge-bases/$KB_ID/documents" "$FIXTURE" "$TOKEN"
 assert_code 201
 DOC_ID="$(echo "$HTTP_BODY" | json_get id)"
 
-log "parse task"
-create_parse_task_personal "$TOKEN" "$KB_ID" "$DOC_ID"
-assert_code 201
-PARSE_TASK_ID="$(echo "$HTTP_BODY" | json_get id)"
-wait_task_succeeded "$TOKEN" "$PARSE_TASK_ID"
-
-log "chunk task"
-create_chunk_task_personal "$TOKEN" "$KB_ID" "$DOC_ID"
-assert_code 201
-CHUNK_TASK_ID="$(echo "$HTTP_BODY" | json_get id)"
-wait_task_succeeded "$TOKEN" "$CHUNK_TASK_ID"
-
-log "embed task"
-create_embed_task_personal "$TOKEN" "$KB_ID" "$DOC_ID"
-assert_code 201
-EMBED_TASK_ID="$(echo "$HTTP_BODY" | json_get id)"
-wait_task_succeeded "$TOKEN" "$EMBED_TASK_ID"
-
-log "check parsed artifact"
-PARSED_FILE="$ROOT_DIR/data/parsed/personal/knowledge_base_${KB_ID}/document_${DOC_ID}.json"
-[[ -f "$PARSED_FILE" ]] || fail "missing parsed file: $PARSED_FILE"
-
-log "check chunk artifact"
-CHUNK_FILE="$ROOT_DIR/data/chunks/personal/knowledge_base_${KB_ID}/document_${DOC_ID}.json"
-[[ -f "$CHUNK_FILE" ]] || fail "missing chunk file: $CHUNK_FILE"
+log "submit processing job"
+process_personal_document "$TOKEN" "$KB_ID" "$DOC_ID"
+assert_code 200
+PROCESS_JOB_ID="$(echo "$HTTP_BODY" | json_get job_id)"
+[[ -n "$PROCESS_JOB_ID" ]] || fail "empty processing job id"
+wait_processing_job_terminal "$TOKEN" "$PROCESS_JOB_ID"
+wait_personal_document_indexed "$TOKEN" "$KB_ID" "$DOC_ID"
 
 log "check vector artifact"
 VECTOR_FILE="$ROOT_DIR/data/vector_store/personal/knowledge_base_${KB_ID}/index.json"
 [[ -f "$VECTOR_FILE" ]] || fail "missing vector file: $VECTOR_FILE"
 
+log "check preview chunks"
+http_json GET "/api/v1/knowledge-bases/$KB_ID/documents/$DOC_ID/preview" "" "$TOKEN"
+assert_code 200
+CHUNK_COUNT="$(echo "$HTTP_BODY" | json_get chunks | json_len)"
+[[ "$CHUNK_COUNT" -ge 1 ]] || fail "preview returned no chunks"
+
 echo
 echo "PASS: worker flow"
-echo "parsed=$PARSED_FILE"
-echo "chunk=$CHUNK_FILE"
+echo "job_id=$PROCESS_JOB_ID"
 echo "vector=$VECTOR_FILE"

@@ -18,17 +18,7 @@ export default function KnowledgeBasesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <CreateKnowledgeBaseForm
-          title={messages.knowledgeBases.createTitle}
-          description={messages.knowledgeBases.createDescription}
-          submitLabel={messages.common.create}
-          onSubmit={async (values) => {
-            await createMutation.mutateAsync(values);
-          }}
-          isSubmitting={createMutation.isPending}
-        />
-
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card>
           <CardHeader>
             <CardTitle>{messages.knowledgeBases.title}</CardTitle>
@@ -61,6 +51,16 @@ export default function KnowledgeBasesPage() {
             ) : null}
           </CardContent>
         </Card>
+
+        <CreateKnowledgeBaseForm
+          title={messages.knowledgeBases.createTitle}
+          description={messages.knowledgeBases.createDescription}
+          submitLabel={messages.common.create}
+          onSubmit={async (values) => {
+            await createMutation.mutateAsync(values);
+          }}
+          isSubmitting={createMutation.isPending}
+        />
       </div>
     </div>
   );
