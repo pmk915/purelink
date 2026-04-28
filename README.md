@@ -8,13 +8,13 @@
 
 PureLink 是一个**本地优先、云端兼容的自部署 AI 知识库系统**，适合个人、小团队、实验室、项目组服务器或用户自己的云服务器部署。
 
-英文摘要：PureLink is a local-first, cloud-ready, self-hosted AI knowledge workspace for individuals and small teams.
+PureLink is a local-first, cloud-ready, self-hosted AI knowledge workspace for individuals and small teams.
 
-PureLink 不是官方托管 SaaS。你需要自己部署服务、管理数据，并通过 `.env` 配置自己的 `LLM_PROVIDER`、`EMBEDDING_PROVIDER`、`OCR_PROVIDER`、`ASR_PROVIDER` 和 `RERANKER_PROVIDER`。
+你需要自己部署服务、管理数据，并通过 `.env` 配置自己的 `LLM_PROVIDER`、`EMBEDDING_PROVIDER`、`OCR_PROVIDER`、`ASR_PROVIDER` 和 `RERANKER_PROVIDER`。
 
 ## PureLink 是什么？
 
-PureLink 把文档和多媒体文件变成可检索、可问答、可引用来源的知识库。普通用户不需要理解内部处理流程，核心路径是：
+PureLink 把文档和多媒体文件变成可检索、可问答、可引用来源的知识库，核心路径是：
 
 ```text
 启动系统 -> 注册登录 -> 创建知识库 -> 上传文件 -> 自动准备 -> 提问 -> 查看 citation -> 打开 source preview
