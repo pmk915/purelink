@@ -109,9 +109,9 @@ export function DocumentCard({
 
     if (document.processing_status === "parsed") {
       return {
-        label: messages.documents.statusReadyToContinue,
-        description: messages.documents.statusReadyToContinueHint,
-        variant: "secondary" as const
+        label: messages.documents.statusProcessing,
+        description: messages.documents.statusProcessingHint,
+        variant: "warning" as const
       };
     }
 
@@ -122,12 +122,7 @@ export function DocumentCard({
     };
   })();
 
-  const processButtonLabel =
-    document.processing_status === "failed"
-      ? messages.documents.processRetry
-      : document.processing_status === "parsed"
-        ? messages.documents.processContinue
-        : messages.documents.processStart;
+  const processButtonLabel = messages.documents.processRetry;
 
   const canProcess =
     Boolean(onProcess) &&
@@ -161,12 +156,6 @@ export function DocumentCard({
         {document.review_comment ? (
           <div className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
             {messages.documents.reviewComment}: {document.review_comment}
-          </div>
-        ) : null}
-
-        {document.processing_status === "failed" && document.error_message ? (
-          <div className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {document.error_message}
           </div>
         ) : null}
 

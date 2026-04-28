@@ -79,10 +79,12 @@ class OpenAICompatibleAnswerGenerator:
         api_base: str,
         api_key: str,
         model: str,
+        timeout_seconds: float = 30.0,
     ) -> None:
         self.api_base = api_base
         self.api_key = api_key
         self.model = model
+        self.timeout_seconds = timeout_seconds
 
     def generate(
         self,
@@ -98,6 +100,7 @@ class OpenAICompatibleAnswerGenerator:
                 model=self.model,
                 system_prompt=prompt.system_prompt,
                 user_prompt=prompt.user_prompt,
+                timeout=self.timeout_seconds,
             )
         except LLMProviderError as exc:
             raise AnswerGenerationError(str(exc)) from exc
@@ -228,7 +231,9 @@ def resolve_answer_generator(settings: Settings | None = None) -> AnswerGenerato
 
     if active_settings.llm_provider == OPENAI_COMPATIBLE_PROVIDER:
         if not active_settings.llm_api_base:
-            raise AnswerGenerationError("LLM_API_BASE is required for openai_compatible provider.")
+            raise AnswerGenerationError(
+                "LLM_API_BASE_URL is required for openai_compatible provider."
+            )
         if not active_settings.llm_api_key:
             raise AnswerGenerationError("LLM_API_KEY is required for openai_compatible provider.")
         if not active_settings.llm_model:
@@ -238,6 +243,7 @@ def resolve_answer_generator(settings: Settings | None = None) -> AnswerGenerato
             api_base=active_settings.llm_api_base,
             api_key=active_settings.llm_api_key,
             model=active_settings.llm_model,
+            timeout_seconds=active_settings.llm_timeout_seconds,
         )
 
     raise AnswerGenerationError(

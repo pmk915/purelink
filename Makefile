@@ -10,7 +10,7 @@ else
 PYTHON ?= python3
 endif
 
-.PHONY: up down logs ps build restart test test-python test-go smoke e2e
+.PHONY: up down logs ps build restart test test-python test-go check smoke e2e
 
 up:
 	$(COMPOSE) up --build -d
@@ -36,6 +36,9 @@ test-go:
 	cd worker-go && $(GO) test ./...
 
 test: test-python test-go
+
+check:
+	scripts/check_stack.sh
 
 smoke:
 	@set -euo pipefail; \

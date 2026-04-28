@@ -1,0 +1,12 @@
+PureLink Demo Playbook
+
+PureLink is a self-hosted AI knowledge workspace for personal and small team knowledge bases.
+The recommended demo path is simple: start the Docker stack, register a user, create a personal knowledge base, upload this file, wait until it is ready, ask a question, then open a citation source preview.
+
+Operational notes:
+- Local fallback mode can run the demo without an LLM or embedding API key.
+- Real LLM and embedding providers improve answer quality and ranking.
+- Team admins can upload documents directly into shared knowledge bases.
+- Team members can upload documents for review before the content becomes searchable.
+
+When asked what this document is about, the answer should mention a PureLink self-hosted demo, local fallback mode, knowledge bases, upload preparation, Q&A, and citation source previews.

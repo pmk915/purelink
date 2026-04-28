@@ -48,6 +48,44 @@ def _get_list(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
     return values or default
 
 
+def _get_list_alias(
+    names: tuple[str, ...],
+    default: tuple[str, ...],
+) -> tuple[str, ...]:
+    for name in names:
+        raw_value = os.getenv(name)
+        if raw_value is None:
+            continue
+
+        values = tuple(
+            item.strip()
+            for item in raw_value.split(",")
+            if item.strip()
+        )
+        if values:
+            return values
+
+    return default
+
+
+def _get_str_alias(names: tuple[str, ...], default: str = "") -> str:
+    values: list[str] = []
+    for name in names:
+        raw_value = os.getenv(name)
+        if raw_value is None:
+            continue
+        value = raw_value.strip()
+        if value:
+            values.append(value)
+
+    for value in values:
+        if value != default:
+            return value
+    if values:
+        return values[0]
+    return default
+
+
 def _get_int(name: str, default: int) -> int:
     raw_value = os.getenv(name)
     if raw_value is None:
@@ -84,11 +122,14 @@ class Settings:
     access_token_expire_minutes: int
     database_url: str
     redis_url: str
+    api_base_url: str
+    frontend_base_url: str
     db_echo: bool
     cors_allow_origins: tuple[str, ...]
     cors_allow_methods: tuple[str, ...]
     cors_allow_headers: tuple[str, ...]
     cors_allow_credentials: bool
+    data_dir: str
     upload_dir: str
     parsed_dir: str
     chunks_dir: str
@@ -113,6 +154,7 @@ class Settings:
     llm_api_base: str
     llm_api_key: str
     llm_model: str
+    llm_timeout_seconds: float
     processing_queue_key: str
     processing_inflight_queue_key: str
     processing_queue_block_timeout_seconds: int
@@ -139,17 +181,31 @@ def get_settings() -> Settings:
             "postgresql+psycopg://purelink:purelink@localhost:5432/purelink",
         ),
         redis_url=os.getenv("REDIS_URL", "redis://localhost:6379/0").strip(),
+        api_base_url=os.getenv(
+            "API_BASE_URL",
+            "http://localhost:8000/api/v1",
+        ).strip(),
+        frontend_base_url=os.getenv(
+            "FRONTEND_BASE_URL",
+            "http://localhost:3000",
+        ).strip(),
         db_echo=_get_bool("DB_ECHO", False),
-        cors_allow_origins=_get_list("CORS_ALLOW_ORIGINS", ("*",)),
+        cors_allow_origins=_get_list_alias(
+            ("CORS_ORIGINS", "CORS_ALLOW_ORIGINS"),
+            ("*",),
+        ),
         cors_allow_methods=_get_list("CORS_ALLOW_METHODS", ("*",)),
         cors_allow_headers=_get_list("CORS_ALLOW_HEADERS", ("*",)),
         cors_allow_credentials=_get_bool("CORS_ALLOW_CREDENTIALS", False),
+        data_dir=os.getenv("DATA_DIR", "data"),
         upload_dir=os.getenv("UPLOAD_DIR", "data/uploads"),
         parsed_dir=os.getenv("PARSED_DIR", "data/parsed"),
-        chunks_dir=os.getenv("CHUNK_DIR", "data/chunks"),
+        chunks_dir=_get_str_alias(("CHUNKS_DIR", "CHUNK_DIR"), "data/chunks"),
         vector_store_dir=os.getenv("VECTOR_STORE_DIR", "data/vector_store"),
         embedding_provider=os.getenv("EMBEDDING_PROVIDER", "local_hashed_bow").strip().lower(),
-        embedding_api_base=os.getenv("EMBEDDING_API_BASE", "").strip(),
+        embedding_api_base=_get_str_alias(
+            ("EMBEDDING_API_BASE_URL", "EMBEDDING_API_BASE"),
+        ),
         embedding_api_key=os.getenv("EMBEDDING_API_KEY", "").strip(),
         embedding_model=os.getenv("EMBEDDING_MODEL", "").strip(),
         embedding_timeout_seconds=_get_float("EMBEDDING_TIMEOUT_SECONDS", 30.0),
@@ -157,20 +213,21 @@ def get_settings() -> Settings:
         embedding_dimension=_get_optional_int("EMBEDDING_DIMENSION"),
         ocr_provider=os.getenv("OCR_PROVIDER", "tesseract").strip().lower(),
         ocr_tesseract_command=os.getenv("OCR_TESSERACT_COMMAND", "tesseract").strip(),
-        ocr_language=os.getenv("OCR_LANGUAGE", "eng").strip(),
+        ocr_language=_get_str_alias(("OCR_LANG", "OCR_LANGUAGE"), "eng"),
         ocr_tesseract_psm=_get_int("OCR_TESSERACT_PSM", 6),
         asr_provider=os.getenv("ASR_PROVIDER", "vosk").strip().lower(),
         asr_ffmpeg_command=os.getenv("ASR_FFMPEG_COMMAND", "ffmpeg").strip(),
-        asr_vosk_model_path=os.getenv(
-            "ASR_VOSK_MODEL_PATH",
-            "/opt/vosk/vosk-model-small-en-us-0.15",
+        asr_vosk_model_path=_get_str_alias(
+            ("ASR_MODEL_PATH", "ASR_VOSK_MODEL_PATH"),
+            "/app/models/vosk",
         ).strip(),
         reranker_enabled=_get_bool("RERANKER_ENABLED", True),
         reranker_provider=os.getenv("RERANKER_PROVIDER", "local_rule_reranker").strip().lower(),
         llm_provider=os.getenv("LLM_PROVIDER", "heuristic").strip().lower(),
-        llm_api_base=os.getenv("LLM_API_BASE", "").strip(),
+        llm_api_base=_get_str_alias(("LLM_API_BASE_URL", "LLM_API_BASE")),
         llm_api_key=os.getenv("LLM_API_KEY", "").strip(),
         llm_model=os.getenv("LLM_MODEL", "").strip(),
+        llm_timeout_seconds=_get_float("LLM_TIMEOUT_SECONDS", 30.0),
         processing_queue_key=os.getenv(
             "PROCESSING_QUEUE_KEY",
             "purelink:processing-jobs:queued",

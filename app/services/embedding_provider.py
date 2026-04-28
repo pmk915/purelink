@@ -100,7 +100,9 @@ class OpenAICompatibleEmbeddingProvider:
         if not texts:
             return []
         if not self.api_base:
-            raise EmbeddingProviderError("EMBEDDING_API_BASE is required for external embedding provider.")
+            raise EmbeddingProviderError(
+                "EMBEDDING_API_BASE_URL is required for external embedding provider."
+            )
         if not self.api_key:
             raise EmbeddingProviderError("EMBEDDING_API_KEY is required for external embedding provider.")
         if not self.model:
@@ -134,8 +136,18 @@ class OpenAICompatibleEmbeddingProvider:
                 timeout=self.timeout_seconds,
             )
             response.raise_for_status()
+        except httpx.TimeoutException as exc:
+            raise EmbeddingProviderError(
+                "Embedding request timed out. Check EMBEDDING_API_BASE_URL, network access, and EMBEDDING_TIMEOUT_SECONDS."
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            raise EmbeddingProviderError(
+                f"Embedding provider returned HTTP {exc.response.status_code}. Check EMBEDDING_API_KEY and EMBEDDING_MODEL."
+            ) from exc
         except httpx.HTTPError as exc:
-            raise EmbeddingProviderError(f"Embedding request failed: {exc}") from exc
+            raise EmbeddingProviderError(
+                "Embedding request failed. Check EMBEDDING_API_BASE_URL and provider network access."
+            ) from exc
 
         try:
             body = response.json()

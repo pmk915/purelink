@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import * as documentApi from "@/api/documents";
 import { DocumentCard } from "@/components/documents/document-card";
 import { DocumentUploadCard } from "@/components/documents/document-upload-card";
-import { AskWorkspace } from "@/components/qa/ask-workspace";
+import { AskWorkspace, type QaAvailability } from "@/components/qa/ask-workspace";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/hooks/use-auth";
@@ -22,12 +22,7 @@ import {
   useTeamKnowledgeBase
 } from "@/hooks/use-knowledge-bases";
 import { useTeam } from "@/hooks/use-teams";
-import {
-  useAskPersonal,
-  useAskTeam,
-  useRetrievePersonal,
-  useRetrieveTeam
-} from "@/hooks/use-qa";
+import { useAskPersonal, useAskTeam } from "@/hooks/use-qa";
 import type { Document, KnowledgeBaseScope } from "@/types";
 
 function supportsDocumentPreparation(filename: string) {
@@ -66,6 +61,52 @@ function getFeedbackClassName(tone: FeedbackState["tone"]) {
   return "rounded-2xl bg-sky-50 px-4 py-3 text-sm text-sky-700";
 }
 
+function isDocumentQueryable(document: Document) {
+  return (
+    document.review_status !== "pending_review" &&
+    document.review_status !== "rejected" &&
+    (document.processing_status === "ready" ||
+      document.processing_status === "indexed")
+  );
+}
+
+function isDocumentPreparing(document: Document) {
+  if (
+    document.review_status === "pending_review" ||
+    document.review_status === "rejected"
+  ) {
+    return false;
+  }
+
+  return (
+    document.processing_status === "uploaded" ||
+    document.processing_status === "processing" ||
+    document.processing_status === "parsed" ||
+    document.latest_processing_job_status === "queued" ||
+    document.latest_processing_job_status === "running"
+  );
+}
+
+function getQaAvailability(documents: Document[]): QaAvailability {
+  if (documents.length === 0) {
+    return "empty";
+  }
+
+  if (documents.some(isDocumentQueryable)) {
+    return "ready";
+  }
+
+  if (documents.some((document) => document.review_status === "pending_review")) {
+    return "waiting_review";
+  }
+
+  if (documents.some(isDocumentPreparing)) {
+    return "preparing";
+  }
+
+  return "unavailable";
+}
+
 export function KnowledgeBaseWorkspace({
   scope,
   knowledgeBaseId,
@@ -88,8 +129,6 @@ export function KnowledgeBaseWorkspace({
   const teamDocumentsQuery = useTeamDocuments(accessToken, teamId ?? Number.NaN, knowledgeBaseId);
   const uploadPersonal = useUploadPersonalDocument(accessToken, knowledgeBaseId);
   const uploadTeam = useUploadTeamDocument(accessToken, teamId ?? Number.NaN, knowledgeBaseId);
-  const retrievePersonal = useRetrievePersonal(accessToken, knowledgeBaseId);
-  const retrieveTeam = useRetrieveTeam(accessToken, teamId ?? Number.NaN, knowledgeBaseId);
   const askPersonal = useAskPersonal(accessToken, knowledgeBaseId);
   const askTeam = useAskTeam(accessToken, teamId ?? Number.NaN, knowledgeBaseId);
 
@@ -114,10 +153,7 @@ export function KnowledgeBaseWorkspace({
     ]
   );
 
-  const scopeLabel =
-    scope === "personal"
-      ? messages.knowledgeBases.workspaceScopePersonal
-      : messages.knowledgeBases.workspaceScopeTeam(teamId ?? 0);
+  const qaAvailability = getQaAvailability(documents);
 
   const invalidateDocuments = async () => {
     if (scope === "personal") {
@@ -195,8 +231,7 @@ export function KnowledgeBaseWorkspace({
       await invalidateDocuments();
       setFeedback({
         tone: "error",
-        message:
-          error instanceof Error ? error.message : messages.documents.processingFailed
+        message: messages.documents.processingFailedHelp
       });
     } finally {
       setProcessingDocumentIds((current) =>
@@ -333,12 +368,7 @@ export function KnowledgeBaseWorkspace({
           </Card>
 
           <AskWorkspace
-            scopeLabel={scopeLabel}
-            onRetrieve={(values) =>
-              scope === "personal"
-                ? retrievePersonal.mutateAsync(values)
-                : retrieveTeam.mutateAsync(values)
-            }
+            availability={qaAvailability}
             onAsk={(values) =>
               scope === "personal" ? askPersonal.mutateAsync(values) : askTeam.mutateAsync(values)
             }

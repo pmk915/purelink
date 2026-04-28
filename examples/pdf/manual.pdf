@@ -1,0 +1,25 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 198 >>
+stream
+BT
+/F1 12 Tf
+72 720 Td
+(PureLink demo manual. Upload this PDF to test source preview citations.) Tj
+0 -20 Td
+(The main path prepares documents automatically before retrieval and Q&A.) Tj
+0 -20 Td
+(Configure real providers for stronger answer quality.) Tj
+ET
+endstream
+endobj
+%%EOF

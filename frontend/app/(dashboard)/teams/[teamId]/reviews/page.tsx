@@ -74,6 +74,7 @@ export default function TeamReviewsPage({
   const { accessToken } = useAuth();
   const { messages } = useI18n();
   const [activeDocumentId, setActiveDocumentId] = useState<number | null>(null);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
   const reviewsQuery = useTeamReviewTasks(accessToken, teamId);
   const approveMutation = useApproveTeamDocument(accessToken, teamId);
   const rejectMutation = useRejectTeamDocument(accessToken, teamId);
@@ -102,7 +103,7 @@ export default function TeamReviewsPage({
                     {messages.common.knowledgeBaseId(document.knowledge_base_id)}
                   </CardDescription>
                 </div>
-                <Badge variant="warning">{document.review_status}</Badge>
+                <Badge variant="warning">{messages.documents.statusPendingReview}</Badge>
               </div>
             </CardHeader>
             <CardContent className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
@@ -111,15 +112,26 @@ export default function TeamReviewsPage({
                   className="w-full"
                   disabled={approveMutation.isPending}
                   onClick={async () => {
-                    setActiveDocumentId(document.id);
-                    const approvedDocument = await approveMutation.mutateAsync(document.id);
-                    if (accessToken) {
-                      await documentApi.processTeamDocument(
-                        accessToken,
-                        teamId,
-                        approvedDocument.knowledge_base_id,
-                        approvedDocument.id
-                      );
+                    try {
+                      setActiveDocumentId(document.id);
+                      setApprovalError(null);
+                      const approvedDocument = await approveMutation.mutateAsync(document.id);
+                      if (accessToken) {
+                        try {
+                          await documentApi.processTeamDocument(
+                            accessToken,
+                            teamId,
+                            approvedDocument.knowledge_base_id,
+                            approvedDocument.id
+                          );
+                        } catch (error) {
+                          console.error("automatic document preparation failed", { error });
+                          setApprovalError(messages.reviews.autoPrepareError);
+                        }
+                      }
+                    } catch (error) {
+                      console.error("document approval failed", { error });
+                      setApprovalError(messages.reviews.approveError);
                     }
                   }}
                 >
@@ -130,6 +142,9 @@ export default function TeamReviewsPage({
                 <p className="text-xs text-muted-foreground">
                   {messages.reviews.approvalNote}
                 </p>
+                {approvalError && activeDocumentId === document.id ? (
+                  <p className="text-xs text-rose-600">{approvalError}</p>
+                ) : null}
               </div>
               <RejectForm
                 isSubmitting={rejectMutation.isPending && activeDocumentId === document.id}

@@ -1,14 +1,69 @@
 # PureLink 续聊交接摘要（给新对话 / 新 Codex）
 
+## M26 当前定位更新
+
+PureLink 当前定位为：**本地优先、云端兼容的自部署 AI 知识库系统**，而不是官方托管 SaaS。
+
+当前阶段目标不是继续增加文件格式或扩写多模态能力，而是把已经完成的个人知识库、团队知识库、上传、审核、后台处理、检索、问答、citation、source preview 和 Docker 全栈运行能力，整理成其他人可以 clone、配置、启动、演示的自部署项目。
+
+当前推荐演示路径：
+
+```text
+启动系统 -> 注册登录 -> 创建知识库 -> 上传 examples/text/playbook.txt -> 自动准备 -> 提问 -> 查看 citation -> 打开来源预览
+```
+
+当前主路径：
+
+```text
+upload
+-> ProcessingJob(document_process)
+-> extract / OCR / ASR
+-> DocumentChunk
+-> ready
+-> ProcessingJob(document_index)
+-> indexed
+-> retrieve / ask / citation / preview
+```
+
+`parse` / `chunk` / `embed` / old task APIs / `worker-go` 保留为历史兼容或调试路径，新功能不应继续围绕这些路径扩展。当前主生产 worker 是 Python worker。
+
+### M26 Roadmap
+
+Short-term:
+
+- 完善本地部署体验
+- 完善 provider 配置体验
+- 增加 demo / stack check 脚本
+- 优化用户可见状态文案
+- 改善失败重试体验
+
+Mid-term:
+
+- MinIO / S3 对象存储
+- 云服务器部署指南
+- 管理员调试视图
+- 更强 provider 支持
+- 更完善的权限与审核体验
+
+Long-term:
+
+- Kubernetes / Helm
+- 多 worker 横向扩容
+- 监控告警
+- 更强多模态理解
+- 更完整的企业自部署能力
+
 ## 0. 仓库与当前形态
 
 - 仓库路径：`/home/pmk/projects/purelink`
 - 当前项目已经不是纯后端仓库，而是：
   - FastAPI 后端
   - PostgreSQL 数据库
-  - Go worker
+  - Redis 队列
+  - Python worker
+  - Go worker 历史兼容代码
   - Next.js 前端
-- 当前目标不是重新起盘，而是在现有可运行原型上继续收口、稳态化和产品化
+- 当前目标不是重新起盘，而是在现有可运行自部署原型上继续收口、稳态化和产品化
 
 ## 1. 当前已经完成的核心能力
 

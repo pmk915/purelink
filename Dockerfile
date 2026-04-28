@@ -28,9 +28,10 @@ COPY docs ./docs
 COPY scripts ./scripts
 COPY README.md ./README.md
 
-RUN mkdir -p /opt/vosk && \
+RUN mkdir -p /app/models && \
     curl -fsSL https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip -o /tmp/vosk-model.zip && \
-    unzip -q /tmp/vosk-model.zip -d /opt/vosk && \
+    unzip -q /tmp/vosk-model.zip -d /app/models && \
+    mv /app/models/vosk-model-small-en-us-0.15 /app/models/vosk && \
     rm -f /tmp/vosk-model.zip
 
 RUN mkdir -p data/uploads data/parsed data/chunks data/vector_store logs

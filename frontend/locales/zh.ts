@@ -19,7 +19,7 @@ export const zh: Messages = {
     anonymous: "访客",
     openNavigation: "打开导航",
     review: "审核",
-    processing: "处理",
+    processing: "准备中",
     status: "状态",
     personal: "个人",
     team: "团队",
@@ -31,10 +31,10 @@ export const zh: Messages = {
     teamId: (id: number) => `团队 #${id}`,
     knowledgeBaseId: (id: number) => `知识库 #${id}`,
     conversationId: (id: number) => `会话 #${id}`,
-    taskId: (id: number) => `任务 #${id}`,
+    taskId: (id: number) => `后台活动 #${id}`,
     expires: "过期时间",
     submittedBy: (id: number) => `提交用户 #${id}`,
-    chunk: (id: string) => `片段 ${id}`,
+    chunk: (id: string) => `来源片段 ${id}`,
     documentId: (id: number) => `文档 #${id}`,
     shortKnowledgeBaseId: (id: number) => `知识库 #${id}`
   },
@@ -151,15 +151,15 @@ export const zh: Messages = {
     uploadDescriptionPersonal:
       "当前支持 .txt、.md、.pdf、.docx、.mp3、.wav、.m4a、.mp4、.mov、.m4v、.png、.jpg 和 .jpeg。上传后 PureLink 可以将文档准备为可搜索、可问答的内容。",
     uploadDescriptionTeam:
-      "当前支持 .txt、.md、.pdf、.docx、.mp3、.wav、.m4a、.mp4、.mov、.m4v、.png、.jpg 和 .jpeg。管理员上传后自动处理，成员上传后先进入审核。",
+      "当前支持 .txt、.md、.pdf、.docx、.mp3、.wav、.m4a、.mp4、.mov、.m4v、.png、.jpg 和 .jpeg。管理员上传后自动准备，成员上传后先进入审核。",
     documentsTitle: "文档",
-    documentsDescription: "查看每个文档的状态，PureLink 会自动推进上传、审核、处理和索引。",
+    documentsDescription: "查看每个文档的状态，PureLink 会自动推进上传、审核和准备。",
     noDocuments: "还没有文档。",
     workspaceScopePersonal: "个人知识库",
     workspaceScopeTeam: (teamId: number) => `团队知识库 · team #${teamId}`,
-    activeTaskTitle: "当前任务",
+    activeTaskTitle: "后台活动",
     activeTaskDescription:
-      "这个面板会轮询最近一次从工作区触发的任务状态。"
+      "这个面板会跟进最近一次从工作区触发的后台活动。"
   },
   documents: {
     chooseFileError: "请先选择一个 .txt、.md、.pdf、.docx、.mp3、.wav、.m4a、.mp4、.mov、.m4v、.png、.jpg 或 .jpeg 文件。",
@@ -174,35 +174,34 @@ export const zh: Messages = {
     uploadProcessingStarted: (filename: string) =>
       `${filename} 已上传，PureLink 正在为搜索和问答做准备。`,
     processingSubmitted: (filename: string) =>
-      `${filename} 已提交到后台处理，请稍后刷新查看最新状态。`,
+      `${filename} 正在准备中，请稍后刷新查看最新状态。`,
     uploadReady: (filename: string) =>
       `${filename} 已可用于搜索和问答。`,
     uploadedAt: "上传于",
     reviewComment: "审核备注",
-    processStart: "开始处理",
-    processContinue: "继续处理",
-    processRetry: "重新处理",
-    processingNow: "处理中",
-    processingSuccess: "已就绪",
+    processRetry: "重试",
+    processingNow: "准备中",
+    processingSuccess: "可问答",
     processingFailed: "处理失败",
-    processingTimeout: "处理耗时较长，请稍后刷新查看结果。",
-    statusAvailable: "可搜索",
+    processingFailedHelp: "文件处理失败，请重试或联系管理员。",
+    processingTimeout: "准备耗时较长，请稍后刷新查看结果。",
+    statusAvailable: "可问答",
     statusAvailableHint: "该文档已经可以用于搜索和问答。",
     statusPendingReview: "待审核",
     statusPendingReviewHint:
       "需要团队管理员先审核通过，文档才能正式进入知识库。",
-    statusRejected: "需要修改",
+    statusRejected: "审核未通过",
     statusRejectedHint:
       "该文档未通过审核，请根据备注调整后重新上传。",
     statusUploaded: "已上传",
     statusUploadedHint:
       "文档已经进入知识库，系统会自动推进处理。",
-    statusProcessing: "处理中",
+    statusProcessing: "准备中",
     statusProcessingHint:
       "PureLink 正在准备该文档，使其可用于搜索和问答。",
     statusFailed: "处理失败",
     statusFailedHint:
-      "准备过程中出现问题，请重新尝试。",
+      "文件暂时无法准备，请重试或联系管理员。",
     statusUnsupported: "暂不支持",
     statusUnsupportedHint:
       "当前界面只支持将 .txt、.md、.pdf、.docx、.mp3、.wav、.m4a、.mp4、.mov、.m4v、.png、.jpg 和 .jpeg 文档继续处理为可搜索内容。",
@@ -213,7 +212,7 @@ export const zh: Messages = {
     previewTitle: "来源预览",
     previewLoading: "正在加载来源预览...",
     previewError: "来源预览加载失败。",
-    previewNoChunks: "该文档还没有可预览的处理片段。",
+    previewNoChunks: "该文档还没有可预览的来源片段。",
     previewLocation: "定位",
     previewSnippet: "来源片段",
     previewExtractedText: "提取文本",
@@ -224,27 +223,26 @@ export const zh: Messages = {
     previewFileUnavailable: "当前文件无法显示原始预览。"
   },
   qa: {
-    retrieveTitle: "检索上下文",
-    retrieveDescription: (scopeLabel: string) =>
-      `先从当前知识库中找出最相关的内容。当前范围：${scopeLabel}。`,
-    retrieveQuery: "检索问题",
-    retrieveTopK: "Top K",
-    retrieveSubmit: "开始检索",
-    retrieving: "检索中...",
-    retrieveFailed: "检索失败。",
     askTitle: "向 PureLink 提问",
     askDescription:
-      "围绕当前知识库发起提问，相关引用会持续显示在右侧。",
+      "围绕当前知识库发起提问，回答依据会显示在右侧。",
     askQuestion: "问题",
-    askTopK: "Top K",
     askSubmit: "开始问答",
     asking: "回答中...",
-    askFailed: "问答失败。",
+    askFailed: "暂时无法生成回答，请稍后重试或联系管理员。",
     answerTitle: "回答",
     citationsTitle: "引用片段",
     citationsDescription:
       "当前回答对应的相关文档片段会显示在这里。",
-    citationsEmpty: "还没有引用。先检索或直接提问。",
+    citationsEmpty: "提问后，相关引用会显示在这里。",
+    noQueryableDocuments: "当前知识库还没有可问答的文档，请先上传文件。",
+    documentsWaitingReview:
+      "文档正在等待审核，审核通过并准备完成后即可提问。",
+    documentsPreparing: "文档正在准备中，完成后即可提问。",
+    noAvailableDocuments:
+      "当前知识库还没有可用于问答的文档，请检查文档状态或上传新的文件。",
+    noReliableSources:
+      "没有找到足够可靠的来源依据，建议换个问题或补充相关文档。",
     citationPage: (page: number) => `第 ${page} 页`,
     citationSection: (section: string) => `章节：${section}`,
     citationHeadingPath: (path: string) => `标题：${path}`,
@@ -304,20 +302,22 @@ export const zh: Messages = {
     description:
       "只有团队管理员可以通过或拒绝团队成员提交的文档。审核通过后，文档才能继续进入知识库。",
     approvalNote:
-      "通过审核后会自动进入后台处理，不需要再手动准备。",
+      "通过审核后会自动进入准备流程，不需要再手动操作。",
     rejectReason: "拒绝原因",
     rejectSubmit: "拒绝",
     rejecting: "拒绝中...",
     rejectError: "拒绝文档失败。",
     approveSubmit: "通过",
     approving: "通过中...",
+    approveError: "通过审核失败。",
+    autoPrepareError: "审核已通过，但自动准备启动失败，请在文档列表中重试或联系管理员。",
     empty: "当前没有待审核任务。"
   },
   conversations: {
     pageLabel: "会话历史",
     pageTitle: "已保存的问答会话",
     pageDescription:
-      "会话由 ask 流程自动持久化，并始终关联到底层知识库。",
+      "会话会在提问后自动保存，并始终关联到对应知识库。",
     loading: "正在加载会话...",
     emptyTitle: "还没有会话",
     emptyBody: "先从知识库里发起问答，系统才会开始积累会话历史。",

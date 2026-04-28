@@ -113,8 +113,11 @@ export function useApproveTeamDocument(token: string | null, teamId: number) {
   return useMutation({
     mutationFn: (documentId: number) =>
       documentApi.approveTeamDocument(token as string, teamId, documentId),
-    onSuccess: async () => {
+    onSuccess: async (document) => {
       await queryClient.invalidateQueries({ queryKey: ["team-review-tasks", teamId] });
+      await queryClient.invalidateQueries({
+        queryKey: ["documents", "team", teamId, document.knowledge_base_id]
+      });
     }
   });
 }
@@ -126,8 +129,11 @@ export function useRejectTeamDocument(token: string | null, teamId: number) {
       documentApi.rejectTeamDocument(token as string, teamId, payload.documentId, {
         review_comment: payload.review_comment
       }),
-    onSuccess: async () => {
+    onSuccess: async (document) => {
       await queryClient.invalidateQueries({ queryKey: ["team-review-tasks", teamId] });
+      await queryClient.invalidateQueries({
+        queryKey: ["documents", "team", teamId, document.knowledge_base_id]
+      });
     }
   });
 }

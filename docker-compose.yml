@@ -52,16 +52,22 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-purelink}:${POSTGRES_PASSWORD:-purelink}@db:5432/${POSTGRES_DB:-purelink}
       REDIS_URL: redis://redis:6379/0
       DB_ECHO: ${DB_ECHO:-false}
+      API_BASE_URL: ${API_BASE_URL:-http://localhost:8000/api/v1}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-*}
       CORS_ALLOW_METHODS: ${CORS_ALLOW_METHODS:-*}
       CORS_ALLOW_HEADERS: ${CORS_ALLOW_HEADERS:-*}
       CORS_ALLOW_CREDENTIALS: ${CORS_ALLOW_CREDENTIALS:-false}
-      UPLOAD_DIR: data/uploads
-      PARSED_DIR: data/parsed
-      CHUNK_DIR: data/chunks
-      VECTOR_STORE_DIR: data/vector_store
+      DATA_DIR: ${DATA_DIR:-data}
+      UPLOAD_DIR: ${UPLOAD_DIR:-data/uploads}
+      PARSED_DIR: ${PARSED_DIR:-data/parsed}
+      CHUNKS_DIR: ${CHUNKS_DIR:-${CHUNK_DIR:-data/chunks}}
+      CHUNK_DIR: ${CHUNKS_DIR:-${CHUNK_DIR:-data/chunks}}
+      VECTOR_STORE_DIR: ${VECTOR_STORE_DIR:-data/vector_store}
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local_hashed_bow}
-      EMBEDDING_API_BASE: ${EMBEDDING_API_BASE:-}
+      EMBEDDING_API_BASE_URL: ${EMBEDDING_API_BASE_URL:-${EMBEDDING_API_BASE:-}}
+      EMBEDDING_API_BASE: ${EMBEDDING_API_BASE_URL:-${EMBEDDING_API_BASE:-}}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
       EMBEDDING_TIMEOUT_SECONDS: ${EMBEDDING_TIMEOUT_SECONDS:-30}
@@ -69,17 +75,21 @@ services:
       EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-}
       OCR_PROVIDER: ${OCR_PROVIDER:-tesseract}
       OCR_TESSERACT_COMMAND: ${OCR_TESSERACT_COMMAND:-tesseract}
-      OCR_LANGUAGE: ${OCR_LANGUAGE:-eng}
+      OCR_LANG: ${OCR_LANG:-${OCR_LANGUAGE:-eng}}
+      OCR_LANGUAGE: ${OCR_LANG:-${OCR_LANGUAGE:-eng}}
       OCR_TESSERACT_PSM: ${OCR_TESSERACT_PSM:-6}
       ASR_PROVIDER: ${ASR_PROVIDER:-vosk}
       ASR_FFMPEG_COMMAND: ${ASR_FFMPEG_COMMAND:-ffmpeg}
-      ASR_VOSK_MODEL_PATH: ${ASR_VOSK_MODEL_PATH:-/opt/vosk/vosk-model-small-en-us-0.15}
+      ASR_MODEL_PATH: ${ASR_MODEL_PATH:-${ASR_VOSK_MODEL_PATH:-/app/models/vosk}}
+      ASR_VOSK_MODEL_PATH: ${ASR_MODEL_PATH:-${ASR_VOSK_MODEL_PATH:-/app/models/vosk}}
       RERANKER_ENABLED: ${RERANKER_ENABLED:-true}
       RERANKER_PROVIDER: ${RERANKER_PROVIDER:-local_rule_reranker}
       LLM_PROVIDER: ${LLM_PROVIDER:-heuristic}
-      LLM_API_BASE: ${LLM_API_BASE:-}
+      LLM_API_BASE_URL: ${LLM_API_BASE_URL:-${LLM_API_BASE:-}}
+      LLM_API_BASE: ${LLM_API_BASE_URL:-${LLM_API_BASE:-}}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-30}
     ports:
       - "${APP_PORT:-8000}:8000"
     volumes:
@@ -119,12 +129,15 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-purelink}:${POSTGRES_PASSWORD:-purelink}@db:5432/${POSTGRES_DB:-purelink}
       REDIS_URL: redis://redis:6379/0
-      UPLOAD_DIR: data/uploads
-      PARSED_DIR: data/parsed
-      CHUNK_DIR: data/chunks
-      VECTOR_STORE_DIR: data/vector_store
+      DATA_DIR: ${DATA_DIR:-data}
+      UPLOAD_DIR: ${UPLOAD_DIR:-data/uploads}
+      PARSED_DIR: ${PARSED_DIR:-data/parsed}
+      CHUNKS_DIR: ${CHUNKS_DIR:-${CHUNK_DIR:-data/chunks}}
+      CHUNK_DIR: ${CHUNKS_DIR:-${CHUNK_DIR:-data/chunks}}
+      VECTOR_STORE_DIR: ${VECTOR_STORE_DIR:-data/vector_store}
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local_hashed_bow}
-      EMBEDDING_API_BASE: ${EMBEDDING_API_BASE:-}
+      EMBEDDING_API_BASE_URL: ${EMBEDDING_API_BASE_URL:-${EMBEDDING_API_BASE:-}}
+      EMBEDDING_API_BASE: ${EMBEDDING_API_BASE_URL:-${EMBEDDING_API_BASE:-}}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
       EMBEDDING_TIMEOUT_SECONDS: ${EMBEDDING_TIMEOUT_SECONDS:-30}
@@ -132,11 +145,13 @@ services:
       EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-}
       OCR_PROVIDER: ${OCR_PROVIDER:-tesseract}
       OCR_TESSERACT_COMMAND: ${OCR_TESSERACT_COMMAND:-tesseract}
-      OCR_LANGUAGE: ${OCR_LANGUAGE:-eng}
+      OCR_LANG: ${OCR_LANG:-${OCR_LANGUAGE:-eng}}
+      OCR_LANGUAGE: ${OCR_LANG:-${OCR_LANGUAGE:-eng}}
       OCR_TESSERACT_PSM: ${OCR_TESSERACT_PSM:-6}
       ASR_PROVIDER: ${ASR_PROVIDER:-vosk}
       ASR_FFMPEG_COMMAND: ${ASR_FFMPEG_COMMAND:-ffmpeg}
-      ASR_VOSK_MODEL_PATH: ${ASR_VOSK_MODEL_PATH:-/opt/vosk/vosk-model-small-en-us-0.15}
+      ASR_MODEL_PATH: ${ASR_MODEL_PATH:-${ASR_VOSK_MODEL_PATH:-/app/models/vosk}}
+      ASR_VOSK_MODEL_PATH: ${ASR_MODEL_PATH:-${ASR_VOSK_MODEL_PATH:-/app/models/vosk}}
       RERANKER_ENABLED: ${RERANKER_ENABLED:-true}
       RERANKER_PROVIDER: ${RERANKER_PROVIDER:-local_rule_reranker}
     volumes:
@@ -157,7 +172,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000/api/v1}
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-${API_BASE_URL:-http://localhost:8000/api/v1}}
     restart: unless-stopped
     environment:
       NODE_ENV: production

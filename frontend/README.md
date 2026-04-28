@@ -1,8 +1,8 @@
 # PureLink Frontend
 
-Next.js App Router frontend for the PureLink backend.
+PureLink 前端基于 Next.js App Router，用于连接 PureLink FastAPI 后端。
 
-## Stack
+## 技术栈
 
 - Next.js
 - TypeScript
@@ -12,14 +12,14 @@ Next.js App Router frontend for the PureLink backend.
 - Zod
 - shadcn-style UI primitives
 
-## Language Switching
+## 语言切换
 
-- Built-in `EN / 中文` toggle
-- Available on both auth pages and the dashboard
-- Selected locale is stored in `localStorage` under `purelink_locale`
-- Browser language defaults to Chinese when `navigator.language` starts with `zh`
+- 内置 `EN / 中文` 切换
+- 登录、注册和工作台页面都可用
+- 语言选择保存在 `localStorage` 的 `purelink_locale`
+- 当 `navigator.language` 以 `zh` 开头时，默认使用中文
 
-## Run Locally
+## 本地运行
 
 ```bash
 cd /home/pmk/projects/purelink/frontend
@@ -28,19 +28,19 @@ npm install
 npm run dev
 ```
 
-Frontend default URL:
+前端默认地址：
 
 - `http://127.0.0.1:3000`
 
-Backend API default URL:
+后端 API 默认地址：
 
 - `http://127.0.0.1:8000/api/v1`
 
-If your backend is running elsewhere, update `NEXT_PUBLIC_API_BASE_URL` in `.env.local`.
+如果后端不在默认地址，修改 `.env.local` 中的 `NEXT_PUBLIC_API_BASE_URL`。
 
-## Run with Docker Compose
+## 使用 Docker Compose 运行
 
-The repository root `docker-compose.yml` includes the frontend service.
+仓库根目录的 `docker-compose.yml` 已包含 frontend 服务。
 
 ```bash
 cd /home/pmk/projects/purelink
@@ -48,12 +48,12 @@ cp .env.example .env
 docker compose up -d --build frontend
 ```
 
-The Docker image builds a production Next.js standalone server. `NEXT_PUBLIC_API_BASE_URL` is baked into the frontend bundle at build time, so rebuild the frontend image after changing that value.
+Docker 镜像会构建 Next.js standalone production server。`NEXT_PUBLIC_API_BASE_URL` 是构建时变量，修改后需要重新构建 frontend 镜像。
 
-## Processing Behavior
+## 文档准备行为
 
-- Personal uploads and approved team uploads are submitted to the backend `/process` job flow automatically.
-- Admin team uploads skip review; member uploads wait for admin approval before processing.
-- Text, image OCR, scanned PDF OCR, audio transcription, and video transcription all converge into the same `DocumentChunk -> ready -> indexed -> retrieve / ask` pipeline.
-- Citation cards consume structured `source_locator` data so they can show PDF pages, OCR text regions, text sections, and audio/video time ranges without guessing from loose fields.
-- The legacy `parse -> chunk -> embed` path is still available for compatibility, including worker-driven `document_tasks`, scripted E2E flows, and worker-specific verification.
+- 个人上传和审核通过的团队上传会自动提交到后端 `/process` job flow。
+- 团队管理员上传免审核；团队成员上传需要等待管理员审核。
+- 文本、图片 OCR、扫描 PDF OCR、音频转写、视频转写都会进入 `DocumentChunk -> ready -> indexed -> retrieve / ask` 主路径。
+- Citation 卡片使用结构化 `source_locator`，用于展示 PDF 页码、OCR 区域、文本章节和音频/视频时间段。
+- `parse -> chunk -> embed` legacy path 仍保留给兼容脚本、`document_tasks` 和 worker 验证使用，不建议新功能继续扩展。

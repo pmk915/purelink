@@ -17,7 +17,7 @@ export const en = {
     anonymous: "Anonymous",
     openNavigation: "Open navigation",
     review: "review",
-    processing: "processing",
+    processing: "preparing",
     status: "Status",
     personal: "Personal",
     team: "Team",
@@ -29,10 +29,10 @@ export const en = {
     teamId: (id: number) => `Team #${id}`,
     knowledgeBaseId: (id: number) => `KB #${id}`,
     conversationId: (id: number) => `Conversation #${id}`,
-    taskId: (id: number) => `Task #${id}`,
+    taskId: (id: number) => `Activity #${id}`,
     expires: "Expires",
     submittedBy: (id: number) => `Submitted by user #${id}`,
-    chunk: (id: string) => `Excerpt ${id}`,
+    chunk: (id: string) => `Source excerpt ${id}`,
     documentId: (id: number) => `doc #${id}`,
     shortKnowledgeBaseId: (id: number) => `kb #${id}`
   },
@@ -151,17 +151,17 @@ export const en = {
     uploadDescriptionPersonal:
       "Supported formats: .txt, .md, .pdf, .docx, .mp3, .wav, .m4a, .mp4, .mov, .m4v, .png, .jpg, and .jpeg. After upload, PureLink can prepare the document for search and Q&A.",
     uploadDescriptionTeam:
-      "Supported formats: .txt, .md, .pdf, .docx, .mp3, .wav, .m4a, .mp4, .mov, .m4v, .png, .jpg, and .jpeg. Admin uploads start processing automatically; member uploads wait for review.",
+      "Supported formats: .txt, .md, .pdf, .docx, .mp3, .wav, .m4a, .mp4, .mov, .m4v, .png, .jpg, and .jpeg. Admin uploads are prepared automatically; member uploads wait for review.",
     documentsTitle: "Documents",
     documentsDescription:
-      "Track document status while PureLink advances upload, review, processing, and indexing automatically.",
+      "Track document status while PureLink advances upload, review, and preparation automatically.",
     noDocuments: "No documents yet.",
     workspaceScopePersonal: "personal knowledge base",
     workspaceScopeTeam: (teamId: number) =>
       `team knowledge base · team #${teamId}`,
-    activeTaskTitle: "Active task",
+    activeTaskTitle: "Background activity",
     activeTaskDescription:
-      "This panel polls the most recent task triggered from the workspace."
+      "This panel follows the latest background activity from the workspace."
   },
   documents: {
     chooseFileError: "Choose a .txt, .md, .pdf, .docx, .mp3, .wav, .m4a, .mp4, .mov, .m4v, .png, .jpg, or .jpeg file first.",
@@ -177,37 +177,37 @@ export const en = {
     uploadProcessingStarted: (filename: string) =>
       `${filename} was uploaded. PureLink is preparing it for search and Q&A.`,
     processingSubmitted: (filename: string) =>
-      `${filename} was queued for background processing. Refresh in a moment to see the latest status.`,
+      `${filename} is being prepared. Refresh in a moment to see the latest status.`,
     uploadReady: (filename: string) =>
       `${filename} is ready for search and Q&A.`,
     uploadedAt: "Uploaded",
     reviewComment: "Review comment",
-    processStart: "Start processing",
-    processContinue: "Continue processing",
-    processRetry: "Retry processing",
-    processingNow: "Processing",
-    processingSuccess: "Ready",
-    processingFailed: "Processing failed",
+    processRetry: "Retry",
+    processingNow: "Preparing",
+    processingSuccess: "Ready for Q&A",
+    processingFailed: "Preparation failed",
+    processingFailedHelp:
+      "The file could not be prepared. Try again or contact an admin.",
     processingTimeout:
-      "Processing took too long. Check the document again in a moment.",
-    statusAvailable: "Ready for search",
+      "Preparation is taking longer than expected. Check the document again in a moment.",
+    statusAvailable: "Ready for Q&A",
     statusAvailableHint:
       "This document is available for search and question answering.",
     statusPendingReview: "Waiting for review",
     statusPendingReviewHint:
       "A team admin must approve this document before it becomes part of the knowledge base.",
-    statusRejected: "Needs changes",
+    statusRejected: "Review rejected",
     statusRejectedHint:
       "This document was not approved. Review the comment and upload an updated version.",
     statusUploaded: "Uploaded",
     statusUploadedHint:
       "The document is in the knowledge base and will be prepared automatically.",
-    statusProcessing: "Processing",
+    statusProcessing: "Preparing",
     statusProcessingHint:
       "PureLink is preparing this document for search and Q&A.",
-    statusFailed: "Processing failed",
+    statusFailed: "Preparation failed",
     statusFailedHint:
-      "Something went wrong while preparing this document. Try again.",
+      "The file could not be prepared. Try again or contact an admin.",
     statusUnsupported: "Unsupported format",
     statusUnsupportedHint:
       "This document cannot be prepared from the current UI because only .txt, .md, .pdf, .docx, .mp3, .wav, .m4a, .mp4, .mov, .m4v, .png, .jpg, and .jpeg are supported.",
@@ -218,7 +218,7 @@ export const en = {
     previewTitle: "Source preview",
     previewLoading: "Loading source preview...",
     previewError: "Unable to load source preview.",
-    previewNoChunks: "No processed chunks are available for this document.",
+    previewNoChunks: "No source excerpts are available for this document.",
     previewLocation: "Location",
     previewSnippet: "Source excerpt",
     previewExtractedText: "Extracted text",
@@ -229,28 +229,29 @@ export const en = {
     previewFileUnavailable: "Original preview is not available for this file."
   },
   qa: {
-    retrieveTitle: "Retrieve context",
-    retrieveDescription: (scopeLabel: string) =>
-      `Find the most relevant content from this knowledge base before asking. Current scope: ${scopeLabel}.`,
-    retrieveQuery: "Query",
-    retrieveTopK: "Top K",
-    retrieveSubmit: "Retrieve",
-    retrieving: "Retrieving...",
-    retrieveFailed: "Retrieval failed.",
     askTitle: "Ask PureLink",
     askDescription:
-      "Ask questions about this knowledge base. Relevant excerpts stay visible in the side panel.",
+      "Ask questions about this knowledge base. Supporting sources stay visible in the side panel.",
     askQuestion: "Question",
-    askTopK: "Top K",
     askSubmit: "Ask",
     asking: "Answering...",
-    askFailed: "Ask failed.",
+    askFailed: "Unable to generate an answer right now. Try again or contact an admin.",
     answerTitle: "Answer",
     citationsTitle: "Citations",
     citationsDescription:
       "Relevant document excerpts for the current answer stay visible here.",
     citationsEmpty:
-      "No citations yet. Run retrieval or ask a question.",
+      "Citations will appear here after you ask a question.",
+    noQueryableDocuments:
+      "This knowledge base has no Q&A-ready documents yet. Upload a file first.",
+    documentsWaitingReview:
+      "Documents are waiting for review. You can ask questions after approval and preparation finish.",
+    documentsPreparing:
+      "Documents are being prepared. You can ask questions after preparation finishes.",
+    noAvailableDocuments:
+      "No documents are currently available for Q&A. Check document status or upload another file.",
+    noReliableSources:
+      "PureLink did not find enough reliable source material. Try another question or add relevant documents.",
     citationPage: (page: number) => `Page ${page}`,
     citationSection: (section: string) => `Section ${section}`,
     citationHeadingPath: (path: string) => `Heading ${path}`,
@@ -315,20 +316,23 @@ export const en = {
     description:
       "Only team admins can approve or reject submitted documents. Approved documents can then be prepared for search and Q&A.",
     approvalNote:
-      "Approval starts background processing automatically. No extra prepare step is needed.",
+      "Approval starts preparation automatically. No extra step is needed.",
     rejectReason: "Rejection reason",
     rejectSubmit: "Reject",
     rejecting: "Rejecting...",
     rejectError: "Unable to reject document.",
     approveSubmit: "Approve",
     approving: "Approving...",
+    approveError: "Unable to approve document.",
+    autoPrepareError:
+      "The document was approved, but automatic preparation did not start. Retry from the document list or contact an admin.",
     empty: "No pending review tasks."
   },
   conversations: {
     pageLabel: "Conversation history",
     pageTitle: "Saved Q&A sessions",
     pageDescription:
-      "Conversations are persisted from the ask flow and stay linked to the underlying knowledge base.",
+      "Conversations are saved after you ask and stay linked to the related knowledge base.",
     loading: "Loading conversations...",
     emptyTitle: "No conversations yet",
     emptyBody:

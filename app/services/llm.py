@@ -37,8 +37,18 @@ def generate_openai_compatible_chat_completion(
             timeout=timeout,
         )
         response.raise_for_status()
+    except httpx.TimeoutException as exc:
+        raise LLMProviderError(
+            "LLM request timed out. Check LLM_API_BASE_URL, network access, and LLM_TIMEOUT_SECONDS."
+        ) from exc
+    except httpx.HTTPStatusError as exc:
+        raise LLMProviderError(
+            f"LLM provider returned HTTP {exc.response.status_code}. Check LLM_API_KEY and LLM_MODEL."
+        ) from exc
     except httpx.HTTPError as exc:
-        raise LLMProviderError(f"LLM request failed: {exc}") from exc
+        raise LLMProviderError(
+            "LLM request failed. Check LLM_API_BASE_URL and provider network access."
+        ) from exc
 
     try:
         body = response.json()
