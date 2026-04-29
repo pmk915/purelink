@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import logging
+import time
+
 from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
+from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import CurrentUser, DBSession
 from app.core.config import BASE_DIR, get_settings
@@ -10,6 +14,7 @@ from app.models.enums import (
     DocumentTaskType,
     KnowledgeBaseScope,
     ProcessingJobTrigger,
+    ProcessingJobType,
 )
 from app.schemas.document import (
     DocumentChunkRead,
@@ -26,11 +31,15 @@ from app.schemas.processing_job import ProcessingJobRead, ProcessingJobSubmissio
 from app.schemas.knowledge_base import (
     KnowledgeBaseCreateRequest,
     KnowledgeBaseRead,
+    KnowledgeBaseReindexRead,
     KnowledgeBaseUpdateRequest,
 )
 from app.services.document import (
+    compute_document_sha256,
     create_document,
+    DocumentUploadSupportError,
     ensure_supported_document_upload,
+    get_document_by_sha256_for_knowledge_base,
     get_document_for_knowledge_base,
     list_documents_for_knowledge_base,
     resolve_upload_root,
@@ -44,6 +53,7 @@ from app.services.document_chunker import (
 )
 from app.services.document_embedding import (
     DocumentEmbeddingError,
+    delete_knowledge_base_index_artifact,
     resolve_vector_store_root,
 )
 from app.services.document_preview import (
@@ -75,9 +85,19 @@ from app.services.document_task import (
 from app.services.processing_job import (
     ActiveProcessingJobExistsError,
     ProcessingJobEligibilityError,
+    count_active_processing_jobs_for_knowledge_base,
+    count_active_processing_jobs_for_user,
+    get_active_processing_job_for_document,
     list_processing_jobs_for_document,
 )
 from app.services import processing_worker
+from app.services.upload_guard import (
+    DUPLICATE_DOCUMENT,
+    UploadGuardError,
+    build_upload_error_detail,
+    validate_active_job_limits,
+    validate_upload_size,
+)
 from app.services.knowledge_base import (
     UNSET,
     create_knowledge_base,
@@ -89,6 +109,7 @@ from app.services.knowledge_base import (
 
 
 router = APIRouter(prefix="/knowledge-bases", tags=["knowledge-bases"])
+logger = logging.getLogger("purelink.uploads")
 
 
 def _build_processing_job_submission(job) -> ProcessingJobSubmissionRead:
@@ -101,6 +122,37 @@ def _build_processing_job_submission(job) -> ProcessingJobSubmissionRead:
         trigger_type=job.trigger_type,
         attempt_number=job.attempt_number,
     )
+
+
+def _raise_upload_guard_error(exc: UploadGuardError) -> None:
+    raise HTTPException(
+        status_code=exc.status_code,
+        detail=build_upload_error_detail(
+            error_code=exc.error_code,
+            message=exc.message,
+        ),
+    ) from exc
+
+
+def _raise_duplicate_document(document_id: int) -> None:
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "error_code": DUPLICATE_DOCUMENT,
+            "message": "This file already exists in the knowledge base.",
+            "document_id": str(document_id),
+        },
+    )
+
+
+def _is_personal_document_reindex_eligible(document: object) -> bool:
+    review_status = getattr(document, "review_status", None)
+    processing_status = getattr(document, "processing_status", None)
+    return review_status == DocumentReviewStatus.NOT_REQUIRED and processing_status in {
+        DocumentProcessingStatus.READY,
+        DocumentProcessingStatus.PARSED,
+        DocumentProcessingStatus.INDEXED,
+    }
 
 
 def _get_owned_knowledge_base_or_404(
@@ -208,6 +260,7 @@ async def upload_document_to_personal_knowledge_base_endpoint(
     current_user: CurrentUser,
     file: UploadFile = File(...),
 ) -> DocumentRead:
+    started_at = time.monotonic()
     knowledge_base = _get_owned_knowledge_base_or_404(
         db,
         knowledge_base_id=knowledge_base_id,
@@ -224,10 +277,13 @@ async def upload_document_to_personal_knowledge_base_endpoint(
             filename=file.filename,
             mime_type=file.content_type,
         )
-    except ValueError as exc:
+    except DocumentUploadSupportError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
+            detail={
+                "error_code": exc.error_code,
+                "message": str(exc),
+            },
         ) from exc
 
     content = await file.read()
@@ -238,6 +294,79 @@ async def upload_document_to_personal_knowledge_base_endpoint(
         )
 
     settings = get_settings()
+    file_size = len(content)
+    try:
+        validate_upload_size(
+            file_size=file_size,
+            max_upload_size_mb=settings.max_upload_size_mb,
+        )
+    except UploadGuardError as exc:
+        logger.warning(
+            "document upload rejected user_id=%s knowledge_base_id=%s filename=%s file_size=%s "
+            "sha256=%s duplicate=%s job_id=%s duration_ms=%s error_code=%s",
+            current_user.id,
+            knowledge_base.id,
+            file.filename,
+            file_size,
+            None,
+            False,
+            None,
+            int((time.monotonic() - started_at) * 1000),
+            exc.error_code,
+        )
+        _raise_upload_guard_error(exc)
+
+    file_sha256 = compute_document_sha256(content)
+    duplicate_document = get_document_by_sha256_for_knowledge_base(
+        db,
+        knowledge_base_id=knowledge_base.id,
+        sha256=file_sha256,
+    )
+    if duplicate_document is not None:
+        logger.info(
+            "document upload duplicate user_id=%s knowledge_base_id=%s filename=%s file_size=%s "
+            "sha256=%s duplicate=%s job_id=%s duration_ms=%s error_code=%s",
+            current_user.id,
+            knowledge_base.id,
+            file.filename,
+            file_size,
+            file_sha256,
+            True,
+            duplicate_document.latest_processing_job_id,
+            int((time.monotonic() - started_at) * 1000),
+            DUPLICATE_DOCUMENT,
+        )
+        _raise_duplicate_document(duplicate_document.id)
+
+    try:
+        validate_active_job_limits(
+            active_jobs_for_user=count_active_processing_jobs_for_user(
+                db,
+                user_id=current_user.id,
+            ),
+            max_active_jobs_per_user=settings.max_active_jobs_per_user,
+            active_jobs_for_knowledge_base=count_active_processing_jobs_for_knowledge_base(
+                db,
+                knowledge_base_id=knowledge_base.id,
+            ),
+            max_active_jobs_per_kb=settings.max_active_jobs_per_kb,
+        )
+    except UploadGuardError as exc:
+        logger.warning(
+            "document upload rejected user_id=%s knowledge_base_id=%s filename=%s file_size=%s "
+            "sha256=%s duplicate=%s job_id=%s duration_ms=%s error_code=%s",
+            current_user.id,
+            knowledge_base.id,
+            file.filename,
+            file_size,
+            file_sha256,
+            False,
+            None,
+            int((time.monotonic() - started_at) * 1000),
+            exc.error_code,
+        )
+        _raise_upload_guard_error(exc)
+
     upload_root = resolve_upload_root(settings.upload_dir, base_dir=BASE_DIR)
     internal_filename, storage_path = store_document_file(
         upload_root=upload_root,
@@ -246,18 +375,83 @@ async def upload_document_to_personal_knowledge_base_endpoint(
         original_filename=file.filename,
         content=content,
     )
-    document = create_document(
-        db,
-        knowledge_base_id=knowledge_base.id,
-        owner_id=current_user.id,
-        submitted_by=current_user.id,
-        filename=internal_filename,
-        original_filename=file.filename,
-        file_type=file.content_type or "application/octet-stream",
-        file_size=len(content),
-        storage_path=storage_path,
-        review_status=DocumentReviewStatus.NOT_REQUIRED,
-        processing_status=DocumentProcessingStatus.UPLOADED,
+    try:
+        document = create_document(
+            db,
+            knowledge_base_id=knowledge_base.id,
+            owner_id=current_user.id,
+            submitted_by=current_user.id,
+            filename=internal_filename,
+            original_filename=file.filename,
+            file_type=file.content_type or "application/octet-stream",
+            file_size=file_size,
+            storage_path=storage_path,
+            review_status=DocumentReviewStatus.NOT_REQUIRED,
+            processing_status=DocumentProcessingStatus.UPLOADED,
+            sha256=file_sha256,
+        )
+    except IntegrityError as exc:
+        db.rollback()
+        (upload_root / storage_path).unlink(missing_ok=True)
+        duplicate_document = get_document_by_sha256_for_knowledge_base(
+            db,
+            knowledge_base_id=knowledge_base.id,
+            sha256=file_sha256,
+        )
+        logger.info(
+            "document upload duplicate race user_id=%s knowledge_base_id=%s filename=%s file_size=%s "
+            "sha256=%s duplicate=%s job_id=%s duration_ms=%s error_code=%s",
+            current_user.id,
+            knowledge_base.id,
+            file.filename,
+            file_size,
+            file_sha256,
+            True,
+            duplicate_document.latest_processing_job_id if duplicate_document else None,
+            int((time.monotonic() - started_at) * 1000),
+            DUPLICATE_DOCUMENT,
+        )
+        if duplicate_document is not None:
+            _raise_duplicate_document(duplicate_document.id)
+        raise exc
+
+    try:
+        job = processing_worker.create_and_submit_processing_job(
+            db,
+            document=document,
+            triggered_by_id=current_user.id,
+        )
+    except RuntimeError as exc:
+        logger.warning(
+            "document upload job submit failed user_id=%s knowledge_base_id=%s filename=%s file_size=%s "
+            "sha256=%s duplicate=%s job_id=%s duration_ms=%s error_code=%s",
+            current_user.id,
+            knowledge_base.id,
+            file.filename,
+            file_size,
+            file_sha256,
+            False,
+            document.latest_processing_job_id,
+            int((time.monotonic() - started_at) * 1000),
+            "PROCESSING_JOB_SUBMIT_FAILED",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from exc
+    db.refresh(document)
+    logger.info(
+        "document upload accepted user_id=%s knowledge_base_id=%s filename=%s file_size=%s "
+        "sha256=%s duplicate=%s job_id=%s duration_ms=%s error_code=%s",
+        current_user.id,
+        knowledge_base.id,
+        file.filename,
+        file_size,
+        file_sha256,
+        False,
+        job.id,
+        int((time.monotonic() - started_at) * 1000),
+        None,
     )
     return DocumentRead.model_validate(document)
 
@@ -388,6 +582,13 @@ async def process_personal_document_endpoint(
             triggered_by_id=current_user.id,
         )
     except (ActiveProcessingJobExistsError, ProcessingJobEligibilityError) as exc:
+        active_job = get_active_processing_job_for_document(
+            db,
+            document_id=document.id,
+            job_type=ProcessingJobType.DOCUMENT_PROCESS,
+        )
+        if active_job is not None:
+            return _build_processing_job_submission(active_job)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
@@ -681,6 +882,10 @@ async def chunk_personal_document_endpoint(
     "/{knowledge_base_id}/documents/{document_id}/embed",
     response_model=ProcessingJobSubmissionRead,
 )
+@router.post(
+    "/{knowledge_base_id}/documents/{document_id}/reindex",
+    response_model=ProcessingJobSubmissionRead,
+)
 async def embed_personal_document_endpoint(
     knowledge_base_id: int,
     document_id: int,
@@ -735,6 +940,68 @@ async def embed_personal_document_endpoint(
         ) from exc
 
     return _build_processing_job_submission(job)
+
+
+@router.post(
+    "/{knowledge_base_id}/reindex",
+    response_model=KnowledgeBaseReindexRead,
+)
+async def reindex_personal_knowledge_base_endpoint(
+    knowledge_base_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+) -> KnowledgeBaseReindexRead:
+    knowledge_base = _get_owned_knowledge_base_or_404(
+        db,
+        knowledge_base_id=knowledge_base_id,
+        user_id=current_user.id,
+    )
+    documents = list_documents_for_knowledge_base(
+        db,
+        knowledge_base_id=knowledge_base.id,
+    )
+
+    eligible_documents = [
+        document for document in documents if _is_personal_document_reindex_eligible(document)
+    ]
+    eligible_document_ids = {document.id for document in eligible_documents}
+    skipped_document_ids: list[int] = [
+        document.id for document in documents if document.id not in eligible_document_ids
+    ]
+
+    settings = get_settings()
+    vector_root = resolve_vector_store_root(settings.vector_store_dir, base_dir=BASE_DIR)
+    if eligible_documents:
+        delete_knowledge_base_index_artifact(
+            vector_root=vector_root,
+            scope=KnowledgeBaseScope.PERSONAL,
+            knowledge_base_id=knowledge_base.id,
+        )
+
+    queued_jobs: list[ProcessingJobSubmissionRead] = []
+    for document in eligible_documents:
+        try:
+            job = processing_worker.create_and_submit_indexing_job(
+                db,
+                document=document,
+                triggered_by_id=current_user.id,
+            )
+        except (ActiveProcessingJobExistsError, ProcessingJobEligibilityError):
+            skipped_document_ids.append(document.id)
+            continue
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=str(exc),
+            ) from exc
+        queued_jobs.append(_build_processing_job_submission(job))
+
+    return KnowledgeBaseReindexRead(
+        knowledge_base_id=knowledge_base.id,
+        queued_jobs=queued_jobs,
+        queued_document_ids=[job.document_id for job in queued_jobs],
+        skipped_document_ids=sorted(set(skipped_document_ids)),
+    )
 
 
 @router.post(

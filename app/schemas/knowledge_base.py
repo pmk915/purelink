@@ -5,6 +5,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import KnowledgeBaseScope
+from app.schemas.processing_job import ProcessingJobSubmissionRead
 
 
 class KnowledgeBaseCreateRequest(BaseModel):
@@ -73,3 +74,10 @@ class KnowledgeBaseRead(BaseModel):
     team_id: int | None
     created_at: datetime
     updated_at: datetime
+
+
+class KnowledgeBaseReindexRead(BaseModel):
+    knowledge_base_id: int
+    queued_jobs: list[ProcessingJobSubmissionRead]
+    queued_document_ids: list[int]
+    skipped_document_ids: list[int]

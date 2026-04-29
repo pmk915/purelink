@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -22,14 +23,17 @@ from app.services.document_indexing import (
     resolve_indexing_roots,
 )
 from app.services.processing_job import (
+    acquire_processing_job,
+    can_retry_processing_job,
     create_processing_job_for_document,
+    fail_timed_out_processing_jobs,
     get_processing_job,
     infer_processing_job_trigger,
 )
 from app.services.processing_queue import enqueue_processing_job
 from app.services.processing_job import (
     mark_processing_job_failed,
-    mark_processing_job_started,
+    mark_processing_job_for_retry,
     mark_processing_job_step,
     mark_processing_job_succeeded,
 )
@@ -77,6 +81,7 @@ def create_and_submit_processing_job(
             db,
             job=job,
             error_message=error_message,
+            error_code="PROCESSING_JOB_SUBMIT_FAILED",
         )
         update_document_processing_status(
             db,
@@ -114,6 +119,7 @@ def create_and_submit_indexing_job(
             db,
             job=job,
             error_message=error_message,
+            error_code="INDEXING_JOB_SUBMIT_FAILED",
         )
         raise RuntimeError(error_message) from exc
 
@@ -127,6 +133,11 @@ def execute_processing_job(
 ) -> None:
     db = open_processing_session()
     try:
+        settings = get_settings()
+        fail_timed_out_processing_jobs(
+            db,
+            timeout_seconds=settings.processing_job_timeout_seconds,
+        )
         job = get_processing_job(db, job_id=job_id)
         if job is None:
             logger.warning("processing job not found job_id=%s", job_id)
@@ -141,9 +152,31 @@ def execute_processing_job(
                 job.status,
             )
             return
+        if job.status != ProcessingJobStatus.QUEUED:
+            logger.info(
+                "processing job is not claimable job_id=%s status=%s job_type=%s",
+                job.id,
+                job.status,
+                job.job_type,
+            )
+            return
+
+        claim_worker_name = (
+            REDIS_INDEXING_WORKER_NAME
+            if job.job_type == ProcessingJobType.DOCUMENT_INDEX
+            else worker_name
+        )
+        job = acquire_processing_job(
+            db,
+            job_id=job.id,
+            worker_name=claim_worker_name,
+            timeout_seconds=settings.processing_job_timeout_seconds,
+        )
+        if job is None:
+            logger.info("processing job already claimed job_id=%s", job_id)
+            return
 
         if job.job_type == ProcessingJobType.DOCUMENT_PROCESS:
-            settings = get_settings()
             upload_root = resolve_upload_root(settings.upload_dir, base_dir=BASE_DIR)
 
             try:
@@ -154,29 +187,45 @@ def execute_processing_job(
                     worker_name=worker_name,
                 )
             except DocumentProcessingError:
-                logger.info("processing job failed job_id=%s", job_id)
+                logger.info(
+                    "processing job did not complete job_id=%s document_id=%s retry_count=%s max_retries=%s "
+                    "locked_by=%s current_step=%s error_code=%s duration_ms=%s",
+                    job.id,
+                    job.document_id,
+                    job.retry_count,
+                    job.max_retries,
+                    job.locked_by,
+                    job.current_step,
+                    job.error_code,
+                    _job_duration_ms(job),
+                )
             except Exception as exc:  # pragma: no cover - defensive guard for unexpected worker failures
-                logger.exception("processing job unexpected failure job_id=%s", job_id)
                 db.rollback()
                 error_message = "Processing job failed unexpectedly."
-                mark_processing_job_failed(
+                _handle_processing_job_failure(
                     db,
                     job=job,
                     error_message=error_message,
+                    error_code="DOCUMENT_PROCESSING_FAILED",
+                    mark_document_failed=True,
                 )
-                if job.document is not None:
-                    update_document_processing_status(
-                        db,
-                        document=job.document,
-                        processing_status=DocumentProcessingStatus.FAILED,
-                        error_message=error_message,
-                        processed_at=None,
-                    )
+                logger.exception(
+                    "processing job unexpected failure job_id=%s document_id=%s job_type=%s retry_count=%s "
+                    "max_retries=%s locked_by=%s current_step=%s error_code=%s duration_ms=%s",
+                    job.id,
+                    job.document_id,
+                    job.job_type,
+                    job.retry_count,
+                    job.max_retries,
+                    job.locked_by,
+                    job.current_step,
+                    job.error_code,
+                    _job_duration_ms(job),
+                )
                 raise RuntimeError(error_message) from exc
             return
 
         if job.job_type == ProcessingJobType.DOCUMENT_INDEX:
-            settings = get_settings()
             chunks_root, vector_root = resolve_indexing_roots(
                 chunks_dir=settings.chunks_dir,
                 vector_store_dir=settings.vector_store_dir,
@@ -191,15 +240,40 @@ def execute_processing_job(
                     worker_name=REDIS_INDEXING_WORKER_NAME,
                 )
             except DocumentIndexingError:
-                logger.info("indexing job failed job_id=%s", job_id)
+                logger.info(
+                    "indexing job did not complete job_id=%s document_id=%s retry_count=%s max_retries=%s "
+                    "locked_by=%s current_step=%s error_code=%s duration_ms=%s",
+                    job.id,
+                    job.document_id,
+                    job.retry_count,
+                    job.max_retries,
+                    job.locked_by,
+                    job.current_step,
+                    job.error_code,
+                    _job_duration_ms(job),
+                )
             except Exception as exc:  # pragma: no cover - defensive guard for unexpected worker failures
-                logger.exception("indexing job unexpected failure job_id=%s", job_id)
                 db.rollback()
                 error_message = "Indexing job failed unexpectedly."
-                mark_processing_job_failed(
+                _handle_processing_job_failure(
                     db,
                     job=job,
                     error_message=error_message,
+                    error_code="DOCUMENT_INDEXING_FAILED",
+                    mark_document_failed=False,
+                )
+                logger.exception(
+                    "indexing job unexpected failure job_id=%s document_id=%s job_type=%s retry_count=%s "
+                    "max_retries=%s locked_by=%s current_step=%s error_code=%s duration_ms=%s",
+                    job.id,
+                    job.document_id,
+                    job.job_type,
+                    job.retry_count,
+                    job.max_retries,
+                    job.locked_by,
+                    job.current_step,
+                    job.error_code,
+                    _job_duration_ms(job),
                 )
                 raise RuntimeError(error_message) from exc
             return
@@ -209,6 +283,7 @@ def execute_processing_job(
             db,
             job=job,
             error_message="Unsupported processing job type.",
+            error_code="UNSUPPORTED_PROCESSING_JOB_TYPE",
         )
     finally:
         db.close()
@@ -221,11 +296,7 @@ def run_processing_job_worker(
     upload_root,
     worker_name: str = REDIS_PROCESSING_WORKER_NAME,
 ) -> ProcessedDocumentResult:
-    mark_processing_job_started(
-        db,
-        job=job,
-        worker_name=worker_name,
-    )
+    started_at = datetime.now(UTC)
     try:
         result = process_document(
             db,
@@ -238,16 +309,30 @@ def run_processing_job_worker(
             ),
         )
     except DocumentProcessingError as exc:
-        mark_processing_job_failed(
+        _handle_processing_job_failure(
             db,
             job=job,
             error_message=str(exc),
+            error_code=getattr(exc, "error_code", None),
+            mark_document_failed=True,
         )
         raise
 
     mark_processing_job_succeeded(
         db,
         job=job,
+    )
+    logger.info(
+        "processing job succeeded job_id=%s document_id=%s job_type=%s retry_count=%s max_retries=%s "
+        "locked_by=%s current_step=%s duration_ms=%s",
+        job.id,
+        job.document_id,
+        job.job_type,
+        job.retry_count,
+        job.max_retries,
+        job.locked_by or worker_name,
+        job.current_step,
+        int((datetime.now(UTC) - started_at).total_seconds() * 1000),
     )
     try:
         create_and_submit_indexing_job(
@@ -271,11 +356,7 @@ def run_indexing_job_worker(
     vector_root,
     worker_name: str = REDIS_INDEXING_WORKER_NAME,
 ):
-    mark_processing_job_started(
-        db,
-        job=job,
-        worker_name=worker_name,
-    )
+    started_at = datetime.now(UTC)
     try:
         result = build_document_index(
             db,
@@ -289,10 +370,12 @@ def run_indexing_job_worker(
             ),
         )
     except DocumentIndexingError as exc:
-        mark_processing_job_failed(
+        _handle_processing_job_failure(
             db,
             job=job,
             error_message=str(exc),
+            error_code=getattr(exc, "error_code", None) or "DOCUMENT_INDEXING_FAILED",
+            mark_document_failed=False,
         )
         raise
 
@@ -300,4 +383,83 @@ def run_indexing_job_worker(
         db,
         job=job,
     )
+    logger.info(
+        "indexing job succeeded job_id=%s document_id=%s job_type=%s retry_count=%s max_retries=%s "
+        "locked_by=%s current_step=%s duration_ms=%s",
+        job.id,
+        job.document_id,
+        job.job_type,
+        job.retry_count,
+        job.max_retries,
+        job.locked_by or worker_name,
+        job.current_step,
+        int((datetime.now(UTC) - started_at).total_seconds() * 1000),
+    )
     return result
+
+
+def _handle_processing_job_failure(
+    db: Session,
+    *,
+    job: ProcessingJob,
+    error_message: str,
+    error_code: str | None,
+    mark_document_failed: bool,
+) -> None:
+    if can_retry_processing_job(job=job, error_code=error_code):
+        retried_job = mark_processing_job_for_retry(
+            db,
+            job=job,
+            error_message=error_message,
+            error_code=error_code,
+        )
+        if mark_document_failed and retried_job.document is not None:
+            update_document_processing_status(
+                db,
+                document=retried_job.document,
+                processing_status=DocumentProcessingStatus.PROCESSING,
+                error_message=None,
+                processed_at=None,
+            )
+        submit_processing_job(job=retried_job)
+        logger.warning(
+            "processing job scheduled for retry job_id=%s document_id=%s job_type=%s retry_count=%s "
+            "max_retries=%s locked_by=%s current_step=%s error_code=%s duration_ms=%s",
+            retried_job.id,
+            retried_job.document_id,
+            retried_job.job_type,
+            retried_job.retry_count,
+            retried_job.max_retries,
+            retried_job.locked_by,
+            retried_job.current_step,
+            retried_job.error_code,
+            _job_duration_ms(retried_job),
+        )
+        return
+
+    mark_processing_job_failed(
+        db,
+        job=job,
+        error_message=error_message,
+        error_code=error_code,
+    )
+    if mark_document_failed and job.document is not None:
+        update_document_processing_status(
+            db,
+            document=job.document,
+            processing_status=DocumentProcessingStatus.FAILED,
+            error_message=error_message,
+            processed_at=None,
+        )
+
+
+def _job_duration_ms(job: ProcessingJob) -> int | None:
+    if job.started_at is None:
+        return None
+    started_at = job.started_at
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=UTC)
+    finished_at = job.finished_at or datetime.now(UTC)
+    if finished_at.tzinfo is None:
+        finished_at = finished_at.replace(tzinfo=UTC)
+    return int((finished_at - started_at).total_seconds() * 1000)

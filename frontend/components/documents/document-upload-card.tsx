@@ -7,21 +7,28 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useI18n } from "@/hooks/use-i18n";
+import { ApiClientError } from "@/lib/api-client";
+
+type UploadItemStatus =
+  | "uploading"
+  | "queued"
+  | "processing"
+  | "indexed"
+  | "failed"
+  | "duplicate"
+  | "too_large";
+
+type UploadItem = {
+  id: string;
+  file: File;
+  status: UploadItemStatus;
+  message?: string;
+};
 
 const SUPPORTED_EXTENSIONS = [
   ".txt",
   ".md",
-  ".pdf",
-  ".docx",
-  ".mp3",
-  ".wav",
-  ".m4a",
-  ".mp4",
-  ".mov",
-  ".m4v",
-  ".png",
-  ".jpg",
-  ".jpeg"
+  ".pdf"
 ] as const;
 
 function isSupportedDocumentFile(fileName: string) {
@@ -42,8 +49,14 @@ export function DocumentUploadCard({
 }) {
   const { messages } = useI18n();
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const [file, setFile] = useState<File | null>(null);
+  const [items, setItems] = useState<UploadItem[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  const updateItem = (id: string, next: Partial<UploadItem>) => {
+    setItems((current) =>
+      current.map((item) => (item.id === id ? { ...item, ...next } : item))
+    );
+  };
 
   return (
     <Card>
@@ -55,55 +68,102 @@ export function DocumentUploadCard({
         <Input
           ref={inputRef}
           type="file"
-          accept=".txt,.TXT,.md,.MD,.pdf,.PDF,.docx,.DOCX,.mp3,.MP3,.wav,.WAV,.m4a,.M4A,.mp4,.MP4,.mov,.MOV,.m4v,.M4V,.png,.PNG,.jpg,.JPG,.jpeg,.JPEG,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/wave,audio/mp4,audio/x-m4a,audio/m4a,video/mp4,video/quicktime,video/x-m4v,image/png,image/jpeg"
+          multiple
+          accept=".txt,.TXT,.md,.MD,.pdf,.PDF,text/plain,text/markdown,application/pdf"
           onChange={(event) => {
-            const nextFile = event.target.files?.[0] ?? null;
-            if (nextFile && !isSupportedDocumentFile(nextFile.name)) {
-              setFile(null);
+            const selectedFiles = Array.from(event.target.files ?? []);
+            const unsupportedFile = selectedFiles.find(
+              (nextFile) => !isSupportedDocumentFile(nextFile.name)
+            );
+            if (unsupportedFile) {
+              setItems([]);
               setError(messages.documents.unsupportedFileType);
               event.target.value = "";
               return;
             }
 
-            setFile(nextFile);
+            setItems(
+              selectedFiles.map((nextFile) => ({
+                id: `${nextFile.name}-${nextFile.size}-${nextFile.lastModified}`,
+                file: nextFile,
+                status: "queued"
+              }))
+            );
             setError(null);
           }}
         />
         <p className="text-xs text-muted-foreground">{messages.documents.supportedFormats}</p>
-        {file ? (
-          <div className="rounded-2xl bg-secondary/60 px-4 py-3 text-sm text-foreground">
-            {file.name}
+        {items.length > 0 ? (
+          <div className="space-y-2">
+            {items.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between gap-3 rounded-md bg-secondary/60 px-4 py-3 text-sm text-foreground"
+              >
+                <span className="min-w-0 truncate">{item.file.name}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {messages.documents.uploadStatuses[item.status]}
+                </span>
+              </div>
+            ))}
           </div>
         ) : null}
         {error ? (
-          <div className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>
+          <div className="rounded-md bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>
         ) : null}
         <Button
-          disabled={!file || isUploading}
+          disabled={items.length === 0 || isUploading}
           onClick={async () => {
-            if (!file) {
+            if (items.length === 0) {
               setError(messages.documents.chooseFileError);
               return;
             }
-            try {
-              await onUpload(file);
-              setFile(null);
+
+            const results = await Promise.all(
+              items.map(async (item) => {
+                updateItem(item.id, { status: "uploading", message: undefined });
+                try {
+                  await onUpload(item.file);
+                  updateItem(item.id, { status: "queued" });
+                  return "queued" as UploadItemStatus;
+                } catch (uploadError) {
+                  console.error("upload failed", {
+                    error: uploadError,
+                    file: {
+                      name: item.file.name,
+                      type: item.file.type,
+                      size: item.file.size
+                    }
+                  });
+                  const status =
+                    uploadError instanceof ApiClientError &&
+                    uploadError.errorCode === "DUPLICATE_DOCUMENT"
+                      ? "duplicate"
+                      : uploadError instanceof ApiClientError &&
+                          uploadError.errorCode === "FILE_TOO_LARGE"
+                        ? "too_large"
+                        : "failed";
+                  updateItem(item.id, {
+                    status,
+                    message:
+                      uploadError instanceof Error
+                        ? uploadError.message
+                        : messages.documents.uploadFailed
+                  });
+                  return status;
+                }
+              })
+            );
+
+            const hasFailure = results.some((status) =>
+              ["failed", "duplicate", "too_large"].includes(status)
+            );
+            if (!hasFailure) {
+              setItems([]);
               setError(null);
               if (inputRef.current) {
                 inputRef.current.value = "";
               }
-            } catch (uploadError) {
-              console.error("upload failed", {
-                error: uploadError,
-                file: {
-                  name: file.name,
-                  type: file.type,
-                  size: file.size
-                }
-              });
-              setError(
-                uploadError instanceof Error ? uploadError.message : messages.documents.uploadFailed
-              );
             }
           }}
         >

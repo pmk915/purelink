@@ -8,13 +8,7 @@ WORKDIR /app
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-      curl \
-      espeak-ng \
-      ffmpeg \
-      fonts-dejavu-core \
-      tesseract-ocr \
-      tesseract-ocr-eng \
-      unzip && \
+      curl && \
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
@@ -27,12 +21,6 @@ COPY app ./app
 COPY docs ./docs
 COPY scripts ./scripts
 COPY README.md ./README.md
-
-RUN mkdir -p /app/models && \
-    curl -fsSL https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip -o /tmp/vosk-model.zip && \
-    unzip -q /tmp/vosk-model.zip -d /app/models && \
-    mv /app/models/vosk-model-small-en-us-0.15 /app/models/vosk && \
-    rm -f /tmp/vosk-model.zip
 
 RUN mkdir -p data/uploads data/parsed data/chunks data/vector_store logs
 

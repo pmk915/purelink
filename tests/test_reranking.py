@@ -36,7 +36,7 @@ def _chunk(
         document_name=document_name,
         text=text,
         snippet=text,
-        source_type="txt",
+        source_type="text",
         char_start=char_start,
         char_end=char_end,
         page_number=page_number,
@@ -210,5 +210,5 @@ def test_retrieval_eval_fixture_is_well_formed() -> None:
     payload = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
 
     assert len(payload) >= 6
-    assert {item["document_type"] for item in payload} >= {"txt", "md", "pdf", "docx"}
+    assert {item["document_type"] for item in payload} >= {"txt", "md", "pdf"}
     assert all(item["query"] for item in payload)

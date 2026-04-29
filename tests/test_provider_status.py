@@ -13,15 +13,13 @@ from app.main import app
 @pytest.mark.anyio
 async def test_provider_status_local_fallback_is_configured(
     monkeypatch,
-    tmp_path,
 ) -> None:
     monkeypatch.setenv("LLM_PROVIDER", "heuristic")
     monkeypatch.setenv("EMBEDDING_PROVIDER", "local_hashed_bow")
-    monkeypatch.setenv("OCR_PROVIDER", "tesseract")
-    monkeypatch.setenv("OCR_TESSERACT_COMMAND", "python3")
-    monkeypatch.setenv("ASR_PROVIDER", "vosk")
-    monkeypatch.setenv("ASR_MODEL_PATH", str(tmp_path))
-    monkeypatch.setenv("ASR_FFMPEG_COMMAND", "python3")
+    monkeypatch.setenv("ENABLE_OCR", "false")
+    monkeypatch.setenv("OCR_PROVIDER", "disabled")
+    monkeypatch.setenv("ENABLE_MEDIA", "false")
+    monkeypatch.setenv("ASR_PROVIDER", "disabled")
     monkeypatch.setenv("RERANKER_PROVIDER", "local_rule_reranker")
     get_settings.cache_clear()
 
@@ -39,7 +37,8 @@ async def test_provider_status_local_fallback_is_configured(
     assert payload["embedding"]["configured"] is True
     assert payload["embedding"]["requires_api_key"] is False
     assert payload["embedding"]["mode"] == "local_demo"
-    assert payload["asr"]["configured"] is True
+    assert payload["ocr"]["mode"] == "disabled"
+    assert payload["asr"]["mode"] == "disabled"
 
     get_settings.cache_clear()
 
@@ -64,6 +63,53 @@ async def test_provider_status_external_missing_key_is_clear(monkeypatch) -> Non
     assert payload["llm"]["requires_api_key"] is True
     assert payload["llm"]["api_key_configured"] is False
     assert "LLM_API_KEY" in payload["llm"]["message"]
+
+    get_settings.cache_clear()
+
+
+@pytest.mark.anyio
+async def test_provider_status_deepseek_is_clear(monkeypatch) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "deepseek")
+    monkeypatch.setenv("LLM_API_BASE_URL", "https://api.deepseek.com")
+    monkeypatch.setenv("LLM_API_KEY", "deepseek-secret")
+    monkeypatch.setenv("LLM_MODEL", "deepseek-v4-pro")
+    get_settings.cache_clear()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        response = await client.get("/api/v1/system/providers")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["llm"]["configured"] is True
+    assert payload["llm"]["requires_api_key"] is True
+    assert payload["llm"]["mode"] == "external_api"
+    assert payload["llm"]["provider"] == "deepseek"
+    assert payload["llm"]["model"] == "deepseek-v4-pro"
+
+    get_settings.cache_clear()
+
+
+@pytest.mark.anyio
+async def test_provider_status_fastembed_is_local_model(monkeypatch) -> None:
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "fastembed")
+    monkeypatch.setenv("EMBEDDING_MODEL", "BAAI/bge-small-zh-v1.5")
+    get_settings.cache_clear()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        response = await client.get("/api/v1/system/providers")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["embedding"]["configured"] is True
+    assert payload["embedding"]["requires_api_key"] is False
+    assert payload["embedding"]["mode"] == "local_model"
+    assert payload["embedding"]["model"] == "BAAI/bge-small-zh-v1.5"
 
     get_settings.cache_clear()
 
@@ -117,11 +163,9 @@ async def test_provider_status_unsupported_provider_is_not_500(monkeypatch) -> N
 
 
 @pytest.mark.anyio
-async def test_provider_status_reports_missing_asr_model(monkeypatch, tmp_path) -> None:
-    missing_path = tmp_path / "missing-vosk-model"
-    monkeypatch.setenv("ASR_PROVIDER", "vosk")
-    monkeypatch.setenv("ASR_MODEL_PATH", str(missing_path))
-    monkeypatch.setenv("ASR_FFMPEG_COMMAND", "python3")
+async def test_provider_status_sentence_transformers_optional_mode_is_clear(monkeypatch) -> None:
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence_transformers")
+    monkeypatch.setenv("EMBEDDING_MODEL", "BAAI/bge-small-zh-v1.5")
     get_settings.cache_clear()
 
     async with AsyncClient(
@@ -132,9 +176,9 @@ async def test_provider_status_reports_missing_asr_model(monkeypatch, tmp_path) 
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["asr"]["configured"] is False
-    assert payload["asr"]["model_path_exists"] is False
-    assert "模型路径不存在" in payload["asr"]["message"]
+    assert payload["embedding"]["configured"] is True
+    assert payload["embedding"]["mode"] == "local_model"
+    assert payload["embedding"]["model"] == "BAAI/bge-small-zh-v1.5"
 
     get_settings.cache_clear()
 

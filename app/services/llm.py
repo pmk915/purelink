@@ -15,6 +15,8 @@ def generate_openai_compatible_chat_completion(
     system_prompt: str,
     user_prompt: str,
     timeout: float = 30.0,
+    reasoning_effort: str | None = None,
+    thinking_enabled: bool = False,
 ) -> str:
     endpoint = f"{api_base.rstrip('/')}/chat/completions"
     payload = {
@@ -24,7 +26,13 @@ def generate_openai_compatible_chat_completion(
             {"role": "user", "content": user_prompt},
         ],
         "temperature": 0,
+        "stream": False,
     }
+    normalized_reasoning_effort = (reasoning_effort or "").strip().lower()
+    if normalized_reasoning_effort:
+        payload["reasoning_effort"] = normalized_reasoning_effort
+    if thinking_enabled:
+        payload["thinking"] = {"type": "enabled"}
 
     try:
         response = httpx.post(

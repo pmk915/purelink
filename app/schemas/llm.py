@@ -3,8 +3,10 @@ from __future__ import annotations
 
 HEURISTIC_PROVIDER = "heuristic"
 OPENAI_COMPATIBLE_PROVIDER = "openai_compatible"
+DEEPSEEK_PROVIDER = "deepseek"
 
 SUPPORTED_LLM_PROVIDERS = (
     HEURISTIC_PROVIDER,
     OPENAI_COMPATIBLE_PROVIDER,
+    DEEPSEEK_PROVIDER,
 )

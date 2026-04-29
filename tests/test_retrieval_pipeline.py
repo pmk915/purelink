@@ -8,6 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.config import get_settings
 from app.db.base import Base, load_all_models
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
@@ -20,7 +21,11 @@ from app.models.knowledge_base import KnowledgeBase
 from app.models.user import User
 from app.services.document_embedding import DocumentEmbeddingError, RetrievedChunk
 from app.services.document_embedding import build_index_relative_path
-from app.services.qa import select_context_chunks_for_answer
+from app.services.qa import (
+    NO_RELIABLE_EVIDENCE_MESSAGE,
+    answer_question,
+    select_context_chunks_for_answer,
+)
 from app.services.retrieval import (
     build_query_aware_chunk_snippet,
     merge_hybrid_candidates,
@@ -129,7 +134,7 @@ def _retrieved_chunk(
     text: str = "PureLink knowledge base chunk text",
     section_title: str | None = None,
     heading_path: tuple[str, ...] | None = None,
-    source_type: str | None = "txt",
+    source_type: str | None = "text",
     char_start: int | None = None,
     char_end: int | None = None,
 ) -> RetrievedChunk:
@@ -179,14 +184,14 @@ def test_search_document_chunks_lexical_returns_keyword_matches(
             document=document,
             chunk_index=0,
             chunk_text="PureLink incident runbook contains omega restart checklist.",
-            metadata={"source_type": "txt"},
+            metadata={"source_type": "text"},
         )
         _create_chunk(
             db,
             document=document,
             chunk_index=1,
             chunk_text="Unrelated release timeline entry.",
-            metadata={"source_type": "txt"},
+            metadata={"source_type": "text"},
         )
         db.commit()
 
@@ -303,7 +308,7 @@ def test_retrieve_falls_back_to_lexical_chunks_when_index_is_unavailable(
             document=document,
             chunk_index=0,
             chunk_text="Fallback lexical retrieval survives a corrupt vector index.",
-            metadata={"source_type": "txt"},
+            metadata={"source_type": "text"},
         )
         db.commit()
 
@@ -355,7 +360,7 @@ def test_retrieve_falls_back_when_index_provider_config_is_unavailable(
             document=document,
             chunk_index=0,
             chunk_text="Provider mismatch fallback keeps lexical retrieval available.",
-            metadata={"source_type": "txt"},
+            metadata={"source_type": "text"},
         )
         db.commit()
 
@@ -382,7 +387,7 @@ def test_retrieve_falls_back_when_index_provider_config_is_unavailable(
                                     "chunk_id": f"{document.id}:0",
                                     "text": "Provider mismatch fallback keeps lexical retrieval available.",
                                     "vector": [1.0, 0.0, 0.0],
-                                    "metadata": {"source_type": "txt"},
+                                    "metadata": {"source_type": "text"},
                                 }
                             ],
                         }
@@ -436,7 +441,7 @@ def test_retrieve_falls_back_when_index_model_does_not_match_current_provider(
             document=document,
             chunk_index=0,
             chunk_text="Model mismatch fallback keeps lexical retrieval available.",
-            metadata={"source_type": "txt"},
+            metadata={"source_type": "text"},
         )
         db.commit()
 
@@ -463,7 +468,7 @@ def test_retrieve_falls_back_when_index_model_does_not_match_current_provider(
                                     "chunk_id": f"{document.id}:0",
                                     "text": "Model mismatch fallback keeps lexical retrieval available.",
                                     "vector": [1.0, 0.0, 0.0],
-                                    "metadata": {"source_type": "txt"},
+                                    "metadata": {"source_type": "text"},
                                 }
                             ],
                         }
@@ -542,3 +547,27 @@ def test_select_context_chunks_for_answer_deduplicates_overlapping_chunks() -> N
     assert "2:0" in selected_ids
     assert "1:1" not in selected_ids
     assert selected_ids.count("1:0") == 1
+
+
+def test_answer_question_returns_empty_citations_when_scores_are_below_threshold(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RETRIEVAL_MIN_SCORE", "0.2")
+    get_settings.cache_clear()
+
+    result = answer_question(
+        question="What does the runbook say?",
+        retrieved_chunks=[
+            _retrieved_chunk(
+                chunk_id="1:0",
+                document_id=1,
+                document_name="runbook.txt",
+                score=0.08,
+                text="Rollback checklist for the service.",
+            )
+        ],
+    )
+
+    get_settings.cache_clear()
+    assert result.answer == NO_RELIABLE_EVIDENCE_MESSAGE
+    assert result.citations == []

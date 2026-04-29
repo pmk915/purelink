@@ -29,6 +29,7 @@ class DocumentRead(BaseModel):
     original_filename: str
     file_type: str
     file_size: int
+    sha256: str | None
     storage_path: str
     review_status: DocumentReviewStatus
     processing_status: DocumentProcessingStatus
@@ -41,6 +42,7 @@ class DocumentRead(BaseModel):
     latest_processing_job_status: ProcessingJobStatus | None = None
     latest_processing_job_type: ProcessingJobType | None = None
     latest_processing_job_step: str | None = None
+    latest_processing_job_error_code: str | None = None
     latest_processing_job_trigger: ProcessingJobTrigger | None = None
     latest_processing_job_attempt_number: int | None = None
     created_at: datetime

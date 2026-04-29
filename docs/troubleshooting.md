@@ -1,6 +1,6 @@
 # 故障排查
 
-本文面向 PureLink 本地 Docker Compose 和自部署场景。命令、配置项和 API 路径保持原样。
+本文面向 PureLink `Core` 版本：默认只处理 `.txt`、`.md` 和普通文本型 `.pdf`。命令、配置项和 API 路径保持原样。
 
 ## 快速检查
 
@@ -10,7 +10,7 @@ docker compose logs -f api
 docker compose logs -f worker
 docker compose logs -f redis
 docker compose down
-docker compose up -d --build api worker
+docker compose up -d --build api worker frontend
 make check
 ```
 
@@ -26,8 +26,8 @@ make check
 Provider status 输出含义：
 
 - `[OK]`：当前配置可用。
-- `[WARN]`：服务可运行，但某类能力可能不可用，例如 `ASR_MODEL_PATH` 不存在。
 - `[FAIL]`：关键配置不完整，例如外部 LLM 缺少 `LLM_API_KEY`。
+- `OCR_PROVIDER=disabled`、`ASR_PROVIDER=disabled` 在默认 Core 配置下会显示为 `[OK]`，不是 warning。
 
 ## Docker / WSL
 
@@ -79,10 +79,9 @@ docker compose ps
 docker compose logs -f worker
 ```
 
-检查 Redis：
+确认 Redis 可用：
 
 ```bash
-docker compose logs -f redis
 docker compose exec redis redis-cli ping
 ```
 
@@ -115,7 +114,7 @@ LLM_PROVIDER=heuristic
 
 `heuristic` 是本地演示模式，不调用外部大模型。它能跑通 demo，但回答质量有限。
 
-更好的回答质量需要配置 OpenAI-compatible LLM：
+### 如何配置外部 LLM？
 
 ```env
 LLM_PROVIDER=openai_compatible
@@ -125,126 +124,154 @@ LLM_MODEL=your-chat-model
 LLM_TIMEOUT_SECONDS=30
 ```
 
-### 外部 LLM 报错
-
 检查：
 
 - `LLM_API_BASE_URL` 是否是正确的 `/v1` base URL
 - `LLM_API_KEY` 是否填写
 - `LLM_MODEL` 是否存在
 - 当前服务器是否能访问 provider endpoint
-- provider 是否兼容 OpenAI `chat/completions`
 
-可以通过接口查看状态：
+### DeepSeek 为什么一直答不出来？
 
-```bash
-curl http://localhost:8000/api/v1/system/providers
+如果你使用 DeepSeek，不要把：
+
+```env
+LLM_PROVIDER=deepseek
 ```
+
+误当成旧版本里不支持的自定义值。当前 Core 已经支持 `deepseek` provider，并会按 OpenAI-compatible 的 `chat/completions` 格式请求：
+
+```env
+LLM_PROVIDER=deepseek
+LLM_API_BASE_URL=https://api.deepseek.com
+LLM_API_KEY=your-deepseek-api-key
+DEEPSEEK_API_KEY=your-deepseek-api-key
+LLM_MODEL=deepseek-v4-pro
+LLM_REASONING_EFFORT=high
+LLM_THINKING_ENABLED=true
+```
+
+重点检查：
+
+- `LLM_API_BASE_URL` 是否为 `https://api.deepseek.com`
+- `LLM_API_KEY` 或 `DEEPSEEK_API_KEY` 是否至少配置了一个
+- `LLM_MODEL` 是否填写了真实模型名
+- API key 是否正确
+- 修改 `.env` 后是否已经重启 `api`
 
 ## Embedding Provider
 
-### 默认检索效果为什么比较基础？
+### 默认检索为什么不是最轻量 fallback？
 
-默认配置是：
+当前 Core 默认配置是：
+
+```env
+EMBEDDING_PROVIDER=fastembed
+EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
+```
+
+这会在本地提供真实语义 embedding。首次运行下载模型是正常现象。
+
+### 不想下载模型怎么办？
+
+改成：
 
 ```env
 EMBEDDING_PROVIDER=local_hashed_bow
+EMBEDDING_MODEL=
 ```
 
-`local_hashed_bow` 是本地 fallback，适合 demo 和开发，不代表真实语义 embedding 效果。
-
-更好的语义检索需要配置 OpenAI-compatible embedding：
-
-```env
-EMBEDDING_PROVIDER=openai_compatible
-EMBEDDING_API_BASE_URL=https://api.example.com/v1
-EMBEDDING_API_KEY=your-api-key
-EMBEDDING_MODEL=your-embedding-model
-EMBEDDING_TIMEOUT_SECONDS=30
-```
+这样更轻，但检索质量会下降。
 
 ### 切换 embedding 后旧文档为什么没有变化？
 
-已有 `indexed` 文档使用旧 index artifact。修改 `EMBEDDING_PROVIDER` 或 `EMBEDDING_MODEL` 后，需要重新索引旧文档。
-
-可选方式：
-
-- 对文档重新准备
-- 调用 `/embed` 相关接口重建索引
-- 重新处理文档，让它重新进入 `ready -> indexed`
+已有 `indexed` 文档仍然使用旧 index artifact。修改 `EMBEDDING_PROVIDER`、`EMBEDDING_MODEL` 或 `EMBEDDING_NORMALIZE` 后，需要重新索引旧文档。
 
 ### provider/model 不匹配是什么意思？
 
-当前 `.env` 中的 embedding provider 或 model，与旧 index artifact 里记录的 provider 或 model 不一致。为避免混用不同向量空间，PureLink 会提示不匹配。解决方式是重新索引。
+当前 `.env` 中的 embedding 配置，与旧 index artifact 记录的 metadata 不一致。PureLink 会拒绝混合向量空间，并提示你执行知识库级 `reindex`。
 
-## OCR Provider
+### `sentence_transformers` 为什么报未安装？
 
-### 图片 OCR 或扫描 PDF OCR 失败
+`sentence_transformers` 现在是高级可选方案，不进入默认安装。
+
+如需启用：
+
+```bash
+python -m pip install -r requirements-embedding-torch.txt
+```
+
+如果未安装就配置：
+
+```env
+EMBEDDING_PROVIDER=sentence_transformers
+```
+
+系统会返回 `EMBEDDING_PROVIDER_NOT_INSTALLED`。
+
+## PDF 与文本处理
+
+### 普通 PDF 可以处理，扫描 PDF 为什么失败？
+
+Core 版本只支持**普通文本型 PDF**。扫描件、图片式 PDF 默认不走 OCR fallback。
+
+常见表现：
+
+- `PDF_TEXT_GARBLED`
+- `PDF_TEXT_EXTRACTION_FAILED`
+- `TEXT_QUALITY_TOO_LOW`
+
+如果你需要扫描 PDF OCR，需要后续接入 OCR 扩展，而不是依赖当前默认部署。
+
+### 文件内容质量过低是什么意思？
+
+PureLink 在 chunk 入库前会做文本清洗和质量检测。以下情况会被拒绝：
+
+- 空文本
+- 乱码文本
+- 二进制样式文本
+- 含明显控制字符的文本
+
+这样可以避免低质量内容进入 `DocumentChunk` 和索引。
+
+### 为什么 ask 没有直接给答案？
+
+当前 Core 版本会先判断检索结果是否足够可靠。如果没有检索到结果，或者最高分低于 `RETRIEVAL_MIN_SCORE`，系统会返回：
+
+```text
+当前知识库中没有找到足够可靠的依据，无法确认该问题。
+```
+
+这表示系统在避免强行编造答案。你可以：
+
+- 换一个更具体的问题
+- 上传更相关的文档
+- 调低 `RETRIEVAL_MIN_SCORE`
+
+## OCR / ASR / 多模态
+
+### 为什么 `make check` 里 OCR / ASR 显示 disabled？
+
+这是当前 Core 版本的默认行为，不是故障。
 
 默认配置：
 
 ```env
-OCR_PROVIDER=tesseract
-OCR_LANG=eng
-OCR_TESSERACT_COMMAND=tesseract
+ENABLE_OCR=false
+OCR_PROVIDER=disabled
+
+ENABLE_MEDIA=false
+ASR_PROVIDER=disabled
+
+MULTIMODAL_PROVIDER=disabled
 ```
 
-检查：
+### 上传 `.png`、`.jpg`、`.mp3`、`.mp4` 为什么被拒绝？
 
-```bash
-docker compose logs -f worker
-docker compose exec worker tesseract --version
-```
+因为当前 Core 版本专注文本类知识库。这些类型会返回：
 
-如果使用中文 OCR，需要确认容器中安装了对应语言包，并把 `OCR_LANG` 改成对应值。
-
-### `tesseract` 不可用
-
-Docker 镜像默认安装 `tesseract`。如果你在宿主机手动运行后端，需要自己安装 `tesseract`，或把 `OCR_TESSERACT_COMMAND` 设置为可执行文件完整路径。
-
-## ASR Provider
-
-### 音频或视频处理失败
-
-默认配置：
-
-```env
-ASR_PROVIDER=vosk
-ASR_MODEL_PATH=/app/models/vosk
-ASR_FFMPEG_COMMAND=ffmpeg
-```
-
-检查 Vosk 模型：
-
-```bash
-docker compose exec worker ls -la /app/models/vosk
-```
-
-检查 ffmpeg：
-
-```bash
-docker compose exec worker ffmpeg -version
-```
-
-### Vosk 模型路径不存在
-
-`make check` 会把这种情况显示为 `[WARN]`，因为它不会影响文本知识库 demo，但音频和视频处理会失败。
-
-如果你挂载自己的模型，需要确保 `ASR_MODEL_PATH` 是 worker 容器内部可见的路径。
-
-### `ffmpeg` 不可用
-
-Docker 镜像默认安装 `ffmpeg`。宿主机手动运行时，需要自己安装 `ffmpeg`，或把 `ASR_FFMPEG_COMMAND` 设置为可执行文件完整路径。
-
-## Reranker Provider
-
-默认配置：
-
-```env
-RERANKER_PROVIDER=local_rule_reranker
-```
-
-当前 `local_rule_reranker` 是轻量规则 rerank，用于提升 hybrid retrieval 后的排序稳定性。external reranker 还不是当前主路径。
+- `UNSUPPORTED_FILE_TYPE`
+- 或 `FEATURE_NOT_ENABLED`
 
 ## Provider Status 接口
 
@@ -259,16 +286,26 @@ GET /api/v1/system/providers
 - provider 名称
 - 是否配置完成
 - 是否需要 API key
-- API key 是否已填写的布尔值
-- model 名称
-- ASR 模型路径是否存在
-- 简短 message
+- 当前 mode
+- 提示信息
 
-示例：
+## 镜像和缓存体积
+
+查看镜像体积：
 
 ```bash
-curl http://localhost:8000/api/v1/system/providers
+docker images
+docker history --human purelink-api
+docker history --human purelink-worker
 ```
+
+清理 Docker build cache：
+
+```bash
+docker builder prune -af
+```
+
+模型缓存默认落在宿主机 `./models`，不会写进 Git，也不会被复制进默认镜像。
 
 ## 常见命令
 
@@ -277,8 +314,6 @@ docker compose ps
 docker compose logs -f api
 docker compose logs -f worker
 docker compose logs -f redis
-docker compose down
-docker compose up -d --build api worker
-docker compose up -d --build frontend
+docker compose exec redis redis-cli ping
 make check
 ```

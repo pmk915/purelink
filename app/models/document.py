@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, Enum as SAEnum, ForeignKey, String, Text
+from sqlalchemy import BigInteger, DateTime, Enum as SAEnum, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -20,6 +20,13 @@ if TYPE_CHECKING:
 
 class Document(PrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "documents"
+    __table_args__ = (
+        UniqueConstraint(
+            "knowledge_base_id",
+            "sha256",
+            name="uq_documents_knowledge_base_sha256",
+        ),
+    )
 
     knowledge_base_id: Mapped[int] = mapped_column(
         ForeignKey("knowledge_bases.id", ondelete="CASCADE"),
@@ -40,6 +47,7 @@ class Document(PrimaryKeyMixin, TimestampMixin, Base):
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     file_type: Mapped[str] = mapped_column(String(100), nullable=False)
     file_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     storage_path: Mapped[str] = mapped_column(String(1024), nullable=False)
     review_status: Mapped[DocumentReviewStatus] = mapped_column(
         SAEnum(
@@ -143,6 +151,13 @@ class Document(PrimaryKeyMixin, TimestampMixin, Base):
         if latest_job is None:
             return None
         return latest_job.current_step
+
+    @property
+    def latest_processing_job_error_code(self) -> str | None:
+        latest_job = self.latest_processing_job
+        if latest_job is None:
+            return None
+        return latest_job.error_code
 
     @property
     def latest_processing_job_trigger(self):

@@ -6,114 +6,138 @@
 ![Next.js](https://img.shields.io/badge/Next.js-frontend-black.svg)
 ![Docker](https://img.shields.io/badge/Docker-ready-2496ED.svg)
 
-PureLink 是一个**本地优先、云端兼容的自部署 AI 知识库系统**，适合个人、小团队、实验室、项目组服务器或用户自己的云服务器部署。
+PureLink Core 是一个轻量级 local-first 文本知识库问答系统，专注 `txt` / `md` / 普通文本型 `pdf` 的上传、处理、语义检索和带来源问答。
 
-PureLink is a local-first, cloud-ready, self-hosted AI knowledge workspace for individuals and small teams.
+它不是多模态助手、视频处理系统，也不是默认启用 OCR / ASR 的重型 RAG 平台。当前 `Core` 版本的边界很明确：围绕团队内部文本知识沉淀、检索、问答和来源追踪，把默认部署保持在轻量、稳定、可自部署的范围内。
 
-你需要自己部署服务、管理数据，并通过 `.env` 配置自己的 `LLM_PROVIDER`、`EMBEDDING_PROVIDER`、`OCR_PROVIDER`、`ASR_PROVIDER` 和 `RERANKER_PROVIDER`。
+PureLink is a local-first, cloud-ready, self-hosted AI knowledge workspace for text knowledge bases.
 
-## PureLink 是什么？
+## What Is PureLink Core?
 
-PureLink 把文档和多媒体文件变成可检索、可问答、可引用来源的知识库，核心路径是：
+PureLink Core 面向这样的主路径：
 
 ```text
-启动系统 -> 注册登录 -> 创建知识库 -> 上传文件 -> 自动准备 -> 提问 -> 查看 citation -> 打开 source preview
+注册登录 -> 创建知识库 -> 上传 txt/md/pdf -> 自动处理 -> 建立索引 -> 提问 -> 查看 answer + citations
 ```
 
-适合的部署场景：
+适合场景：
 
-- 本机个人部署
+- 个人本机部署
 - 小团队内网部署
-- 实验室 / 项目组服务器部署
-- 用户自行部署到云服务器
+- 实验室 / 项目组服务器
+- 自己控制数据和模型配置的云服务器
 
-## 核心能力
+## Current Features
 
-- 个人知识库和团队知识库
-- 团队邀请码、成员管理、管理员审核
-- 上传后自动准备文档，审核通过后自动进入处理
-- 支持 `.txt`、`.md`、`.pdf`、`.docx`、图片 OCR、音频转写、视频转写
-- Hybrid retrieval、轻量 rerank、问答、citation
-- 支持 `source_locator` / `preview_target` 的来源预览
-- 默认本地 demo 模式不需要外部 API key
-- Docker Compose 一键启动 PostgreSQL、Redis、FastAPI API、Python worker、Next.js frontend
+- 用户注册 / 登录
+- 个人知识库 / 团队知识库
+- txt / md / 普通文本型 PDF 上传
+- sha256 文件去重
+- Redis + Worker 异步处理
+- `ProcessingJob` 状态管理、retry、timeout、worker 抢占
+- 文本清洗与质量检测
+- 文档 chunk 化
+- `fastembed` + `BAAI/bge-small-zh-v1.5` 本地语义检索
+- knowledge base 级 `reindex`
+- ask 问答
+- citations 来源引用
+- 轻量 Docker 本地部署
 
-## 快速开始
+## Current Core Does Not Support
+
+- 图片 OCR
+- 扫描 PDF OCR
+- 音频 / 视频 ASR
+- 多模态图片 / 视频理解
+- 默认 `PyTorch` / `sentence-transformers`
+- MinIO / S3
+- Go file service
+
+这些能力可以进入 Roadmap，但不属于当前 `Core` 默认能力。如果上传不支持的文件，后端会返回 `UNSUPPORTED_FILE_TYPE` 或 `FEATURE_NOT_ENABLED`。
+
+## Quick Start
+
+### 环境要求
+
+- Docker Desktop 或 Linux Docker Engine
+- Docker Compose v2
+- 建议 Python 3.12（本地跑测试时）
+- 建议 Node.js 24 LTS（本地跑前端 lint/build 时）
+
+### 启动服务
 
 ```bash
 git clone https://github.com/pmk915/purelink.git
 cd purelink
 cp .env.example .env
-docker compose up -d --build
-```
-
-打开：
-
-- 前端：`http://localhost:3000`
-- API 文档：`http://localhost:8000/docs`
-- API health：`http://localhost:8000/api/v1/health`
-- Provider status：`http://localhost:8000/api/v1/system/providers`
-
-检查本地服务：
-
-```bash
+docker compose up -d --build api worker frontend
 make check
 ```
 
-停止服务：
+访问入口：
 
-```bash
-docker compose down
-```
+- Frontend: `http://localhost:3000`
+- API: `http://localhost:8000/api/v1`
+- Swagger: `http://localhost:8000/docs`
+- Provider status: `http://localhost:8000/api/v1/system/providers`
 
-首次构建会安装 OCR、媒体处理和 ASR 依赖，耗时会更长。
+默认不预置账号。启动后需要先注册，再创建知识库并上传文件。
 
-## 5 分钟 Demo
+### 最小演示流程
 
-1. 克隆仓库。
-2. 执行 `cp .env.example .env`。
-3. 执行 `docker compose up -d --build`。
-4. 打开 `http://localhost:3000`。
-5. 注册一个用户。
-6. 创建个人知识库。
-7. 上传 `examples/text/playbook.txt`。
-8. 等待文档变成“可问答”。
-9. 提问：`What is this document about?`
-10. 点击 citation，进入来源预览页面。
+1. 打开 `http://localhost:3000`
+2. 注册账号并登录
+3. 创建个人知识库
+4. 上传 `sample_docs/sample.txt`
+5. 上传 `sample_docs/sample.md`
+6. 也可以额外上传任意一个可复制文字的普通文本型 PDF
+7. 等待文档状态变为“可问答”
+8. 在问答区提问
+9. 查看 answer 下方“参考来源”
 
-默认本地模式可以不配置任何外部 API key 跑通这个 demo。配置真实 LLM 和 Embedding Provider 后，回答质量和检索效果会更好。
+`sample_docs/` 中的文件用于本地演示，不包含隐私内容。
 
-`examples/` 目录提供小型 demo 文件，仅用于本地测试。音频和视频样例本轮不提交，测试 ASR 时请自行准备短文件。
+## 配置说明
 
-## Provider 配置指南
-
-PureLink 的 provider 都通过 `.env` 配置。默认模式优先保证“可以本地跑通”，外部模型模式用于更好的真实效果。
-
-### 默认本地模式
-
-默认配置：
+当前 `Core` 默认推荐配置：
 
 ```env
+EMBEDDING_PROVIDER=fastembed
+EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
+EMBEDDING_MODEL_CACHE_DIR=/app/models/embedding
+EMBEDDING_NORMALIZE=true
+
 LLM_PROVIDER=heuristic
-EMBEDDING_PROVIDER=local_hashed_bow
-OCR_PROVIDER=tesseract
-ASR_PROVIDER=vosk
-RERANKER_PROVIDER=local_rule_reranker
+
+OCR_PROVIDER=disabled
+ASR_PROVIDER=disabled
+MULTIMODAL_PROVIDER=disabled
+
+RETRIEVAL_MIN_SCORE=0.15
 ```
 
 说明：
 
-- `heuristic`：本地演示问答，不需要 `LLM_API_KEY`。
-- `local_hashed_bow`：本地 fallback embedding，不需要 `EMBEDDING_API_KEY`。
-- `tesseract`：用于图片 OCR 和扫描版 PDF OCR。
-- `vosk`：用于音频和视频转写，需要本地模型路径存在。
-- `local_rule_reranker`：轻量规则 rerank，用于改善排序稳定性。
+- `EMBEDDING_PROVIDER=fastembed` 是默认本地语义检索方案
+- 默认模型为 `BAAI/bge-small-zh-v1.5`
+- 模型缓存放在宿主机 `./models`，容器内挂载到 `/app/models`
+- 模型权重不会提交到 Git，也不会被打进默认 Docker 镜像
+- `LLM_PROVIDER=heuristic` 适合本地 demo；如需更强回答能力，可改为 `openai_compatible` 或 `deepseek`
+- `OCR_PROVIDER`、`ASR_PROVIDER`、`MULTIMODAL_PROVIDER` 在 Core 中默认关闭
+- `RETRIEVAL_MIN_SCORE` 用于控制“是否有足够可靠来源可以回答”
 
-默认模式适合本地 demo 和开发联调，不代表最终高质量问答效果。真实使用建议配置外部 LLM 和 Embedding Provider。
+如果你不想下载任何 embedding 模型，可以切到：
 
-### 配置外部 LLM Provider
+```env
+EMBEDDING_PROVIDER=local_hashed_bow
+EMBEDDING_MODEL=
+```
 
-OpenAI-compatible 示例：
+但检索质量会明显弱于真实语义 embedding。
+
+## 接入大模型回答
+
+如果你只是想接入一个现成的大模型 API，而不是改代码，当前最小路径是直接配置：
 
 ```env
 LLM_PROVIDER=openai_compatible
@@ -123,263 +147,222 @@ LLM_MODEL=your-chat-model
 LLM_TIMEOUT_SECONDS=30
 ```
 
-注意：
+然后重启 API / worker：
 
-- `LLM_API_KEY` 不要提交到 Git。
-- 当前调用格式是 OpenAI-compatible `chat/completions`。
-- 如果使用 DashScope、OpenAI 兼容网关或自建代理，把 `LLM_API_BASE_URL` 填成对应的 `/v1` base URL。
-- 缺少 `LLM_API_BASE_URL`、`LLM_API_KEY` 或 `LLM_MODEL` 时，`/api/v1/system/providers` 会显示配置未完成。
+```bash
+docker compose up -d --build api worker
+```
 
-### 配置外部 Embedding Provider
+### DeepSeek 配置示例
 
-OpenAI-compatible 示例：
+如果你要接 DeepSeek，当前支持直接使用：
 
 ```env
-EMBEDDING_PROVIDER=openai_compatible
-EMBEDDING_API_BASE_URL=https://api.example.com/v1
-EMBEDDING_API_KEY=your-api-key
-EMBEDDING_MODEL=your-embedding-model
-EMBEDDING_TIMEOUT_SECONDS=30
+LLM_PROVIDER=deepseek
+LLM_API_BASE_URL=https://api.deepseek.com
+LLM_API_KEY=your-deepseek-api-key
+# 或者直接使用 DEEPSEEK_API_KEY=your-deepseek-api-key
+LLM_MODEL=deepseek-v4-pro
+LLM_TIMEOUT_SECONDS=30
+LLM_REASONING_EFFORT=high
+LLM_THINKING_ENABLED=true
 ```
 
 说明：
 
-- Embedding 用于 `indexed` 路径和语义检索。
-- `EMBEDDING_API_KEY` 不要提交到 Git。
-- 外部 Embedding Provider 需要兼容 OpenAI `embeddings` API。
-- 缺少 `EMBEDDING_API_BASE_URL`、`EMBEDDING_API_KEY` 或 `EMBEDDING_MODEL` 时，索引和语义检索会失败。
+- `LLM_API_BASE_URL` 对 DeepSeek 应该写 `https://api.deepseek.com`
+- `LLM_API_KEY` 和 `DEEPSEEK_API_KEY` 当前都可用，优先读取 `LLM_API_KEY`
+- 当前后端会请求 `POST /chat/completions`
+- `LLM_REASONING_EFFORT` 和 `LLM_THINKING_ENABLED` 会透传到 DeepSeek 请求体
+- 如果你不需要 thinking 模式，可以把 `LLM_THINKING_ENABLED=false`
 
-### OCR Provider 配置
+### 当前代码入口在哪里
 
-```env
-OCR_PROVIDER=tesseract
-OCR_LANG=eng
+如果你想看 PureLink 现在是在哪里接入大模型回答的，核心文件是：
+
+- [app/services/qa.py](app/services/qa.py)
+  - `answer_question()`：问答主入口
+  - `resolve_answer_generator()`：根据 `LLM_PROVIDER` 选择回答实现
+  - `OpenAICompatibleAnswerGenerator`：当前默认的外部大模型回答器
+- [app/services/llm.py](app/services/llm.py)
+  - `generate_openai_compatible_chat_completion()`：真正发起 HTTP 请求的地方
+- [app/schemas/llm.py](app/schemas/llm.py)
+  - `HEURISTIC_PROVIDER`
+  - `OPENAI_COMPATIBLE_PROVIDER`
+  - `DEEPSEEK_PROVIDER`
+  - `SUPPORTED_LLM_PROVIDERS`
+- [app/core/config.py](app/core/config.py)
+  - 读取 `LLM_PROVIDER`、`LLM_API_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`
+  - 读取 `LLM_REASONING_EFFORT`、`LLM_THINKING_ENABLED`
+
+### 如果要新增一个新的 LLM provider，应该改哪里
+
+建议按这条路径改：
+
+1. 在 [app/schemas/llm.py](app/schemas/llm.py) 增加新的 provider 常量
+2. 在 [app/core/config.py](app/core/config.py) 复用现有配置项，或补充新 provider 需要的配置
+3. 在 [app/services/llm.py](app/services/llm.py) 新增对应的请求函数
+4. 在 [app/services/qa.py](app/services/qa.py) 新增一个新的 `AnswerGenerator` 实现，并接到 `resolve_answer_generator()`
+
+也就是说：
+
+- **问答路由入口不需要改**
+- **retrieval 和 citations 逻辑不需要改**
+- 真正需要扩展的是 `qa.py` 里的回答器选择逻辑，以及 `llm.py` 里的 provider 调用实现
+
+### 为什么入口放在这里
+
+PureLink 当前把问答链路拆成两段：
+
+- retrieval / citations：由后端自己控制，保证来源可靠
+- answer generation：由 `LLM_PROVIDER` 决定
+
+这样做的好处是，你可以替换回答模型，但不用动 citations 生成逻辑，也不会让大模型自己编来源。
+
+## Citation 与可靠性策略
+
+问答接口会直接返回结构化 `citations`，不是让大模型自己编造来源。
+
+当前 Core 的 chunk metadata 规范：
+
+- txt: `source_type=text`，`source_locator=text:chunk:<chunk_index>`
+- markdown: `source_type=markdown`，`source_locator=heading:<heading>` 或 `markdown:chunk:<chunk_index>`
+- pdf: `source_type=pdf`，`page_number=<n>`，`source_locator=page:<n>`
+
+如果没有检索到结果，或者最高分低于 `RETRIEVAL_MIN_SCORE`，系统会返回：
+
+```text
+当前知识库中没有找到足够可靠的依据，无法确认该问题。
 ```
 
-说明：
+同时 `citations=[]`，避免无依据作答。
 
-- OCR 用于图片 OCR。
-- OCR 也用于扫描版 PDF 的 fallback。
-- Docker 镜像默认安装 `tesseract` 和英文语言包。
-- 如果容器中缺少 `tesseract` 或对应语言包，OCR 会失败。
+## 架构概览
 
-### ASR Provider 配置
-
-```env
-ASR_PROVIDER=vosk
-ASR_MODEL_PATH=/app/models/vosk
+```mermaid
+flowchart LR
+  U[User] --> FE[Next.js Frontend]
+  FE --> API[FastAPI API]
+  API --> PG[(PostgreSQL)]
+  API --> R[(Redis Queue)]
+  R --> W[Processing Worker]
+  W --> PG
+  W --> VS[(Local Vector Index)]
+  W --> MC[(Model Cache)]
+  API --> VS
 ```
 
-说明：
+系统组件说明：
 
-- ASR 用于音频转写。
-- 视频会先通过 `ffmpeg` 抽取音频，再使用 ASR 转写。
-- 如果 `ASR_MODEL_PATH` 不存在，音频和视频处理会失败。
-- 如果 `ffmpeg` 不可用，音频转换和视频抽音会失败。
+- Frontend：登录、知识库管理、上传、问答、citation 展示
+- API：鉴权、权限控制、上传入口、ask/reindex 接口
+- PostgreSQL：业务主数据
+- Redis：异步任务队列
+- Worker：文档处理和索引
+- Local Vector Index：本地索引产物
+- Model Cache：`fastembed` 模型缓存
 
-### Reranker Provider 配置
+## 文件处理流程
 
-```env
-RERANKER_PROVIDER=local_rule_reranker
+```mermaid
+flowchart TD
+  A[Upload txt/md/pdf] --> B[Auth and KB permission check]
+  B --> C[Compute sha256]
+  C --> D{Duplicate in KB?}
+  D -->|Yes| E[Return duplicate document]
+  D -->|No| F[Save file and create Document]
+  F --> G[Create ProcessingJob]
+  G --> H[Worker claims queued job]
+  H --> I[Extract text]
+  I --> J[Text quality check]
+  J --> K[Chunk persist]
+  K --> L[Embedding and index]
+  L --> M[Document indexed]
+  M --> N[Ask with citations]
 ```
 
-说明：
+这条链路强调两点：
 
-- 当前默认使用轻量规则 rerank。
-- 它可以提升 hybrid retrieval 后的排序稳定性。
-- external reranker 还不是当前主路径。
+- 上传接口只做轻量入口工作，不同步解析文件
+- 文本质量不达标时，chunk 不会入库，避免脏数据污染索引
 
-### 修改 Embedding Provider 后需要重新索引
+## 问答流程
 
-如果你修改了 `EMBEDDING_PROVIDER` 或 `EMBEDDING_MODEL`，已有 `indexed` 文档仍然使用旧索引。为了让旧文档使用新的 embedding provider，需要重新索引。
+```mermaid
+flowchart TD
+  Q[User question] --> A[Check KB access]
+  A --> B[Retrieve relevant chunks]
+  B --> C{Reliable source?}
+  C -->|No| D[Return no reliable source answer]
+  C -->|Yes| E[Build context]
+  E --> F[LLM or heuristic answer]
+  F --> G[Return answer and citations]
+```
 
-可选方式：
+## 项目设计取舍
 
-- 在前端对失败或需要更新的文档重新准备。
-- 调用 `/embed` 相关接口手动重建索引。
-- 重新处理文档，让它重新进入 `ready -> indexed` 路径。
+当前版本不默认做多模态，原因很直接：
 
-如果看到 provider/model 不匹配错误，通常说明当前配置和旧 index artifact 的 provider 或 model 不一致。
-
-### 常见 Provider 配置错误
-
-- 问答质量很基础：仍在使用 `LLM_PROVIDER=heuristic`。
-- 检索语义效果弱：仍在使用 `EMBEDDING_PROVIDER=local_hashed_bow`。
-- 外部 LLM 报错：检查 `LLM_API_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`。
-- 外部 embedding 报错：检查 `EMBEDDING_API_BASE_URL`、`EMBEDDING_API_KEY`、`EMBEDDING_MODEL`，并确认切换后重新索引。
-- 图片或扫描 PDF OCR 失败：检查 `OCR_PROVIDER=tesseract`、`OCR_LANG` 和容器内语言包。
-- 音频或视频失败：检查 `ASR_MODEL_PATH` 和 `ASR_FFMPEG_COMMAND`。
+- 轻量开源项目不应该默认带上 OCR / ASR / 视频 / 多模态重依赖
+- 当前核心业务是团队文本知识库，而不是通用多模态助手
+- 语义检索是核心智能能力，先把文本处理、索引、问答和来源追踪做稳
+- OCR、ASR、Go file service 等更适合作为未来扩展，而不是默认路径
 
 ## 支持的文件类型
 
 | 类型 | 格式 | 说明 |
 | --- | --- | --- |
-| Text | `.txt`, `.md` | 最适合首次 demo |
-| Office / PDF | `.docx`, `.pdf` | 文本 PDF 直接抽取；扫描 PDF 走 OCR fallback |
-| Image | `.png`, `.jpg`, `.jpeg` | 依赖 OCR Provider |
-| Audio | `.mp3`, `.wav`, `.m4a` | 依赖 ASR Provider 和模型 |
-| Video | `.mp4`, `.mov`, `.m4v` | 先抽音，再走 ASR |
-
-M27 不继续增加新格式，重点是 provider 配置体验、中文文档和自部署可诊断性。
-
-## 架构
-
-```text
-Browser
-  -> Next.js frontend
-  -> FastAPI API
-  -> PostgreSQL metadata
-  -> Redis processing queue
-  -> Python worker
-  -> local file storage
-  -> DocumentChunk / index artifacts
-  -> retrieve / ask / citation / preview
-```
-
-团队审核规则：
-
-- 个人上传：自动准备。
-- 团队管理员上传：自动通过并准备。
-- 团队成员上传：先等待管理员审核。
-- 被拒绝的团队文档不会进入检索。
-
-## Main Path vs Legacy Compatibility
-
-当前主路径：
-
-```text
-upload
--> ProcessingJob(document_process)
--> extract / OCR / ASR
--> DocumentChunk
--> ready
--> ProcessingJob(document_index)
--> indexed
--> retrieve / ask / citation / preview
-```
-
-历史兼容和调试路径仍然保留：
-
-- `parse`
-- `chunk`
-- `embed`
-- old task APIs
-- `worker-go`
-
-新功能应优先走主路径。`worker-go` 当前不是主生产 worker。
-
-## 故障排查
-
-常用命令：
-
-```bash
-docker compose ps
-docker compose logs -f api
-docker compose logs -f worker
-docker compose logs -f redis
-docker compose down
-docker compose up -d --build api worker
-make check
-```
-
-常见问题：
-
-- WSL 中找不到 Docker：启用 Docker Desktop WSL integration。
-- 后端改动未生效：执行 `docker compose up -d --build api worker`。
-- 文档一直“准备中”：检查 `docker compose logs -f worker` 和 Redis。
-- Provider 配置是否正确：打开 `/api/v1/system/providers` 或执行 `make check`。
-- 默认模式回答较弱：配置外部 LLM 和 Embedding Provider。
-
-更多排查路径见：[docs/troubleshooting.md](docs/troubleshooting.md)。
-
-## 验证
-
-后端测试：
-
-```bash
-pytest -q
-```
-
-前端检查：
-
-```bash
-cd frontend
-npm run lint
-npm run build
-```
-
-Smoke / E2E：
-
-```bash
-make smoke
-make e2e
-```
-
-## 项目结构
-
-```text
-purelink/
-├── app/                    # FastAPI app, models, schemas, services, workers
-├── alembic/                # Database migrations
-├── docs/                   # 中文指南和故障排查
-├── examples/               # 本地 demo 小文件
-├── frontend/               # Next.js frontend and Dockerfile
-├── scripts/                # E2E and stack check scripts
-├── tests/                  # pytest test suite
-├── worker-go/              # Legacy / experimental Go worker
-├── data/                   # Local runtime artifacts
-├── docker-compose.yml      # Full local stack
-├── Dockerfile              # API / worker image
-└── Makefile                # Common commands
-```
-
-## Roadmap
-
-Short-term:
-
-- 完善本地部署体验
-- 完善 provider 配置体验
-- 增加 demo script
-- 优化用户可见状态文案
-- 改善失败重试体验
-
-Mid-term:
-
-- MinIO / S3 对象存储
-- 云服务器部署指南
-- 管理员调试视图
-- 更强 provider 支持
-- 更完善的权限与审核体验
-
-Long-term:
-
-- Kubernetes / Helm
-- 多 worker 横向扩容
-- 监控告警
-- 更强多模态理解
-- 更完整的企业自部署能力
+| Text | `.txt`, `.md` | 推荐首次 demo 使用 |
+| PDF | `.pdf` | 仅支持普通文本型 PDF |
 
 ## 相关文档
 
-- [PLAN.md](PLAN.md)：阶段计划和路线
-- [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md)：开发记录
-- [DEV_COMMANDS.md](DEV_COMMANDS.md)：本地常用命令
-- [frontend/README.md](frontend/README.md)：前端局部说明
-- [CONTRIBUTING.md](CONTRIBUTING.md)：贡献说明
-- [LICENSE](LICENSE)：MIT license
+- [架构说明](docs/architecture.md)
+- [处理流水线](docs/processing-pipeline.md)
+- [任务状态机](docs/job-state-machine.md)
+- [检索与 citations](docs/retrieval-and-citations.md)
+- [本地演示指南](docs/demo-guide.md)
+- [项目复盘 / 面试说明](docs/project-notes.md)
+- [故障排查](docs/troubleshooting.md)
 
-## Contributing
+## Roadmap
 
-欢迎提交 issue 和 pull request。较大改动请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
+### Short-term
 
-建议：
+- 继续优化 txt / md / 普通文本型 PDF 的处理稳定性
+- 改善 fastembed 检索质量和 reindex 体验
+- 完善 citation 展示和 source preview 体验
+- 持续收紧默认部署边界
 
-- 保持 Docker stack 可运行。
-- 修改后端行为时补测试。
-- 修改 `frontend/` 时运行 lint/build。
-- 新文档优先中文说明。
-- 新文档处理能力优先走 main path，不继续扩展 legacy path。
+### Mid-term
+
+- OCR extension
+- media extension
+- `sentence_transformers` advanced embedding
+- 云服务器部署指南
+- 更完整的管理员调试视图
+
+### Long-term
+
+- Go file service
+- MinIO / S3
+- pgvector / Qdrant / FAISS 可替换索引后端
+- 更细粒度权限与审计
+
+## 验证命令
+
+```bash
+python3 -m compileall app tests
+PYTHONPATH=/home/pmk/projects/purelink ./.venv/bin/pytest -q
+cd frontend && npm run lint
+cd frontend && npm run build
+bash -n scripts/check_stack.sh
+docker compose --env-file .env.example config
+docker compose up -d --build api worker frontend
+make check
+git diff --check
+```
 
 ## License
 
-PureLink 使用 [MIT License](LICENSE)。
+[MIT](LICENSE)

@@ -13,7 +13,8 @@ function hasActiveProcessingJob(document: {
   return (
     document.processing_status === "processing" ||
     document.latest_processing_job_status === "queued" ||
-    document.latest_processing_job_status === "running"
+    document.latest_processing_job_status === "processing" ||
+    document.latest_processing_job_status === "retrying"
   );
 }
 

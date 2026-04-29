@@ -84,10 +84,26 @@ class ProcessingJob(PrimaryKeyMixin, TimestampMixin, Base):
         server_default="1",
         nullable=False,
     )
+    retry_count: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        server_default="0",
+        nullable=False,
+    )
+    max_retries: Mapped[int] = mapped_column(
+        Integer,
+        default=3,
+        server_default="3",
+        nullable=False,
+    )
     worker_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    locked_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    timeout_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     document: Mapped["Document"] = relationship(back_populates="processing_jobs")
     triggered_by_user: Mapped["User"] = relationship(

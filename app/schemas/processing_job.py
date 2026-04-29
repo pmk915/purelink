@@ -34,9 +34,15 @@ class ProcessingJobRead(BaseModel):
     status: ProcessingJobStatus
     current_step: str | None
     attempt_number: int
+    retry_count: int
+    max_retries: int
     worker_name: str | None
+    locked_by: str | None
+    error_code: str | None
     error_message: str | None
     created_at: datetime
     updated_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+    locked_at: datetime | None
+    timeout_at: datetime | None

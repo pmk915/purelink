@@ -30,17 +30,7 @@ function supportsDocumentPreparation(filename: string) {
   return (
     normalized.endsWith(".txt") ||
     normalized.endsWith(".md") ||
-    normalized.endsWith(".pdf") ||
-    normalized.endsWith(".docx") ||
-    normalized.endsWith(".mp3") ||
-    normalized.endsWith(".wav") ||
-    normalized.endsWith(".m4a") ||
-    normalized.endsWith(".mp4") ||
-    normalized.endsWith(".mov") ||
-    normalized.endsWith(".m4v") ||
-    normalized.endsWith(".png") ||
-    normalized.endsWith(".jpg") ||
-    normalized.endsWith(".jpeg")
+    normalized.endsWith(".pdf")
   );
 }
 
@@ -83,7 +73,8 @@ function isDocumentPreparing(document: Document) {
     document.processing_status === "processing" ||
     document.processing_status === "parsed" ||
     document.latest_processing_job_status === "queued" ||
-    document.latest_processing_job_status === "running"
+    document.latest_processing_job_status === "processing" ||
+    document.latest_processing_job_status === "retrying"
   );
 }
 
@@ -300,10 +291,9 @@ export function KnowledgeBaseWorkspace({
                 const uploadedDocument = await uploadPersonal.mutateAsync(file);
                 setFeedback({
                   tone: "success",
-                  message: messages.documents.uploadSucceeded(uploadedDocument.original_filename)
-                });
-                void runProcessingPipeline(uploadedDocument, {
-                  triggeredByUpload: true
+                  message: messages.documents.uploadProcessingStarted(
+                    uploadedDocument.original_filename
+                  )
                 });
                 return;
               }
@@ -315,9 +305,6 @@ export function KnowledgeBaseWorkspace({
                   message: messages.documents.uploadProcessingStarted(
                     uploadedDocument.original_filename
                   )
-                });
-                void runProcessingPipeline(uploadedDocument, {
-                  triggeredByUpload: true
                 });
                 return;
               }

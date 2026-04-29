@@ -19,18 +19,28 @@ class ChunkMetadata:
     ocr_provider: str | None = None
     ocr_provider_version: str | None = None
     ocr_language: str | None = None
+    extractor: str | None = None
     asr_provider: str | None = None
     asr_provider_version: str | None = None
     region_count: int | None = None
     regions: tuple[dict[str, object], ...] | None = None
 
 
+def normalize_source_type(source_type: str | None) -> str | None:
+    normalized = _normalize_optional_str(source_type)
+    if normalized == "txt":
+        return "text"
+    if normalized == "md":
+        return "markdown"
+    return normalized
+
+
 def infer_source_type_from_filename(filename: str) -> str:
     suffix = Path(filename).suffix.lower()
     if suffix == ".txt":
-        return "txt"
+        return "text"
     if suffix == ".md":
-        return "md"
+        return "markdown"
     if suffix == ".pdf":
         return "pdf"
     if suffix == ".docx":
@@ -46,6 +56,7 @@ def infer_source_type_from_filename(filename: str) -> str:
 
 def build_source_locator(
     *,
+    source_type: str | None = None,
     char_start: int | None = None,
     char_end: int | None = None,
     page_number: int | None = None,
@@ -53,8 +64,11 @@ def build_source_locator(
     end_time: float | None = None,
     section_title: str | None = None,
 ) -> str | None:
+    normalized_source_type = normalize_source_type(source_type)
     if page_number is not None:
         return f"page:{page_number}"
+    if section_title and normalized_source_type == "markdown":
+        return f"heading:{section_title}"
     if section_title:
         return f"section:{section_title}"
     if start_time is not None and end_time is not None:
@@ -78,17 +92,20 @@ def build_chunk_metadata_payload(
     ocr_provider: str | None = None,
     ocr_provider_version: str | None = None,
     ocr_language: str | None = None,
+    extractor: str | None = None,
     asr_provider: str | None = None,
     asr_provider_version: str | None = None,
     region_count: int | None = None,
     regions: list[dict[str, object]] | tuple[dict[str, object], ...] | None = None,
 ) -> dict[str, object]:
+    normalized_source_type = normalize_source_type(source_type) or "text"
     normalized_section_title = _normalize_optional_str(section_title)
     normalized_heading_path = _coerce_heading_path(heading_path)
     if normalized_heading_path is None and normalized_section_title:
         normalized_heading_path = (normalized_section_title,)
 
     locator = _normalize_optional_str(source_locator) or build_source_locator(
+        source_type=normalized_source_type,
         char_start=char_start,
         char_end=char_end,
         page_number=page_number,
@@ -98,7 +115,7 @@ def build_chunk_metadata_payload(
     )
 
     payload: dict[str, object] = {
-        "source_type": source_type,
+        "source_type": normalized_source_type,
         "char_start": char_start,
         "char_end": char_end,
     }
@@ -117,6 +134,7 @@ def build_chunk_metadata_payload(
     normalized_ocr_provider = _normalize_optional_str(ocr_provider)
     normalized_ocr_provider_version = _normalize_optional_str(ocr_provider_version)
     normalized_ocr_language = _normalize_optional_str(ocr_language)
+    normalized_extractor = _normalize_optional_str(extractor)
     normalized_asr_provider = _normalize_optional_str(asr_provider)
     normalized_asr_provider_version = _normalize_optional_str(asr_provider_version)
     normalized_regions = _coerce_regions(regions)
@@ -126,6 +144,8 @@ def build_chunk_metadata_payload(
         payload["ocr_provider_version"] = normalized_ocr_provider_version
     if normalized_ocr_language:
         payload["ocr_language"] = normalized_ocr_language
+    if normalized_extractor:
+        payload["extractor"] = normalized_extractor
     if normalized_asr_provider:
         payload["asr_provider"] = normalized_asr_provider
     if normalized_asr_provider_version:
@@ -153,7 +173,9 @@ def parse_chunk_metadata(
     elif isinstance(raw_metadata, dict):
         payload = raw_metadata
 
-    source_type = _normalize_optional_str(payload.get("source_type")) or fallback_source_type
+    source_type = normalize_source_type(
+        _normalize_optional_str(payload.get("source_type")) or fallback_source_type
+    )
     char_start = _coerce_int(payload.get("char_start"))
     char_end = _coerce_int(payload.get("char_end"))
     page_number = _coerce_int(payload.get("page_number"))
@@ -164,11 +186,13 @@ def parse_chunk_metadata(
     ocr_provider = _normalize_optional_str(payload.get("ocr_provider"))
     ocr_provider_version = _normalize_optional_str(payload.get("ocr_provider_version"))
     ocr_language = _normalize_optional_str(payload.get("ocr_language"))
+    extractor = _normalize_optional_str(payload.get("extractor"))
     asr_provider = _normalize_optional_str(payload.get("asr_provider"))
     asr_provider_version = _normalize_optional_str(payload.get("asr_provider_version"))
     region_count = _coerce_int(payload.get("region_count"))
     regions = _coerce_regions(payload.get("regions"))
     source_locator = _normalize_optional_str(payload.get("source_locator")) or build_source_locator(
+        source_type=source_type,
         char_start=char_start,
         char_end=char_end,
         page_number=page_number,
@@ -190,6 +214,7 @@ def parse_chunk_metadata(
         ocr_provider=ocr_provider,
         ocr_provider_version=ocr_provider_version,
         ocr_language=ocr_language,
+        extractor=extractor,
         asr_provider=asr_provider,
         asr_provider_version=asr_provider_version,
         region_count=region_count,

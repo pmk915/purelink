@@ -149,9 +149,9 @@ export const en = {
       "The current user may not have access to this workspace.",
     uploadTitle: "Upload document",
     uploadDescriptionPersonal:
-      "Supported formats: .txt, .md, .pdf, .docx, .mp3, .wav, .m4a, .mp4, .mov, .m4v, .png, .jpg, and .jpeg. After upload, PureLink can prepare the document for search and Q&A.",
+      "The Core build supports .txt, .md, and text-based .pdf files. After upload, PureLink prepares them for search and Q&A automatically.",
     uploadDescriptionTeam:
-      "Supported formats: .txt, .md, .pdf, .docx, .mp3, .wav, .m4a, .mp4, .mov, .m4v, .png, .jpg, and .jpeg. Admin uploads are prepared automatically; member uploads wait for review.",
+      "The Core build supports .txt, .md, and text-based .pdf files. Admin uploads are prepared automatically; member uploads wait for review.",
     documentsTitle: "Documents",
     documentsDescription:
       "Track document status while PureLink advances upload, review, and preparation automatically.",
@@ -164,12 +164,21 @@ export const en = {
       "This panel follows the latest background activity from the workspace."
   },
   documents: {
-    chooseFileError: "Choose a .txt, .md, .pdf, .docx, .mp3, .wav, .m4a, .mp4, .mov, .m4v, .png, .jpg, or .jpeg file first.",
-    unsupportedFileType: "Only .txt, .md, .pdf, .docx, .mp3, .wav, .m4a, .mp4, .mov, .m4v, .png, .jpg, and .jpeg files are currently supported in the product UI.",
-    supportedFormats: "Supported formats: .txt, .md, .pdf, .docx, .mp3, .wav, .m4a, .mp4, .mov, .m4v, .png, .jpg, .jpeg",
+    chooseFileError: "Choose a .txt, .md, or .pdf file first.",
+    unsupportedFileType: "This Core build focuses on text knowledge bases and currently supports only .txt, .md, and .pdf files.",
+    supportedFormats: "Supported formats: .txt, .md, .pdf",
     uploadSubmit: "Upload document",
     uploading: "Uploading...",
     uploadFailed: "Upload failed.",
+    uploadStatuses: {
+      uploading: "Uploading",
+      queued: "Queued",
+      processing: "Preparing",
+      indexed: "Ready",
+      failed: "Failed",
+      duplicate: "Duplicate",
+      too_large: "Too large"
+    },
     uploadSucceeded: (filename: string) =>
       `${filename} was uploaded successfully.`,
     uploadSubmittedForReview: (filename: string) =>
@@ -208,9 +217,25 @@ export const en = {
     statusFailed: "Preparation failed",
     statusFailedHint:
       "The file could not be prepared. Try again or contact an admin.",
+    failureHints: {
+      PDF_TEXT_GARBLED:
+        "PDF text extraction looked abnormal. This may be a scanned or specially encoded PDF.",
+      OCR_PROVIDER_UNAVAILABLE:
+        "OCR is not available. Check the local OCR dependency.",
+      OCR_NO_TEXT_FOUND:
+        "No useful text could be recognized from this file.",
+      TEXT_QUALITY_TOO_LOW:
+        "The file content quality is too low to use for Q&A right now.",
+      CHUNK_PERSIST_FAILED:
+        "Document chunks could not be saved. Try again.",
+      FEATURE_NOT_ENABLED:
+        "This capability is not enabled in the current Core build.",
+      UNSUPPORTED_FILE_TYPE:
+        "This Core build focuses on text knowledge bases and does not support this file type."
+    },
     statusUnsupported: "Unsupported format",
     statusUnsupportedHint:
-      "This document cannot be prepared from the current UI because only .txt, .md, .pdf, .docx, .mp3, .wav, .m4a, .mp4, .mov, .m4v, .png, .jpg, and .jpeg are supported.",
+      "This Core build focuses on text knowledge bases and supports only .txt, .md, and text-based .pdf files.",
     statusReadyToContinue: "Ready to continue",
     statusReadyToContinueHint:
       "The document was partially prepared and can continue to the final step.",
@@ -237,9 +262,9 @@ export const en = {
     asking: "Answering...",
     askFailed: "Unable to generate an answer right now. Try again or contact an admin.",
     answerTitle: "Answer",
-    citationsTitle: "Citations",
+    citationsTitle: "Sources",
     citationsDescription:
-      "Relevant document excerpts for the current answer stay visible here.",
+      "Supporting source excerpts for the current answer stay visible here.",
     citationsEmpty:
       "Citations will appear here after you ask a question.",
     noQueryableDocuments:

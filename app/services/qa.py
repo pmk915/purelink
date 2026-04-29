@@ -6,7 +6,11 @@ import re
 from typing import Protocol
 
 from app.core.config import Settings, get_settings
-from app.schemas.llm import HEURISTIC_PROVIDER, OPENAI_COMPATIBLE_PROVIDER
+from app.schemas.llm import (
+    DEEPSEEK_PROVIDER,
+    HEURISTIC_PROVIDER,
+    OPENAI_COMPATIBLE_PROVIDER,
+)
 from app.schemas.qa import CitationRead
 from app.services.document_embedding import RetrievedChunk, tokenize_text
 from app.services.llm import LLMProviderError, generate_openai_compatible_chat_completion
@@ -16,7 +20,7 @@ from app.services.source_locator import (
 )
 
 
-NO_ANSWER_FOUND_MESSAGE = "I could not find relevant information in the knowledge base."
+NO_RELIABLE_EVIDENCE_MESSAGE = "当前知识库中没有找到足够可靠的依据，无法确认该问题。"
 MAX_ASK_CONTEXT_CHUNKS = 6
 MAX_ASK_CONTEXT_TOTAL_CHARS = 4200
 MAX_ASK_CHUNKS_PER_DOCUMENT = 2
@@ -63,7 +67,7 @@ class HeuristicAnswerGenerator:
         prompt: PromptBundle,
     ) -> str:
         if not retrieved_chunks:
-            return NO_ANSWER_FOUND_MESSAGE
+            return NO_RELIABLE_EVIDENCE_MESSAGE
 
         snippets = [
             _compress_text(chunk.text)
@@ -80,11 +84,15 @@ class OpenAICompatibleAnswerGenerator:
         api_key: str,
         model: str,
         timeout_seconds: float = 30.0,
+        reasoning_effort: str | None = None,
+        thinking_enabled: bool = False,
     ) -> None:
         self.api_base = api_base
         self.api_key = api_key
         self.model = model
         self.timeout_seconds = timeout_seconds
+        self.reasoning_effort = reasoning_effort
+        self.thinking_enabled = thinking_enabled
 
     def generate(
         self,
@@ -101,6 +109,8 @@ class OpenAICompatibleAnswerGenerator:
                 system_prompt=prompt.system_prompt,
                 user_prompt=prompt.user_prompt,
                 timeout=self.timeout_seconds,
+                reasoning_effort=self.reasoning_effort,
+                thinking_enabled=self.thinking_enabled,
             )
         except LLMProviderError as exc:
             raise AnswerGenerationError(str(exc)) from exc
@@ -111,46 +121,63 @@ def answer_question(
     question: str,
     retrieved_chunks: list[RetrievedChunk],
     generator: AnswerGenerator | None = None,
+    settings: Settings | None = None,
 ) -> QuestionAnswerResult:
+    active_settings = settings or get_settings()
     context_chunks = select_context_chunks_for_answer(retrieved_chunks)
     prompt = build_prompt(question=question, retrieved_chunks=context_chunks)
-    if not context_chunks:
-        answer = NO_ANSWER_FOUND_MESSAGE
+    if not _has_reliable_retrieval_results(
+        retrieved_chunks,
+        min_score=active_settings.retrieval_min_score,
+    ) or not context_chunks:
+        answer = NO_RELIABLE_EVIDENCE_MESSAGE
+        citations: list[CitationRead] = []
     else:
-        answer_generator = generator or resolve_answer_generator()
+        answer_generator = generator or resolve_answer_generator(active_settings)
         answer = answer_generator.generate(
             question=question,
             retrieved_chunks=context_chunks,
             prompt=prompt,
         )
-    citations = [
-        CitationRead(
-            chunk_id=item.chunk_id,
-            document_id=item.document_id,
-            knowledge_base_id=item.knowledge_base_id,
-            scope=item.scope,
-            team_id=item.team_id,
-            document_name=item.document_name,
-            snippet=item.snippet,
-            text=item.text,
-            source_type=item.source_type,
-            char_start=item.char_start,
-            char_end=item.char_end,
-            page_number=item.page_number,
-            start_time=item.start_time,
-            end_time=item.end_time,
-            section_title=item.section_title,
-            source_locator=build_source_locator_for_chunk(item),
-            preview_target=build_preview_target_for_chunk(item),
-            heading_path=list(item.heading_path) if item.heading_path else None,
-        )
-        for item in organize_citations(context_chunks)
-    ]
+        citations = [
+            CitationRead(
+                chunk_id=item.chunk_id,
+                document_id=item.document_id,
+                knowledge_base_id=item.knowledge_base_id,
+                scope=item.scope,
+                team_id=item.team_id,
+                document_name=item.document_name,
+                snippet=item.snippet,
+                text=item.text,
+                source_type=item.source_type,
+                char_start=item.char_start,
+                char_end=item.char_end,
+                page_number=item.page_number,
+                start_time=item.start_time,
+                end_time=item.end_time,
+                section_title=item.section_title,
+                source_locator=build_source_locator_for_chunk(item),
+                preview_target=build_preview_target_for_chunk(item),
+                heading_path=list(item.heading_path) if item.heading_path else None,
+            )
+            for item in organize_citations(context_chunks)
+        ]
     return QuestionAnswerResult(
         answer=answer,
         citations=citations,
         prompt=prompt,
     )
+
+
+def _has_reliable_retrieval_results(
+    retrieved_chunks: list[RetrievedChunk],
+    *,
+    min_score: float,
+) -> bool:
+    if not retrieved_chunks:
+        return False
+    top_score = max(chunk.score for chunk in retrieved_chunks)
+    return top_score >= max(0.0, min_score)
 
 
 def select_context_chunks_for_answer(
@@ -244,6 +271,25 @@ def resolve_answer_generator(settings: Settings | None = None) -> AnswerGenerato
             api_key=active_settings.llm_api_key,
             model=active_settings.llm_model,
             timeout_seconds=active_settings.llm_timeout_seconds,
+        )
+
+    if active_settings.llm_provider == DEEPSEEK_PROVIDER:
+        if not active_settings.llm_api_base:
+            raise AnswerGenerationError(
+                "LLM_API_BASE_URL is required for deepseek provider."
+            )
+        if not active_settings.llm_api_key:
+            raise AnswerGenerationError("LLM_API_KEY is required for deepseek provider.")
+        if not active_settings.llm_model:
+            raise AnswerGenerationError("LLM_MODEL is required for deepseek provider.")
+
+        return OpenAICompatibleAnswerGenerator(
+            api_base=active_settings.llm_api_base,
+            api_key=active_settings.llm_api_key,
+            model=active_settings.llm_model,
+            timeout_seconds=active_settings.llm_timeout_seconds,
+            reasoning_effort=active_settings.llm_reasoning_effort,
+            thinking_enabled=active_settings.llm_thinking_enabled,
         )
 
     raise AnswerGenerationError(

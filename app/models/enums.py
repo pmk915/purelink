@@ -59,9 +59,11 @@ class ProcessingJobTrigger(StrEnum):
 
 class ProcessingJobStatus(StrEnum):
     QUEUED = "queued"
-    RUNNING = "running"
+    PROCESSING = "processing"
+    RETRYING = "retrying"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class MessageRole(StrEnum):

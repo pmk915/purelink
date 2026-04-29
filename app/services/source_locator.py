@@ -6,7 +6,7 @@ from app.schemas.source_locator import PreviewTargetRead, SourceLocatorRead
 
 
 TIMED_SOURCE_TYPES = {"audio", "video"}
-TEXT_SOURCE_TYPES = {"txt", "md", "docx", "text"}
+TEXT_SOURCE_TYPES = {"text", "markdown", "txt", "md", "docx"}
 
 
 def build_source_locator_for_chunk(chunk: Any) -> SourceLocatorRead | None:

@@ -128,9 +128,7 @@ export function AskWorkspace({
                   {messages.qa.answerTitle}
                 </p>
                 <p className="mt-3 whitespace-pre-wrap leading-7 text-foreground">
-                  {answerResult.citations.length === 0
-                    ? messages.qa.noReliableSources
-                    : answerResult.answer}
+                  {answerResult.answer}
                 </p>
               </div>
             ) : null}

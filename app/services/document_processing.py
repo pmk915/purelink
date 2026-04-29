@@ -25,25 +25,37 @@ from app.services.asr_provider import (
     DEFAULT_ASR_SAMPLE_RATE,
     resolve_asr_provider,
 )
-from app.services.chunk_metadata import build_chunk_metadata_payload
+from app.services.chunk_metadata import (
+    build_chunk_metadata_payload,
+    normalize_source_type,
+)
 from app.services.document import update_document_processing_status
 from app.services.ocr_provider import OCRProviderError, OCRRegion, resolve_ocr_provider
+from app.services.text_quality import (
+    TextQualityStatus,
+    detect_text_quality,
+    sanitize_text,
+)
 
 
 SUPPORTED_STANDARD_PROCESS_SUFFIXES = {
-    ".txt": "txt",
-    ".md": "md",
+    ".txt": "text",
+    ".md": "markdown",
     ".pdf": "pdf",
-    ".docx": "docx",
+}
+OCR_PROCESS_SUFFIXES = {
+    ".png": "image",
+    ".jpg": "image",
+    ".jpeg": "image",
+    ".webp": "image",
+}
+MEDIA_PROCESS_SUFFIXES = {
     ".mp3": "audio",
     ".wav": "audio",
     ".m4a": "audio",
     ".mp4": "video",
     ".mov": "video",
     ".m4v": "video",
-    ".png": "image",
-    ".jpg": "image",
-    ".jpeg": "image",
 }
 TIMED_TRANSCRIPT_SOURCE_TYPES = {"audio", "video"}
 TEXT_ENCODING_CANDIDATES = ("utf-8", "utf-8-sig", "gb18030")
@@ -72,13 +84,21 @@ WORDPROCESSINGML_NS = {
 }
 
 logger = logging.getLogger("purelink.documents")
-SUPPORTED_STANDARD_PROCESS_HINT = (
-    ".txt, .md, .pdf, .docx, .mp3, .wav, .m4a, .mp4, .mov, .m4v, .png, .jpg, and .jpeg"
-)
+SUPPORTED_STANDARD_PROCESS_HINT = ".txt, .md, and .pdf"
+ERROR_PDF_TEXT_GARBLED = "PDF_TEXT_GARBLED"
+ERROR_PDF_TEXT_EXTRACTION_FAILED = "PDF_TEXT_EXTRACTION_FAILED"
+ERROR_OCR_PROVIDER_UNAVAILABLE = "OCR_PROVIDER_UNAVAILABLE"
+ERROR_OCR_NO_TEXT_FOUND = "OCR_NO_TEXT_FOUND"
+ERROR_TEXT_QUALITY_TOO_LOW = "TEXT_QUALITY_TOO_LOW"
+ERROR_CHUNK_PERSIST_FAILED = "CHUNK_PERSIST_FAILED"
+ERROR_UNSUPPORTED_FILE_TYPE = "UNSUPPORTED_FILE_TYPE"
+ERROR_FEATURE_NOT_ENABLED = "FEATURE_NOT_ENABLED"
 
 
 class DocumentProcessingError(ValueError):
-    pass
+    def __init__(self, message: str, *, error_code: str | None = None) -> None:
+        super().__init__(message)
+        self.error_code = error_code
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +115,7 @@ class ExtractedTextResult:
     extracted_char_count: int
     segments: tuple[ExtractedTextSegment, ...]
     encoding: str | None = None
+    page_count: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +133,7 @@ class ProcessedDocumentResult:
     extractor: str
     source_type: str
     encoding: str | None = None
+    page_count: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,10 +172,11 @@ def process_document(
 ) -> ProcessedDocumentResult:
     source_path = upload_root / document.storage_path
     suffix = Path(document.original_filename).suffix.lower()
-    source_type = SUPPORTED_STANDARD_PROCESS_SUFFIXES.get(suffix)
+    source_type = resolve_source_type(suffix)
     if source_type is None:
         raise DocumentProcessingError(
-            f"Only {SUPPORTED_STANDARD_PROCESS_HINT} documents are supported by this processing flow."
+            f"Only {SUPPORTED_STANDARD_PROCESS_HINT} documents are supported by this processing flow.",
+            error_code=ERROR_UNSUPPORTED_FILE_TYPE,
         )
 
     extractor = resolve_text_extractor(suffix)
@@ -173,22 +196,39 @@ def process_document(
         source_path,
     )
 
+    current_step = "resolve_source"
+
+    def report(step_name: str) -> None:
+        nonlocal current_step
+        current_step = step_name
+        _report_progress(progress_callback, step_name)
+
     try:
-        _report_progress(progress_callback, "resolve_source")
-        _report_progress(progress_callback, "extract_text")
+        report("resolve_source")
+        report("extract_text")
         extracted = extractor(source_path=source_path)
-        _report_progress(progress_callback, "chunk_content")
+        logger.info(
+            "document text extracted document_id=%s knowledge_base_id=%s source_type=%s extractor=%s current_step=%s page_count=%s extracted_char_count=%s",
+            document.id,
+            document.knowledge_base_id,
+            extracted.source_type,
+            extracted.extractor,
+            current_step,
+            extracted.page_count,
+            extracted.extracted_char_count,
+        )
+        report("chunk_content")
         generated_chunks = chunk_extracted_text_result(
             extracted=extracted,
             document_id=document.id,
         )
-        _report_progress(progress_callback, "persist_chunks")
+        report("persist_chunks")
         replace_document_chunks(
             db,
             document=document,
             chunks=generated_chunks,
         )
-        _report_progress(progress_callback, "finalize_document")
+        report("finalize_document")
         update_document_processing_status(
             db,
             document=document,
@@ -199,9 +239,13 @@ def process_document(
     except DocumentProcessingError as exc:
         db.rollback()
         logger.warning(
-            "document process failed document_id=%s source_type=%s reason=%s",
+            "document process failed document_id=%s knowledge_base_id=%s source_type=%s current_step=%s error_code=%s error_type=%s reason=%s",
             document.id,
+            document.knowledge_base_id,
             source_type,
+            current_step,
+            exc.error_code,
+            type(exc).__name__,
             str(exc),
         )
         update_document_processing_status(
@@ -215,9 +259,19 @@ def process_document(
     except Exception as exc:  # pragma: no cover - defensive guard for unexpected runtime failures
         db.rollback()
         logger.exception(
-            "document process unexpected failure document_id=%s source_type=%s",
+            "document process unexpected failure document_id=%s knowledge_base_id=%s source_type=%s current_step=%s error_type=%s",
             document.id,
+            document.knowledge_base_id,
             source_type,
+            current_step,
+            type(exc).__name__,
+        )
+        error_code = (
+            ERROR_CHUNK_PERSIST_FAILED
+            if current_step == "persist_chunks"
+            else ERROR_PDF_TEXT_EXTRACTION_FAILED
+            if source_type == "pdf"
+            else ERROR_TEXT_QUALITY_TOO_LOW
         )
         error_message = "Document processing failed unexpectedly."
         update_document_processing_status(
@@ -227,13 +281,16 @@ def process_document(
             error_message=error_message,
             processed_at=None,
         )
-        raise DocumentProcessingError(error_message) from exc
+        raise DocumentProcessingError(error_message, error_code=error_code) from exc
 
     logger.info(
-        "document process completed document_id=%s source_type=%s extractor=%s chunk_count=%s extracted_char_count=%s",
+        "document process completed document_id=%s knowledge_base_id=%s source_type=%s extractor=%s current_step=%s page_count=%s chunk_count=%s extracted_char_count=%s",
         document.id,
+        document.knowledge_base_id,
         extracted.source_type,
         extracted.extractor,
+        current_step,
+        extracted.page_count,
         len(generated_chunks),
         extracted.extracted_char_count,
     )
@@ -243,6 +300,7 @@ def process_document(
         extractor=extracted.extractor,
         source_type=extracted.source_type,
         encoding=extracted.encoding,
+        page_count=extracted.page_count,
     )
 
 
@@ -264,35 +322,57 @@ def process_txt_document(
     )
 
 
+def resolve_source_type(suffix: str) -> str | None:
+    if suffix in SUPPORTED_STANDARD_PROCESS_SUFFIXES:
+        return SUPPORTED_STANDARD_PROCESS_SUFFIXES[suffix]
+    settings = get_settings()
+    if settings.enable_ocr and suffix in OCR_PROCESS_SUFFIXES:
+        return OCR_PROCESS_SUFFIXES[suffix]
+    if settings.enable_media and suffix in MEDIA_PROCESS_SUFFIXES:
+        return MEDIA_PROCESS_SUFFIXES[suffix]
+    return None
+
+
 def resolve_text_extractor(suffix: str) -> TextExtractor:
+    settings = get_settings()
     if suffix == ".txt":
         return extract_text_from_txt
     if suffix == ".md":
         return extract_text_from_md
     if suffix == ".pdf":
         return extract_text_from_pdf
-    if suffix == ".docx":
-        return extract_text_from_docx
+    if suffix in OCR_PROCESS_SUFFIXES:
+        if not settings.enable_ocr:
+            raise DocumentProcessingError(
+                "This PureLink Core deployment does not enable OCR processing.",
+                error_code=ERROR_FEATURE_NOT_ENABLED,
+            )
+        return extract_text_from_image
+    if suffix in MEDIA_PROCESS_SUFFIXES:
+        if not settings.enable_media:
+            raise DocumentProcessingError(
+                "This PureLink Core deployment does not enable audio or video processing.",
+                error_code=ERROR_FEATURE_NOT_ENABLED,
+            )
     if suffix in {".mp3", ".wav", ".m4a"}:
         return extract_text_from_audio
     if suffix in {".mp4", ".mov", ".m4v"}:
         return extract_text_from_video
-    if suffix in {".png", ".jpg", ".jpeg"}:
-        return extract_text_from_image
     raise DocumentProcessingError(
-        f"Only {SUPPORTED_STANDARD_PROCESS_HINT} documents are supported by this processing flow."
+        f"Only {SUPPORTED_STANDARD_PROCESS_HINT} documents are supported by this processing flow.",
+        error_code=ERROR_UNSUPPORTED_FILE_TYPE,
     )
 
 
 def extract_text_from_txt(*, source_path: Path) -> ExtractedTextResult:
     decoded_text, detected_encoding = read_text_file_with_fallback(source_path)
     return build_extracted_text_result(
-        source_type="txt",
-        extractor="plain_text",
+        source_type="text",
+        extractor="text",
         raw_segments=[
             ExtractedTextSegment(
                 text=decoded_text,
-                metadata={"source_type": "txt"},
+                metadata={"source_type": "text"},
             )
         ],
         encoding=detected_encoding,
@@ -311,7 +391,7 @@ def extract_text_from_md(*, source_path: Path) -> ExtractedTextResult:
             return
         paragraph_text = " ".join(paragraph_lines).strip()
         if paragraph_text:
-            metadata: dict[str, object] = {"source_type": "md"}
+            metadata: dict[str, object] = {"source_type": "markdown"}
             if current_heading:
                 metadata["section_title"] = current_heading
             raw_segments.append(
@@ -335,12 +415,12 @@ def extract_text_from_md(*, source_path: Path) -> ExtractedTextResult:
             if current_heading:
                 raw_segments.append(
                     ExtractedTextSegment(
-                        text=current_heading,
-                        metadata={
-                            "source_type": "md",
-                            "section_title": current_heading,
-                        },
-                    )
+                    text=current_heading,
+                    metadata={
+                        "source_type": "markdown",
+                        "section_title": current_heading,
+                    },
+                )
                 )
             continue
 
@@ -349,8 +429,8 @@ def extract_text_from_md(*, source_path: Path) -> ExtractedTextResult:
     flush_paragraph()
 
     return build_extracted_text_result(
-        source_type="md",
-        extractor="markdown_text",
+        source_type="markdown",
+        extractor="markdown",
         raw_segments=raw_segments,
         encoding=detected_encoding,
     )
@@ -359,38 +439,160 @@ def extract_text_from_md(*, source_path: Path) -> ExtractedTextResult:
 def extract_text_from_pdf(*, source_path: Path) -> ExtractedTextResult:
     raw_content = read_binary_file(source_path)
     if not raw_content.startswith(b"%PDF"):
-        raise DocumentProcessingError("Document is not a valid PDF file.")
+        raise DocumentProcessingError(
+            "Document is not a valid PDF file.",
+            error_code=ERROR_PDF_TEXT_EXTRACTION_FAILED,
+        )
 
     try:
-        page_texts = extract_pdf_page_texts(raw_content)
-    except DocumentProcessingError as exc:
-        if str(exc) != "PDF document does not contain extractable text.":
-            raise
-        return extract_text_from_scanned_pdf(source_path=source_path)
-
-    if should_fallback_to_pdf_ocr(page_texts):
-        return extract_text_from_scanned_pdf(source_path=source_path)
-
-    raw_segments: list[ExtractedTextSegment] = []
-    for page_number, text in enumerate(page_texts, start=1):
-        raw_segments.append(
-            ExtractedTextSegment(
-                text=text,
-                metadata={
-                    "source_type": "pdf",
-                    "page_number": page_number,
-                },
-            )
+        raw_segments, page_count, extractor_name = extract_pdf_page_segments_with_pymupdf(
+            source_path=source_path,
         )
+    except ModuleNotFoundError:
+        logger.warning(
+            "pymupdf is not installed; falling back to legacy pdf text extraction source_path=%s",
+            source_path,
+        )
+        try:
+            raw_segments, page_count, extractor_name = extract_pdf_page_segments_with_legacy_parser(
+                raw_content,
+            )
+        except DocumentProcessingError:
+            if not get_settings().enable_ocr:
+                raise DocumentProcessingError(
+                    "PDF text extraction failed and scanned PDF OCR is not enabled.",
+                    error_code=ERROR_PDF_TEXT_EXTRACTION_FAILED,
+                ) from None
+            return extract_text_from_scanned_pdf(
+                source_path=source_path,
+                direct_error_code=ERROR_PDF_TEXT_EXTRACTION_FAILED,
+            )
+    except DocumentProcessingError:
+        raise
+    except Exception as exc:  # pragma: no cover - library error surface
+        raise DocumentProcessingError(
+            "PDF text extraction failed.",
+            error_code=ERROR_PDF_TEXT_EXTRACTION_FAILED,
+        ) from exc
+
+    direct_text = "\n\n".join(sanitize_text(segment.text) for segment in raw_segments)
+    quality = detect_text_quality(direct_text)
+    if quality.status != TextQualityStatus.VALID:
+        logger.info(
+            "pdf direct text rejected source_path=%s extractor=%s page_count=%s quality=%s extracted_char_count=%s",
+            source_path,
+            extractor_name,
+            page_count,
+            quality.status.value,
+            quality.character_count,
+        )
+        if not get_settings().enable_ocr:
+            error_code = (
+                ERROR_PDF_TEXT_GARBLED
+                if quality.status in {
+                    TextQualityStatus.GARBLED,
+                    TextQualityStatus.BINARY_LIKE,
+                }
+                else ERROR_PDF_TEXT_EXTRACTION_FAILED
+            )
+            raise DocumentProcessingError(
+                "This PDF does not contain enough readable text for PureLink Core. Scanned PDF OCR is not enabled.",
+                error_code=error_code,
+            )
+        return extract_text_from_scanned_pdf(
+            source_path=source_path,
+            direct_error_code=(
+                ERROR_PDF_TEXT_GARBLED
+                if quality.status in {
+                    TextQualityStatus.GARBLED,
+                    TextQualityStatus.BINARY_LIKE,
+                }
+                else ERROR_PDF_TEXT_EXTRACTION_FAILED
+            ),
+        )
+
+    logger.info(
+        "pdf text extracted source_path=%s extractor=%s page_count=%s extracted_char_count=%s",
+        source_path,
+        extractor_name,
+        page_count,
+        quality.character_count,
+    )
 
     return build_extracted_text_result(
         source_type="pdf",
-        extractor="minimal_pdf_text",
+        extractor=extractor_name,
         raw_segments=raw_segments,
+        page_count=page_count,
     )
 
 
-def extract_text_from_scanned_pdf(*, source_path: Path) -> ExtractedTextResult:
+def extract_pdf_page_segments_with_pymupdf(
+    *,
+    source_path: Path,
+) -> tuple[list[ExtractedTextSegment], int, str]:
+    import fitz
+
+    try:
+        pdf_document = fitz.open(str(source_path))
+    except Exception as exc:  # pragma: no cover - library error surface
+        raise DocumentProcessingError(
+            "PDF text extraction failed.",
+            error_code=ERROR_PDF_TEXT_EXTRACTION_FAILED,
+        ) from exc
+
+    raw_segments: list[ExtractedTextSegment] = []
+    try:
+        page_count = pdf_document.page_count
+        if page_count <= 0:
+            raise DocumentProcessingError(
+                "PDF document does not contain pages.",
+                error_code=ERROR_PDF_TEXT_EXTRACTION_FAILED,
+            )
+        for page_index in range(page_count):
+            page = pdf_document.load_page(page_index)
+            page_number = page_index + 1
+            raw_segments.append(
+                ExtractedTextSegment(
+                    text=page.get_text("text") or "",
+                    metadata={
+                        "source_type": "pdf",
+                        "page_number": page_number,
+                        "source_locator": f"page:{page_number}",
+                        "extractor": "pymupdf",
+                    },
+                )
+            )
+    finally:
+        pdf_document.close()
+
+    return raw_segments, page_count, "pymupdf"
+
+
+def extract_pdf_page_segments_with_legacy_parser(
+    raw_content: bytes,
+) -> tuple[list[ExtractedTextSegment], int, str]:
+    page_texts = extract_pdf_page_texts(raw_content)
+    raw_segments = [
+        ExtractedTextSegment(
+            text=text,
+            metadata={
+                "source_type": "pdf",
+                "page_number": page_number,
+                "source_locator": f"page:{page_number}",
+                "extractor": "legacy_pdf_text",
+            },
+        )
+        for page_number, text in enumerate(page_texts, start=1)
+    ]
+    return raw_segments, len(page_texts), "legacy_pdf_text"
+
+
+def extract_text_from_scanned_pdf(
+    *,
+    source_path: Path,
+    direct_error_code: str | None = None,
+) -> ExtractedTextResult:
     with TemporaryDirectory(prefix="purelink-pdf-ocr-") as tmp_dir:
         try:
             rendered_pages = render_pdf_pages_to_images(
@@ -403,30 +605,60 @@ def extract_text_from_scanned_pdf(*, source_path: Path) -> ExtractedTextResult:
             raise DocumentProcessingError("PDF document could not be rendered for OCR.") from exc
 
         if not rendered_pages:
-            raise DocumentProcessingError("PDF document does not contain renderable pages for OCR.")
+            raise DocumentProcessingError(
+                "PDF document does not contain renderable pages for OCR.",
+                error_code=direct_error_code or ERROR_PDF_TEXT_EXTRACTION_FAILED,
+            )
 
         try:
             ocr_provider = resolve_ocr_provider()
         except OCRProviderError as exc:
-            raise DocumentProcessingError(str(exc)) from exc
+            raise DocumentProcessingError(
+                "OCR provider is not available for PDF fallback.",
+                error_code=ERROR_OCR_PROVIDER_UNAVAILABLE,
+            ) from exc
 
         raw_segments: list[ExtractedTextSegment] = []
+        ocr_provider_name: str | None = None
         for rendered_page in rendered_pages:
             try:
                 ocr_result = ocr_provider.extract_text(rendered_page.image_path)
             except OCRProviderError as exc:
-                raise DocumentProcessingError(str(exc)) from exc
+                raise DocumentProcessingError(
+                    str(exc),
+                    error_code=ERROR_OCR_PROVIDER_UNAVAILABLE,
+                ) from exc
+            ocr_provider_name = ocr_result.provider_name
             raw_segments.extend(
                 build_pdf_ocr_segments(
                     page_number=rendered_page.page_number,
                     ocr_result=ocr_result,
                 )
             )
-    return build_extracted_text_result(
-        source_type="pdf",
-        extractor=f"ocr_pdf:{ocr_provider.provider_name}",
-        raw_segments=raw_segments,
+    try:
+        result = build_extracted_text_result(
+            source_type="pdf",
+            extractor=f"ocr_pdf:{ocr_provider_name or 'unknown'}",
+            raw_segments=raw_segments,
+            page_count=len(rendered_pages),
+        )
+    except DocumentProcessingError as exc:
+        if exc.error_code == ERROR_TEXT_QUALITY_TOO_LOW:
+            raise DocumentProcessingError(
+                "OCR did not find valid text in this PDF.",
+                error_code=ERROR_OCR_NO_TEXT_FOUND,
+            ) from exc
+        raise
+
+    logger.info(
+        "pdf ocr fallback completed source_path=%s extractor=%s page_count=%s extracted_char_count=%s direct_error_code=%s",
+        source_path,
+        result.extractor,
+        result.page_count,
+        result.extracted_char_count,
+        direct_error_code,
     )
+    return result
 
 
 def extract_text_from_docx(*, source_path: Path) -> ExtractedTextResult:
@@ -495,7 +727,10 @@ def extract_text_from_image(*, source_path: Path) -> ExtractedTextResult:
     try:
         ocr_result = resolve_ocr_provider().extract_text(source_path)
     except OCRProviderError as exc:
-        raise DocumentProcessingError(str(exc)) from exc
+        raise DocumentProcessingError(
+            str(exc),
+            error_code=ERROR_OCR_PROVIDER_UNAVAILABLE,
+        ) from exc
 
     raw_segments = build_image_ocr_segments(ocr_result.regions, ocr_result=ocr_result)
     if not raw_segments:
@@ -601,7 +836,12 @@ def read_text_file_with_fallback(source_path: Path) -> tuple[str, str]:
         raise DocumentProcessingError("Document could not be decoded as supported text.")
 
     if "\x00" in decoded_text:
-        raise DocumentProcessingError("Document contains unsupported binary content.")
+        sanitized_quality = detect_text_quality(sanitize_text(decoded_text))
+        if sanitized_quality.status != TextQualityStatus.VALID:
+            raise DocumentProcessingError(
+                "Document contains unsupported binary content.",
+                error_code=ERROR_TEXT_QUALITY_TOO_LOW,
+            )
     return decoded_text, detected_encoding
 
 
@@ -625,10 +865,19 @@ def build_extracted_text_result(
     extractor: str,
     raw_segments: list[ExtractedTextSegment],
     encoding: str | None = None,
+    page_count: int | None = None,
 ) -> ExtractedTextResult:
     normalized_segments: list[ExtractedTextSegment] = []
     for segment in raw_segments:
-        normalized_text = normalize_extracted_text(segment.text)
+        sanitized_text = sanitize_text(segment.text)
+        quality = detect_text_quality(sanitized_text)
+        if quality.status in {
+            TextQualityStatus.EMPTY,
+            TextQualityStatus.GARBLED,
+            TextQualityStatus.BINARY_LIKE,
+        }:
+            continue
+        normalized_text = normalize_extracted_text(quality.sanitized_text)
         if not normalized_text:
             continue
         metadata = {
@@ -645,9 +894,18 @@ def build_extracted_text_result(
         )
 
     if not normalized_segments:
-        raise DocumentProcessingError("Document does not contain valid text content.")
+        raise DocumentProcessingError(
+            "Document does not contain valid text content.",
+            error_code=ERROR_TEXT_QUALITY_TOO_LOW,
+        )
 
     combined_text = "\n\n".join(segment.text for segment in normalized_segments)
+    combined_quality = detect_text_quality(combined_text)
+    if combined_quality.status != TextQualityStatus.VALID:
+        raise DocumentProcessingError(
+            "Document does not contain valid text content.",
+            error_code=ERROR_TEXT_QUALITY_TOO_LOW,
+        )
     return ExtractedTextResult(
         text=combined_text,
         source_type=source_type,
@@ -655,6 +913,7 @@ def build_extracted_text_result(
         extracted_char_count=len(combined_text),
         segments=tuple(normalized_segments),
         encoding=encoding,
+        page_count=page_count,
     )
 
 
@@ -670,7 +929,7 @@ def normalize_markdown_inline_text(text: str) -> str:
 
 
 def normalize_extracted_text(text: str) -> str:
-    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    normalized = sanitize_text(text)
     lines = normalized.split("\n")
     compact_lines: list[str] = []
     previous_blank = False
@@ -744,6 +1003,7 @@ def build_pdf_ocr_segments(
                     "source_type": "pdf",
                     "page_number": page_number,
                     "source_locator": locator,
+                    "extractor": f"ocr_pdf:{ocr_result.provider_name}",
                     "ocr_provider": ocr_result.provider_name,
                     "ocr_provider_version": ocr_result.provider_version,
                     "ocr_language": ocr_result.language,
@@ -775,6 +1035,7 @@ def build_pdf_ocr_segments(
                     "source_type": "pdf",
                     "page_number": page_number,
                     "source_locator": locator,
+                    "extractor": f"ocr_pdf:{ocr_result.provider_name}",
                     "ocr_provider": ocr_result.provider_name,
                     "ocr_provider_version": ocr_result.provider_version,
                     "ocr_language": ocr_result.language,
@@ -793,6 +1054,7 @@ def build_pdf_ocr_segments(
                 "source_type": "pdf",
                 "page_number": page_number,
                 "source_locator": locator,
+                "extractor": f"ocr_pdf:{ocr_result.provider_name}",
                 "ocr_provider": ocr_result.provider_name,
                 "ocr_provider_version": ocr_result.provider_version,
                 "ocr_language": ocr_result.language,
@@ -949,12 +1211,12 @@ def chunk_text_content(
     direct_chunk_threshold: int = DIRECT_CHUNK_THRESHOLD,
 ) -> list[GeneratedChunkPayload]:
     extracted = build_extracted_text_result(
-        source_type="txt",
-        extractor="plain_text",
+        source_type="text",
+        extractor="text",
         raw_segments=[
             ExtractedTextSegment(
                 text=text,
-                metadata={"source_type": "txt"},
+                metadata={"source_type": "text"},
             )
         ],
     )
@@ -1063,13 +1325,64 @@ def build_generated_chunk(
 ) -> GeneratedChunkPayload:
     metadata_json = None
     if metadata:
-        metadata_json = json.dumps(metadata, ensure_ascii=False)
+        metadata_json = json.dumps(
+            _normalize_chunk_metadata_for_storage(
+                metadata,
+                chunk_index=chunk_index,
+            ),
+            ensure_ascii=False,
+        )
     return GeneratedChunkPayload(
         chunk_key=f"{document_id}:{chunk_index}",
         chunk_index=chunk_index,
         chunk_text=chunk_text,
         metadata_json=metadata_json,
     )
+
+
+def _normalize_chunk_metadata_for_storage(
+    metadata: dict[str, object],
+    *,
+    chunk_index: int,
+) -> dict[str, object]:
+    payload = dict(metadata)
+    raw_source_type = payload.get("source_type")
+    source_type = normalize_source_type(raw_source_type if isinstance(raw_source_type, str) else None)
+    if source_type:
+        payload["source_type"] = source_type
+
+    if source_type == "text":
+        payload["extractor"] = str(payload.get("extractor") or "text")
+        payload["source_locator"] = f"text:chunk:{chunk_index}"
+        return payload
+
+    if source_type == "markdown":
+        payload["extractor"] = str(payload.get("extractor") or "markdown")
+        heading = _resolve_chunk_heading(payload)
+        payload["source_locator"] = (
+            f"heading:{heading}"
+            if heading
+            else f"markdown:chunk:{chunk_index}"
+        )
+        return payload
+
+    if source_type == "pdf" and isinstance(payload.get("page_number"), int):
+        payload["source_locator"] = f"page:{payload['page_number']}"
+
+    return payload
+
+
+def _resolve_chunk_heading(metadata: dict[str, object]) -> str | None:
+    heading_path = metadata.get("heading_path")
+    if isinstance(heading_path, list):
+        for item in heading_path:
+            if isinstance(item, str) and item.strip():
+                return item.strip()
+
+    section_title = metadata.get("section_title")
+    if isinstance(section_title, str) and section_title.strip():
+        return section_title.strip()
+    return None
 
 
 def should_fallback_to_pdf_ocr(page_texts: list[str]) -> bool:
@@ -1340,6 +1653,14 @@ def build_chunk_metadata(
     }
     ocr_language = ocr_languages.pop() if len(ocr_languages) == 1 else None
 
+    extractors = {
+        str(segment.metadata["extractor"])
+        for segment in prepared_segments
+        if isinstance(segment.metadata.get("extractor"), str)
+        and str(segment.metadata["extractor"]).strip()
+    }
+    extractor = extractors.pop() if len(extractors) == 1 else None
+
     asr_providers = {
         str(segment.metadata["asr_provider"])
         for segment in prepared_segments
@@ -1393,6 +1714,7 @@ def build_chunk_metadata(
         ocr_provider=ocr_provider,
         ocr_provider_version=ocr_provider_version,
         ocr_language=ocr_language,
+        extractor=extractor,
         asr_provider=asr_provider,
         asr_provider_version=asr_provider_version,
         region_count=region_count,
@@ -1406,6 +1728,7 @@ def replace_document_chunks(
     document: Document,
     chunks: list[GeneratedChunkPayload],
 ) -> None:
+    validate_generated_chunks(chunks)
     db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == document.id))
     for item in chunks:
         db.add(
@@ -1417,6 +1740,22 @@ def replace_document_chunks(
                 metadata_json=item.metadata_json,
             )
         )
+
+
+def validate_generated_chunks(chunks: list[GeneratedChunkPayload]) -> None:
+    if not chunks:
+        raise DocumentProcessingError(
+            "Document did not produce any valid chunks.",
+            error_code=ERROR_TEXT_QUALITY_TOO_LOW,
+        )
+
+    for item in chunks:
+        quality = detect_text_quality(item.chunk_text)
+        if "\x00" in item.chunk_text or quality.status != TextQualityStatus.VALID:
+            raise DocumentProcessingError(
+                "Chunk text quality is too low to save.",
+                error_code=ERROR_TEXT_QUALITY_TOO_LOW,
+            )
 
 
 def extract_pdf_page_texts(raw_content: bytes) -> list[str]:

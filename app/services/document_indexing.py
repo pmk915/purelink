@@ -31,7 +31,9 @@ from app.services.processing_job import (
 
 
 class DocumentIndexingError(ValueError):
-    pass
+    def __init__(self, message: str, *, error_code: str | None = None) -> None:
+        super().__init__(message)
+        self.error_code = error_code
 
 
 def build_document_index(
@@ -76,7 +78,7 @@ def build_document_index(
                 team_id=team_id,
             )
     except DocumentEmbeddingError as exc:
-        raise DocumentIndexingError(str(exc)) from exc
+        raise DocumentIndexingError(str(exc), error_code=getattr(exc, "error_code", None)) from exc
 
     _report(progress_callback, INDEXING_STEP_WRITE_INDEX)
     _report(progress_callback, INDEXING_STEP_FINALIZE_INDEX)

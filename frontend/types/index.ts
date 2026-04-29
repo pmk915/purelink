@@ -17,12 +17,24 @@ export type DocumentProcessingStatus =
 export type DocumentTaskType = "parse" | "chunk" | "embed" | "index";
 export type DocumentTaskStatus = "pending" | "processing" | "succeeded" | "failed";
 export type ProcessingJobType = "document_process" | "document_index";
-export type ProcessingJobStatus = "queued" | "running" | "succeeded" | "failed";
+export type ProcessingJobStatus =
+  | "queued"
+  | "processing"
+  | "retrying"
+  | "succeeded"
+  | "failed"
+  | "cancelled";
 export type ProcessingJobTrigger = "process" | "retry" | "reprocess" | "index";
 export type MessageRole = "system" | "user" | "assistant";
 
 export interface ApiErrorPayload {
-  detail?: string;
+  detail?:
+    | string
+    | {
+        error_code?: string;
+        message?: string;
+        document_id?: string;
+      };
 }
 
 export interface User {
@@ -101,6 +113,7 @@ export interface Document {
   original_filename: string;
   file_type: string;
   file_size: number;
+  sha256: string | null;
   storage_path: string;
   review_status: DocumentReviewStatus;
   processing_status: DocumentProcessingStatus;
@@ -113,6 +126,7 @@ export interface Document {
   latest_processing_job_status: ProcessingJobStatus | null;
   latest_processing_job_type: ProcessingJobType | null;
   latest_processing_job_step: string | null;
+  latest_processing_job_error_code: string | null;
   latest_processing_job_trigger: ProcessingJobTrigger | null;
   latest_processing_job_attempt_number: number | null;
   created_at: string;

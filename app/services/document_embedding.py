@@ -38,7 +38,9 @@ logger = logging.getLogger("purelink.documents")
 
 
 class DocumentEmbeddingError(ValueError):
-    pass
+    def __init__(self, message: str, *, error_code: str | None = None) -> None:
+        super().__init__(message)
+        self.error_code = error_code
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +53,7 @@ class EmbeddedDocumentResult:
     embedding_provider: str
     embedding_model: str
     embedding_version: str
+    embedding_normalize: bool
     indexed_at: datetime
 
 
@@ -92,6 +95,55 @@ def resolve_vector_store_root(vector_store_dir: str | Path, *, base_dir: Path) -
     if not vector_root.is_absolute():
         vector_root = base_dir / vector_root
     return vector_root
+
+
+def delete_knowledge_base_index_artifact(
+    *,
+    vector_root: Path,
+    scope: KnowledgeBaseScope,
+    knowledge_base_id: int,
+    team_id: int | None = None,
+) -> bool:
+    index_relative_path = build_index_relative_path(
+        scope=scope,
+        knowledge_base_id=knowledge_base_id,
+        team_id=team_id,
+    )
+    index_source = vector_root / index_relative_path
+    if not index_source.exists():
+        return False
+    index_source.unlink()
+    return True
+
+
+def read_knowledge_base_index_metadata(
+    *,
+    vector_root: Path,
+    scope: KnowledgeBaseScope,
+    knowledge_base_id: int,
+    team_id: int | None = None,
+) -> dict[str, object] | None:
+    index_relative_path = build_index_relative_path(
+        scope=scope,
+        knowledge_base_id=knowledge_base_id,
+        team_id=team_id,
+    )
+    index_source = vector_root / index_relative_path
+    if not index_source.exists():
+        return None
+
+    payload = _load_index_payload(index_source)
+    return {
+        "embedding_scheme": payload.get("embedding_scheme"),
+        "embedding_provider": payload.get("embedding_provider"),
+        "embedding_model": payload.get("embedding_model"),
+        "embedding_version": payload.get("embedding_version"),
+        "embedding_dimension": payload.get("embedding_dimension"),
+        "embedding_normalize": payload.get("embedding_normalize"),
+        "created_at": payload.get("created_at"),
+        "indexed_at": payload.get("indexed_at"),
+        "index_artifact_path": payload.get("index_artifact_path"),
+    }
 
 
 def embed_document_chunks(
@@ -245,11 +297,15 @@ def search_index(
     dimension = int(payload.get("embedding_dimension", EMBEDDING_DIMENSION))
     scheme = _coerce_optional_str(payload.get("embedding_scheme")) or EMBEDDING_SCHEME
     provider = _resolve_provider(scheme)
-    _validate_index_provider_compatibility(payload, provider=provider)
     query_vector = build_query_embedding(
         query,
         dimension=dimension,
         provider=provider,
+    )
+    _validate_index_provider_compatibility(
+        payload,
+        provider=provider,
+        query_dimension=len(query_vector),
     )
 
     documents = payload.get("documents", [])
@@ -337,7 +393,7 @@ def build_text_embedding(
     try:
         return active_provider.embed_text(text, dimension=dimension)
     except EmbeddingProviderError as exc:
-        raise DocumentEmbeddingError(str(exc)) from exc
+        raise DocumentEmbeddingError(str(exc), error_code=getattr(exc, "error_code", None)) from exc
 
 
 def build_query_embedding(
@@ -350,13 +406,17 @@ def build_query_embedding(
     try:
         return active_provider.embed_query(text, dimension=dimension)
     except EmbeddingProviderError as exc:
-        raise DocumentEmbeddingError(str(exc)) from exc
+        raise DocumentEmbeddingError(str(exc), error_code=getattr(exc, "error_code", None)) from exc
 
 
 def cosine_similarity(left: list[float], right: list[float]) -> float:
     if len(left) != len(right):
         raise ValueError("Vector dimensions must match.")
-    return sum(lhs * rhs for lhs, rhs in zip(left, right, strict=True))
+    left_norm = sum(value * value for value in left) ** 0.5
+    right_norm = sum(value * value for value in right) ** 0.5
+    if left_norm == 0 or right_norm == 0:
+        return 0.0
+    return sum(lhs * rhs for lhs, rhs in zip(left, right, strict=True)) / (left_norm * right_norm)
 
 
 def tokenize_text(text: str) -> list[str]:
@@ -400,7 +460,7 @@ def _write_document_chunks_to_index(
     try:
         vectors = active_provider.embed_texts(texts, dimension=active_dimension)
     except EmbeddingProviderError as exc:
-        raise DocumentEmbeddingError(str(exc)) from exc
+        raise DocumentEmbeddingError(str(exc), error_code=getattr(exc, "error_code", None)) from exc
     if len(vectors) != len(chunk_inputs):
         raise DocumentEmbeddingError("Embedding provider returned an invalid number of vectors.")
     embedding_dimension = len(vectors[0]) if vectors else active_dimension or EMBEDDING_DIMENSION
@@ -436,11 +496,24 @@ def _write_document_chunks_to_index(
 
     payload = _load_index_payload(destination)
     indexed_at = datetime.now(UTC)
+    mismatch_reason = _describe_single_document_reindex_mismatch(
+        payload,
+        document_id=document.id,
+        provider=active_provider,
+        embedding_dimension=embedding_dimension,
+    )
+    if mismatch_reason is not None:
+        raise DocumentEmbeddingError(mismatch_reason)
+
+    existing_document_entry = _find_index_document_entry(payload, document_id=document.id)
+    created_at = _coerce_optional_str(payload.get("created_at")) or indexed_at.isoformat()
     payload["embedding_scheme"] = active_provider.scheme
     payload["embedding_provider"] = active_provider.provider_name
     payload["embedding_model"] = active_provider.model
     payload["embedding_version"] = active_provider.version
     payload["embedding_dimension"] = embedding_dimension
+    payload["embedding_normalize"] = bool(getattr(active_provider, "normalize", True))
+    payload["created_at"] = created_at
     payload["index_scheme"] = INDEX_SCHEME
     payload["indexed_at"] = indexed_at.isoformat()
     payload["index_artifact_path"] = index_relative_path.as_posix()
@@ -464,6 +537,11 @@ def _write_document_chunks_to_index(
             "embedding_model": active_provider.model,
             "embedding_version": active_provider.version,
             "embedding_dimension": embedding_dimension,
+            "embedding_normalize": bool(getattr(active_provider, "normalize", True)),
+            "created_at": _coerce_optional_str(
+                existing_document_entry.get("created_at") if existing_document_entry else None
+            )
+            or indexed_at.isoformat(),
             "indexed_at": indexed_at.isoformat(),
             "index_artifact_path": index_relative_path.as_posix(),
             "chunks": entries,
@@ -489,6 +567,7 @@ def _write_document_chunks_to_index(
         embedding_provider=active_provider.provider_name,
         embedding_model=active_provider.model,
         embedding_version=active_provider.version,
+        embedding_normalize=bool(getattr(active_provider, "normalize", True)),
         indexed_at=indexed_at,
     )
 
@@ -531,6 +610,26 @@ def _coerce_optional_str(value: object) -> str | None:
     return normalized or None
 
 
+def _coerce_optional_bool(value: object) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    return None
+
+
+def _find_index_document_entry(
+    payload: dict[str, object],
+    *,
+    document_id: int,
+) -> dict[str, object] | None:
+    documents = payload.get("documents", [])
+    if not isinstance(documents, list):
+        return None
+    for item in documents:
+        if isinstance(item, dict) and item.get("document_id") == document_id:
+            return item
+    return None
+
+
 def _resolve_provider(scheme: str | None) -> EmbeddingProvider:
     settings = get_settings()
     try:
@@ -541,26 +640,127 @@ def _resolve_provider(scheme: str | None) -> EmbeddingProvider:
             api_base=settings.embedding_api_base,
             api_key=settings.embedding_api_key,
             model=settings.embedding_model,
+            device=settings.embedding_device,
+            normalize=settings.embedding_normalize,
+            cache_dir=settings.embedding_model_cache_dir,
             timeout_seconds=settings.embedding_timeout_seconds,
             batch_size=settings.embedding_batch_size,
             dimension=settings.embedding_dimension,
         )
     except EmbeddingProviderError as exc:
-        raise DocumentEmbeddingError(str(exc)) from exc
+        raise DocumentEmbeddingError(str(exc), error_code=getattr(exc, "error_code", None)) from exc
 
 
 def _validate_index_provider_compatibility(
     payload: dict[str, object],
     *,
     provider: EmbeddingProvider,
+    query_dimension: int | None = None,
 ) -> None:
+    mismatch_reason = describe_index_metadata_mismatch(
+        payload,
+        provider=provider,
+        query_dimension=query_dimension,
+    )
+    if mismatch_reason is not None:
+        raise DocumentEmbeddingError(mismatch_reason)
+
+
+def describe_index_metadata_mismatch(
+    payload: dict[str, object],
+    *,
+    provider: EmbeddingProvider,
+    query_dimension: int | None = None,
+) -> str | None:
+    mixed_fields = _find_mixed_document_metadata_fields(payload)
+    if mixed_fields:
+        return (
+            "Knowledge base index contains mixed embedding metadata "
+            f"({', '.join(mixed_fields)}). Reindex the knowledge base."
+        )
+
+    mismatched_fields: list[str] = []
     artifact_provider = _coerce_optional_str(payload.get("embedding_provider"))
     if artifact_provider and artifact_provider != provider.provider_name:
-        raise DocumentEmbeddingError("Vector index embedding provider does not match current provider.")
+        mismatched_fields.append("embedding_provider")
 
     artifact_model = _coerce_optional_str(payload.get("embedding_model"))
     if artifact_model and provider.model and artifact_model != provider.model:
-        raise DocumentEmbeddingError("Vector index embedding model does not match current provider model.")
+        mismatched_fields.append("embedding_model")
+
+    artifact_dimension = _coerce_optional_int(payload.get("embedding_dimension"))
+    if artifact_dimension is not None and query_dimension is not None and artifact_dimension != query_dimension:
+        mismatched_fields.append("embedding_dimension")
+
+    artifact_normalize = _coerce_optional_bool(payload.get("embedding_normalize"))
+    provider_normalize = bool(getattr(provider, "normalize", True))
+    if artifact_normalize is not None and artifact_normalize != provider_normalize:
+        mismatched_fields.append("embedding_normalize")
+
+    if not mismatched_fields:
+        return None
+
+    return (
+        "Embedding configuration changed for this index "
+        f"({', '.join(mismatched_fields)}). Reindex is required."
+    )
+
+
+def _describe_single_document_reindex_mismatch(
+    payload: dict[str, object],
+    *,
+    document_id: int,
+    provider: EmbeddingProvider,
+    embedding_dimension: int,
+) -> str | None:
+    documents = payload.get("documents", [])
+    if not isinstance(documents, list) or not documents:
+        return None
+
+    has_other_documents = any(
+        isinstance(item, dict) and item.get("document_id") != document_id
+        for item in documents
+    )
+    if not has_other_documents:
+        return None
+
+    mismatch_reason = describe_index_metadata_mismatch(
+        payload,
+        provider=provider,
+        query_dimension=embedding_dimension,
+    )
+    if mismatch_reason is None:
+        return None
+
+    return (
+        "Knowledge base index uses different embedding metadata. "
+        "Reindex the knowledge base instead of a single document."
+    )
+
+
+def _find_mixed_document_metadata_fields(payload: dict[str, object]) -> list[str]:
+    documents = payload.get("documents", [])
+    if not isinstance(documents, list):
+        return []
+
+    top_level_metadata = {
+        "embedding_provider": _coerce_optional_str(payload.get("embedding_provider")),
+        "embedding_model": _coerce_optional_str(payload.get("embedding_model")),
+        "embedding_dimension": _coerce_optional_int(payload.get("embedding_dimension")),
+        "embedding_normalize": _coerce_optional_bool(payload.get("embedding_normalize")),
+    }
+    mismatched_fields: set[str] = set()
+
+    for item in documents:
+        if not isinstance(item, dict):
+            continue
+        for field_name, top_level_value in top_level_metadata.items():
+            if top_level_value is None:
+                continue
+            if item.get(field_name) != top_level_value:
+                mismatched_fields.add(field_name)
+
+    return sorted(mismatched_fields)
 
 
 def _resolve_document_name(

@@ -149,9 +149,9 @@ export const zh: Messages = {
       "当前用户可能没有权限访问这个工作区。",
     uploadTitle: "上传文档",
     uploadDescriptionPersonal:
-      "当前支持 .txt、.md、.pdf、.docx、.mp3、.wav、.m4a、.mp4、.mov、.m4v、.png、.jpg 和 .jpeg。上传后 PureLink 可以将文档准备为可搜索、可问答的内容。",
+      "当前 Core 版本支持 .txt、.md 和普通文本型 .pdf。上传后 PureLink 会自动准备为可搜索、可问答的内容。",
     uploadDescriptionTeam:
-      "当前支持 .txt、.md、.pdf、.docx、.mp3、.wav、.m4a、.mp4、.mov、.m4v、.png、.jpg 和 .jpeg。管理员上传后自动准备，成员上传后先进入审核。",
+      "当前 Core 版本支持 .txt、.md 和普通文本型 .pdf。管理员上传后自动准备，成员上传后先进入审核。",
     documentsTitle: "文档",
     documentsDescription: "查看每个文档的状态，PureLink 会自动推进上传、审核和准备。",
     noDocuments: "还没有文档。",
@@ -162,12 +162,21 @@ export const zh: Messages = {
       "这个面板会跟进最近一次从工作区触发的后台活动。"
   },
   documents: {
-    chooseFileError: "请先选择一个 .txt、.md、.pdf、.docx、.mp3、.wav、.m4a、.mp4、.mov、.m4v、.png、.jpg 或 .jpeg 文件。",
-    unsupportedFileType: "当前产品界面只支持上传 .txt、.md、.pdf、.docx、.mp3、.wav、.m4a、.mp4、.mov、.m4v、.png、.jpg 和 .jpeg 文件。",
-    supportedFormats: "支持格式：.txt、.md、.pdf、.docx、.mp3、.wav、.m4a、.mp4、.mov、.m4v、.png、.jpg、.jpeg",
+    chooseFileError: "请先选择一个 .txt、.md 或 .pdf 文件。",
+    unsupportedFileType: "当前版本专注文本类知识库，暂只支持 .txt、.md 和 .pdf 文件。",
+    supportedFormats: "支持格式：.txt、.md、.pdf",
     uploadSubmit: "上传文档",
     uploading: "上传中...",
     uploadFailed: "上传失败。",
+    uploadStatuses: {
+      uploading: "上传中",
+      queued: "已提交",
+      processing: "准备中",
+      indexed: "可问答",
+      failed: "失败",
+      duplicate: "已存在",
+      too_large: "文件过大"
+    },
     uploadSucceeded: (filename: string) => `${filename} 上传成功。`,
     uploadSubmittedForReview: (filename: string) =>
       `${filename} 已上传，并已提交审核。`,
@@ -202,9 +211,18 @@ export const zh: Messages = {
     statusFailed: "处理失败",
     statusFailedHint:
       "文件暂时无法准备，请重试或联系管理员。",
+    failureHints: {
+      PDF_TEXT_GARBLED: "PDF 文本提取异常，可能是扫描件或特殊编码 PDF。",
+      OCR_PROVIDER_UNAVAILABLE: "OCR 服务不可用，请检查本地 OCR 依赖。",
+      OCR_NO_TEXT_FOUND: "未能从该文件中识别出有效文字。",
+      TEXT_QUALITY_TOO_LOW: "文件内容质量过低，暂时无法用于问答。",
+      CHUNK_PERSIST_FAILED: "文档分块保存失败，请重试。",
+      FEATURE_NOT_ENABLED: "当前 Core 版本未启用该处理能力。",
+      UNSUPPORTED_FILE_TYPE: "当前版本专注文本类知识库，暂不支持该文件类型。"
+    },
     statusUnsupported: "暂不支持",
     statusUnsupportedHint:
-      "当前界面只支持将 .txt、.md、.pdf、.docx、.mp3、.wav、.m4a、.mp4、.mov、.m4v、.png、.jpg 和 .jpeg 文档继续处理为可搜索内容。",
+      "当前版本专注文本类知识库，只支持 .txt、.md 和普通文本型 .pdf。",
     statusReadyToContinue: "待继续处理",
     statusReadyToContinueHint:
       "该文档已完成部分准备，可以继续进入最后一步。",
@@ -231,9 +249,9 @@ export const zh: Messages = {
     asking: "回答中...",
     askFailed: "暂时无法生成回答，请稍后重试或联系管理员。",
     answerTitle: "回答",
-    citationsTitle: "引用片段",
+    citationsTitle: "参考来源",
     citationsDescription:
-      "当前回答对应的相关文档片段会显示在这里。",
+      "当前回答对应的来源片段会显示在这里。",
     citationsEmpty: "提问后，相关引用会显示在这里。",
     noQueryableDocuments: "当前知识库还没有可问答的文档，请先上传文件。",
     documentsWaitingReview:

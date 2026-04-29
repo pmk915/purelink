@@ -123,9 +123,9 @@ for key in ("llm", "embedding", "ocr", "asr", "reranker"):
     configured = bool(item.get("configured"))
     is_warning = False
 
-    if key == "ocr" and item.get("binary_available") is False:
+    if key == "ocr" and mode != "disabled" and item.get("binary_available") is False:
         is_warning = True
-    if key == "asr" and not configured:
+    if key == "asr" and mode != "disabled" and not configured:
         is_warning = True
 
     if configured and not is_warning:

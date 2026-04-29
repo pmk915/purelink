@@ -138,26 +138,39 @@ class Settings:
     embedding_api_base: str
     embedding_api_key: str
     embedding_model: str
+    embedding_device: str
+    embedding_normalize: bool
+    embedding_model_cache_dir: str
     embedding_timeout_seconds: float
     embedding_batch_size: int
     embedding_dimension: int | None
+    enable_ocr: bool
     ocr_provider: str
     ocr_tesseract_command: str
     ocr_language: str
     ocr_tesseract_psm: int
+    enable_media: bool
     asr_provider: str
     asr_ffmpeg_command: str
     asr_vosk_model_path: str
+    multimodal_provider: str
     reranker_enabled: bool
     reranker_provider: str
+    retrieval_min_score: float
     llm_provider: str
     llm_api_base: str
     llm_api_key: str
     llm_model: str
     llm_timeout_seconds: float
+    llm_reasoning_effort: str
+    llm_thinking_enabled: bool
     processing_queue_key: str
     processing_inflight_queue_key: str
     processing_queue_block_timeout_seconds: int
+    processing_job_timeout_seconds: int
+    max_upload_size_mb: int
+    max_active_jobs_per_user: int
+    max_active_jobs_per_kb: int
 
 
 @lru_cache
@@ -202,32 +215,44 @@ def get_settings() -> Settings:
         parsed_dir=os.getenv("PARSED_DIR", "data/parsed"),
         chunks_dir=_get_str_alias(("CHUNKS_DIR", "CHUNK_DIR"), "data/chunks"),
         vector_store_dir=os.getenv("VECTOR_STORE_DIR", "data/vector_store"),
-        embedding_provider=os.getenv("EMBEDDING_PROVIDER", "local_hashed_bow").strip().lower(),
+        embedding_provider=os.getenv("EMBEDDING_PROVIDER", "fastembed").strip().lower(),
         embedding_api_base=_get_str_alias(
             ("EMBEDDING_API_BASE_URL", "EMBEDDING_API_BASE"),
         ),
         embedding_api_key=os.getenv("EMBEDDING_API_KEY", "").strip(),
-        embedding_model=os.getenv("EMBEDDING_MODEL", "").strip(),
+        embedding_model=os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-zh-v1.5").strip(),
+        embedding_device=os.getenv("EMBEDDING_DEVICE", "cpu").strip().lower(),
+        embedding_normalize=_get_bool("EMBEDDING_NORMALIZE", True),
+        embedding_model_cache_dir=os.getenv(
+            "EMBEDDING_MODEL_CACHE_DIR",
+            "/app/models/embedding",
+        ).strip(),
         embedding_timeout_seconds=_get_float("EMBEDDING_TIMEOUT_SECONDS", 30.0),
         embedding_batch_size=_get_int("EMBEDDING_BATCH_SIZE", 32),
         embedding_dimension=_get_optional_int("EMBEDDING_DIMENSION"),
-        ocr_provider=os.getenv("OCR_PROVIDER", "tesseract").strip().lower(),
+        enable_ocr=_get_bool("ENABLE_OCR", False),
+        ocr_provider=os.getenv("OCR_PROVIDER", "disabled").strip().lower(),
         ocr_tesseract_command=os.getenv("OCR_TESSERACT_COMMAND", "tesseract").strip(),
         ocr_language=_get_str_alias(("OCR_LANG", "OCR_LANGUAGE"), "eng"),
         ocr_tesseract_psm=_get_int("OCR_TESSERACT_PSM", 6),
-        asr_provider=os.getenv("ASR_PROVIDER", "vosk").strip().lower(),
+        enable_media=_get_bool("ENABLE_MEDIA", False),
+        asr_provider=os.getenv("ASR_PROVIDER", "disabled").strip().lower(),
         asr_ffmpeg_command=os.getenv("ASR_FFMPEG_COMMAND", "ffmpeg").strip(),
         asr_vosk_model_path=_get_str_alias(
             ("ASR_MODEL_PATH", "ASR_VOSK_MODEL_PATH"),
             "/app/models/vosk",
         ).strip(),
+        multimodal_provider=os.getenv("MULTIMODAL_PROVIDER", "disabled").strip().lower(),
         reranker_enabled=_get_bool("RERANKER_ENABLED", True),
         reranker_provider=os.getenv("RERANKER_PROVIDER", "local_rule_reranker").strip().lower(),
+        retrieval_min_score=_get_float("RETRIEVAL_MIN_SCORE", 0.15),
         llm_provider=os.getenv("LLM_PROVIDER", "heuristic").strip().lower(),
         llm_api_base=_get_str_alias(("LLM_API_BASE_URL", "LLM_API_BASE")),
-        llm_api_key=os.getenv("LLM_API_KEY", "").strip(),
+        llm_api_key=_get_str_alias(("LLM_API_KEY", "DEEPSEEK_API_KEY")),
         llm_model=os.getenv("LLM_MODEL", "").strip(),
         llm_timeout_seconds=_get_float("LLM_TIMEOUT_SECONDS", 30.0),
+        llm_reasoning_effort=os.getenv("LLM_REASONING_EFFORT", "").strip().lower(),
+        llm_thinking_enabled=_get_bool("LLM_THINKING_ENABLED", False),
         processing_queue_key=os.getenv(
             "PROCESSING_QUEUE_KEY",
             "purelink:processing-jobs:queued",
@@ -240,4 +265,11 @@ def get_settings() -> Settings:
             "PROCESSING_QUEUE_BLOCK_TIMEOUT_SECONDS",
             5,
         ),
+        processing_job_timeout_seconds=_get_int(
+            "PROCESSING_JOB_TIMEOUT_SECONDS",
+            1800,
+        ),
+        max_upload_size_mb=_get_int("MAX_UPLOAD_SIZE_MB", 50),
+        max_active_jobs_per_user=_get_int("MAX_ACTIVE_JOBS_PER_USER", 5),
+        max_active_jobs_per_kb=_get_int("MAX_ACTIVE_JOBS_PER_KB", 10),
     )

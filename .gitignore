@@ -14,20 +14,20 @@ data/uploads/
 data/parsed/
 data/chunks/
 data/vector_store/
+data/
 logs/
+models/
 
 # Editor and OS files
 .DS_Store
 .idea/
 .vscode/
 
-# Local stray files
-=0.0.9,
-
 # Go build outputs
 worker-go/parse-worker
 
 # Frontend
+node_modules/
 frontend/node_modules/
 frontend/.next/
 frontend/.env.local

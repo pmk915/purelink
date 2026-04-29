@@ -12,6 +12,7 @@ SourceLocatorKind = Literal[
     "time_range",
     "unknown",
 ]
+TEXT_SOURCE_TYPES = {"text", "markdown", "txt", "md", "docx"}
 
 
 class SourceLocatorRead(BaseModel):
@@ -87,7 +88,13 @@ def build_locator_from_payload(
         kind = "pdf_page"
     elif source_type == "image":
         kind = "image_region"
-    elif char_start is not None or char_end is not None or section_title or heading_path:
+    elif (
+        source_type in TEXT_SOURCE_TYPES
+        or char_start is not None
+        or char_end is not None
+        or section_title
+        or heading_path
+    ):
         kind = "text_range"
 
     return SourceLocatorRead(

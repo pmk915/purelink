@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import io
 import json
+from datetime import timedelta
 from pathlib import Path
 import wave
 import zipfile
@@ -10,10 +12,15 @@ from xml.sax.saxutils import escape as xml_escape
 import pytest
 import httpx
 from httpx import ASGITransport, AsyncClient
-from PIL import Image, ImageDraw
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+
+try:
+    from PIL import Image, ImageDraw
+except ModuleNotFoundError:  # pragma: no cover - optional extension test dependency
+    Image = None
+    ImageDraw = None
 
 from app.core.config import get_settings
 from app.db.base import Base, load_all_models
@@ -33,6 +40,7 @@ from app.models.processing_job import ProcessingJob
 from app.services.document_embedding import DocumentEmbeddingError
 from app.services.document_processing import (
     DocumentProcessingError,
+    ExtractedTextSegment,
     RenderedPDFPage,
     extract_text_from_txt,
 )
@@ -40,6 +48,10 @@ from app.services.asr_provider import ASRProviderError, ASRResult, ASRSegment
 from app.services.ocr_provider import OCRProviderError, OCRRegion, OCRResult
 from app.services import document_indexing as document_indexing_service
 from app.services import processing_worker as processing_worker_service
+from app.services.processing_job import (
+    acquire_processing_job,
+    fail_timed_out_processing_jobs,
+)
 
 
 load_all_models()
@@ -136,6 +148,20 @@ async def document_client(
     monkeypatch.setenv("CHUNK_DIR", str(tmp_path / "chunks"))
     monkeypatch.setenv("VECTOR_STORE_DIR", str(tmp_path / "vector_store"))
     get_settings.cache_clear()
+
+    def default_submit_processing_job(*, job: ProcessingJob) -> str:
+        return str(job.id)
+
+    monkeypatch.setattr(
+        processing_worker_service,
+        "submit_processing_job",
+        default_submit_processing_job,
+    )
+    monkeypatch.setattr(
+        processing_worker_service,
+        "open_processing_session",
+        lambda: test_session_factory(),
+    )
 
     async def override_get_db():
         db = test_session_factory()
@@ -544,7 +570,10 @@ async def test_personal_document_upload_and_list_respect_owner_boundary(
     assert document_body["original_filename"] == "alice-notes.txt"
     assert document_body["file_type"] == "text/plain"
     assert document_body["review_status"] == "not_required"
-    assert document_body["processing_status"] == "uploaded"
+    assert document_body["processing_status"] == "processing"
+    assert document_body["sha256"] == "0fabec4cbb28eac6a79a222c30b525bd940c1f07d06d34d9f82fdaa8a6670349"
+    assert document_body["latest_processing_job_status"] == "queued"
+    assert document_body["latest_processing_job_type"] == "document_process"
     assert document_body["reviewed_by"] is None
     assert document_body["reviewed_at"] is None
     assert "personal/knowledge_base_" in document_body["storage_path"]
@@ -573,6 +602,284 @@ async def test_personal_document_upload_and_list_respect_owner_boundary(
     )
     assert other_list_response.status_code == 404
     assert other_upload_response.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_personal_upload_rejects_file_larger_than_configured_limit(
+    document_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MAX_UPLOAD_SIZE_MB", "0")
+    get_settings.cache_clear()
+
+    alice = await _register_and_login(
+        document_client,
+        email="upload-too-large@example.com",
+        username="upload-too-large",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+    knowledge_base_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(alice["access_token"]),
+        name="Too Large KB",
+    )
+
+    upload_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=alice_headers,
+        files={"file": ("too-large.txt", b"x", "text/plain")},
+    )
+
+    assert upload_response.status_code == 413
+    assert upload_response.json()["detail"]["error_code"] == "FILE_TOO_LARGE"
+
+
+@pytest.mark.anyio
+async def test_personal_upload_rejects_image_when_core_ocr_is_disabled(
+    document_client: AsyncClient,
+) -> None:
+    alice = await _register_and_login(
+        document_client,
+        email="upload-image-unsupported@example.com",
+        username="upload-image-unsupported",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+    knowledge_base_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(alice["access_token"]),
+        name="Image Unsupported KB",
+    )
+
+    upload_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=alice_headers,
+        files={"file": ("whiteboard.png", b"fake png payload", "image/png")},
+    )
+
+    assert upload_response.status_code == 400
+    assert upload_response.json()["detail"]["error_code"] == "FEATURE_NOT_ENABLED"
+
+
+@pytest.mark.anyio
+async def test_personal_upload_rejects_video_when_core_media_is_disabled(
+    document_client: AsyncClient,
+) -> None:
+    alice = await _register_and_login(
+        document_client,
+        email="upload-video-unsupported@example.com",
+        username="upload-video-unsupported",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+    knowledge_base_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(alice["access_token"]),
+        name="Video Unsupported KB",
+    )
+
+    upload_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=alice_headers,
+        files={"file": ("standup.mp4", b"fake mp4 payload", "video/mp4")},
+    )
+
+    assert upload_response.status_code == 400
+    assert upload_response.json()["detail"]["error_code"] == "FEATURE_NOT_ENABLED"
+
+
+@pytest.mark.anyio
+async def test_personal_upload_duplicate_in_same_knowledge_base_reuses_existing_document(
+    document_client: AsyncClient,
+    test_session_factory: sessionmaker,
+) -> None:
+    alice = await _register_and_login(
+        document_client,
+        email="upload-duplicate@example.com",
+        username="upload-duplicate",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+    knowledge_base_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(alice["access_token"]),
+        name="Duplicate Upload KB",
+    )
+
+    first_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=alice_headers,
+        files={"file": ("first.txt", b"duplicate upload content", "text/plain")},
+    )
+    second_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=alice_headers,
+        files={"file": ("second.txt", b"duplicate upload content", "text/plain")},
+    )
+
+    assert first_response.status_code == 201
+    assert second_response.status_code == 409
+    assert second_response.json()["detail"]["error_code"] == "DUPLICATE_DOCUMENT"
+
+    with test_session_factory() as db:
+        documents = list(
+            db.scalars(
+                select(Document).where(Document.knowledge_base_id == knowledge_base_id)
+            )
+        )
+        jobs = list(
+            db.scalars(
+                select(ProcessingJob).where(ProcessingJob.document_id == documents[0].id)
+            )
+        )
+
+    assert len(documents) == 1
+    assert len(jobs) == 1
+    assert jobs[0].job_type == ProcessingJobType.DOCUMENT_PROCESS
+
+
+@pytest.mark.anyio
+async def test_personal_upload_allows_same_sha256_in_different_knowledge_bases(
+    document_client: AsyncClient,
+    test_session_factory: sessionmaker,
+) -> None:
+    alice = await _register_and_login(
+        document_client,
+        email="upload-same-sha-different-kb@example.com",
+        username="upload-same-sha-different-kb",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+    first_kb_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(alice["access_token"]),
+        name="Same SHA First KB",
+    )
+    second_kb_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(alice["access_token"]),
+        name="Same SHA Second KB",
+    )
+
+    first_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{first_kb_id}/documents",
+        headers=alice_headers,
+        files={"file": ("shared-a.txt", b"shared sha content", "text/plain")},
+    )
+    second_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{second_kb_id}/documents",
+        headers=alice_headers,
+        files={"file": ("shared-b.txt", b"shared sha content", "text/plain")},
+    )
+
+    assert first_response.status_code == 201
+    assert second_response.status_code == 201
+    assert first_response.json()["sha256"] == second_response.json()["sha256"]
+
+    with test_session_factory() as db:
+        documents = list(
+            db.scalars(
+                select(Document)
+                .where(Document.sha256 == first_response.json()["sha256"])
+                .order_by(Document.id.asc())
+            )
+        )
+
+    assert len(documents) == 2
+    assert {item.knowledge_base_id for item in documents} == {first_kb_id, second_kb_id}
+
+
+@pytest.mark.anyio
+async def test_personal_upload_rejects_when_user_active_job_limit_is_reached(
+    document_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    test_session_factory: sessionmaker,
+) -> None:
+    monkeypatch.setenv("MAX_ACTIVE_JOBS_PER_USER", "1")
+    get_settings.cache_clear()
+
+    alice = await _register_and_login(
+        document_client,
+        email="upload-active-limit@example.com",
+        username="upload-active-limit",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+    knowledge_base_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(alice["access_token"]),
+        name="Active Limit KB",
+    )
+
+    first_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=alice_headers,
+        files={"file": ("active-one.txt", b"active one", "text/plain")},
+    )
+    second_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=alice_headers,
+        files={"file": ("active-two.txt", b"active two", "text/plain")},
+    )
+
+    assert first_response.status_code == 201
+    assert second_response.status_code == 429
+    assert second_response.json()["detail"]["error_code"] == "TOO_MANY_ACTIVE_JOBS"
+
+    with test_session_factory() as db:
+        documents = list(
+            db.scalars(
+                select(Document).where(Document.knowledge_base_id == knowledge_base_id)
+            )
+        )
+
+    assert len(documents) == 1
+
+
+@pytest.mark.anyio
+async def test_personal_concurrent_duplicate_upload_creates_one_document_process_job(
+    document_client: AsyncClient,
+    test_session_factory: sessionmaker,
+) -> None:
+    alice = await _register_and_login(
+        document_client,
+        email="upload-concurrent-duplicate@example.com",
+        username="upload-concurrent-duplicate",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+    knowledge_base_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(alice["access_token"]),
+        name="Concurrent Duplicate KB",
+    )
+
+    async def upload_copy(filename: str):
+        return await document_client.post(
+            f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+            headers=alice_headers,
+            files={"file": (filename, b"same concurrent content", "text/plain")},
+        )
+
+    responses = await asyncio.gather(
+        upload_copy("concurrent-a.txt"),
+        upload_copy("concurrent-b.txt"),
+    )
+
+    statuses = sorted(response.status_code for response in responses)
+    assert statuses == [201, 409]
+
+    with test_session_factory() as db:
+        documents = list(
+            db.scalars(
+                select(Document).where(Document.knowledge_base_id == knowledge_base_id)
+            )
+        )
+        jobs = list(
+            db.scalars(
+                select(ProcessingJob)
+                .join(Document, Document.id == ProcessingJob.document_id)
+                .where(Document.knowledge_base_id == knowledge_base_id)
+            )
+        )
+
+    assert len(documents) == 1
+    assert len(jobs) == 1
+    assert jobs[0].job_type == ProcessingJobType.DOCUMENT_PROCESS
 
 
 @pytest.mark.anyio
@@ -711,7 +1018,8 @@ async def test_team_admin_upload_is_approved_without_review_queue(
     assert document_body["review_status"] == "approved"
     assert document_body["reviewed_by"] == admin["user_id"]
     assert document_body["reviewed_at"] is not None
-    assert document_body["processing_status"] == "uploaded"
+    assert document_body["processing_status"] == "processing"
+    assert document_body["latest_processing_job_status"] == "queued"
 
     saved_file = tmp_path / "uploads" / document_body["storage_path"]
     assert saved_file.exists()
@@ -1873,7 +2181,7 @@ async def test_personal_document_can_be_embedded_and_retrieved(
     assert first_result["scope"] == "personal"
     assert first_result["team_id"] is None
     assert first_result["document_name"] == "embed-notes.txt"
-    assert first_result["source_type"] == "txt"
+    assert first_result["source_type"] == "text"
     assert first_result["page_number"] is None
     assert first_result["section_title"] is None
     assert first_result["snippet"]
@@ -2076,7 +2384,7 @@ async def test_personal_knowledge_base_ask_returns_answer_and_citations(
     assert citation["scope"] == "personal"
     assert citation["team_id"] is None
     assert citation["document_name"] == "qa-notes.txt"
-    assert citation["source_type"] == "txt"
+    assert citation["source_type"] == "text"
     assert citation["snippet"]
     assert citation["page_number"] is None
     assert citation["section_title"] is None
@@ -2253,7 +2561,7 @@ async def test_personal_knowledge_base_ask_can_use_openai_compatible_provider(
     )
 
     monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
-    monkeypatch.setenv("LLM_API_BASE", "https://llm.example/v1")
+    monkeypatch.setenv("LLM_API_BASE_URL", "https://llm.example/v1")
     monkeypatch.setenv("LLM_API_KEY", "test-key")
     monkeypatch.setenv("LLM_MODEL", "test-model")
     get_settings.cache_clear()
@@ -2305,6 +2613,106 @@ async def test_personal_knowledge_base_ask_can_use_openai_compatible_provider(
     payload = captured_request["json"]
     assert isinstance(payload, dict)
     assert payload["model"] == "test-model"
+
+
+@pytest.mark.anyio
+async def test_personal_knowledge_base_ask_can_use_deepseek_provider(
+    document_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    processing_job_runner: CapturedProcessingJobRunner,
+) -> None:
+    alice = await _register_and_login(
+        document_client,
+        email="ask-deepseek@example.com",
+        username="ask-deepseek",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+
+    knowledge_base_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(alice["access_token"]),
+        name="DeepSeek QA KB",
+    )
+    upload_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=alice_headers,
+        files={"file": ("deepseek-qa.txt", b"PureLink stores internal docs for teams.", "text/plain")},
+    )
+    assert upload_response.status_code == 201
+    document_id = upload_response.json()["id"]
+
+    assert (
+        await document_client.post(
+            f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}/parse",
+            headers=alice_headers,
+        )
+    ).status_code == 200
+    assert (
+        await document_client.post(
+            f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}/chunk",
+            headers=alice_headers,
+        )
+    ).status_code == 200
+    await _submit_manual_index_job(
+        document_client,
+        path=f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}/embed",
+        headers=alice_headers,
+        processing_job_runner=processing_job_runner,
+    )
+
+    monkeypatch.setenv("LLM_PROVIDER", "deepseek")
+    monkeypatch.setenv("LLM_API_BASE_URL", "https://api.deepseek.com")
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_MODEL", "deepseek-v4-pro")
+    monkeypatch.setenv("LLM_REASONING_EFFORT", "high")
+    monkeypatch.setenv("LLM_THINKING_ENABLED", "true")
+    get_settings.cache_clear()
+
+    captured_request: dict[str, object] = {}
+
+    def fake_post(
+        url: str,
+        *,
+        headers: dict[str, str],
+        json: dict[str, object],
+        timeout: float,
+    ) -> httpx.Response:
+        captured_request["url"] = url
+        captured_request["headers"] = headers
+        captured_request["json"] = json
+        captured_request["timeout"] = timeout
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": "PureLink stores internal docs for teams."
+                        }
+                    }
+                ]
+            },
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr("app.services.llm.httpx.post", fake_post)
+
+    ask_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/ask",
+        headers=alice_headers,
+        json={"question": "What does PureLink store?", "top_k": 3},
+    )
+    assert ask_response.status_code == 200
+    ask_body = ask_response.json()
+    assert ask_body["answer"] == "PureLink stores internal docs for teams."
+    assert ask_body["citations"]
+    assert captured_request["url"] == "https://api.deepseek.com/chat/completions"
+    payload = captured_request["json"]
+    assert isinstance(payload, dict)
+    assert payload["model"] == "deepseek-v4-pro"
+    assert payload["reasoning_effort"] == "high"
+    assert payload["thinking"] == {"type": "enabled"}
+    assert payload["stream"] is False
     assert payload["temperature"] == 0
     messages = payload["messages"]
     assert isinstance(messages, list)
@@ -2622,9 +3030,14 @@ async def test_personal_txt_process_endpoint_marks_ready_creates_chunks_and_supp
     assert saved_jobs[0].status == ProcessingJobStatus.SUCCEEDED
     assert saved_jobs[0].current_step == "completed"
     assert saved_jobs[0].attempt_number == 1
+    assert saved_jobs[0].retry_count == 0
+    assert saved_jobs[0].max_retries == 3
     assert saved_jobs[0].worker_name == processing_worker_service.REDIS_PROCESSING_WORKER_NAME
+    assert saved_jobs[0].locked_by == processing_worker_service.REDIS_PROCESSING_WORKER_NAME
     assert saved_jobs[0].started_at is not None
     assert saved_jobs[0].finished_at is not None
+    assert saved_jobs[0].locked_at is not None
+    assert saved_jobs[0].timeout_at is not None
     assert saved_jobs[1].job_type == ProcessingJobType.DOCUMENT_INDEX
     assert saved_jobs[1].trigger_type == ProcessingJobTrigger.INDEX
     assert saved_jobs[1].status == ProcessingJobStatus.QUEUED
@@ -2652,7 +3065,7 @@ async def test_personal_txt_process_endpoint_marks_ready_creates_chunks_and_supp
     assert retrieve_body["results"][0]["document_id"] == document_id
     assert retrieve_body["results"][0]["chunk_id"] == f"{document_id}:0"
     assert retrieve_body["results"][0]["document_name"] == "ready-notes.txt"
-    assert retrieve_body["results"][0]["source_type"] == "txt"
+    assert retrieve_body["results"][0]["source_type"] == "text"
     assert retrieve_body["results"][0]["snippet"]
     assert "product notes" in retrieve_body["results"][0]["text"]
 
@@ -2666,7 +3079,7 @@ async def test_personal_txt_process_endpoint_marks_ready_creates_chunks_and_supp
     assert ask_body["citations"]
     assert ask_body["citations"][0]["chunk_id"] == f"{document_id}:0"
     assert ask_body["citations"][0]["document_name"] == "ready-notes.txt"
-    assert ask_body["citations"][0]["source_type"] == "txt"
+    assert ask_body["citations"][0]["source_type"] == "text"
     assert ask_body["citations"][0]["snippet"]
 
     preview_response = await document_client.get(
@@ -2825,7 +3238,7 @@ async def test_personal_txt_process_sets_processing_before_ready(
 
 
 @pytest.mark.anyio
-async def test_personal_txt_process_sets_job_running_before_extract(
+async def test_personal_txt_process_sets_job_processing_before_extract(
     document_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
     test_session_factory: sessionmaker,
@@ -2833,27 +3246,27 @@ async def test_personal_txt_process_sets_job_running_before_extract(
 ) -> None:
     alice = await _register_and_login(
         document_client,
-        email="txt-process-job-running@example.com",
-        username="txt-process-job-running",
+        email="txt-process-job-processing@example.com",
+        username="txt-process-job-processing",
     )
     alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
 
     knowledge_base_id = await _create_personal_knowledge_base(
         document_client,
         access_token=str(alice["access_token"]),
-        name="TXT Process Job Running KB",
+        name="TXT Process Job Processing KB",
     )
     upload_response = await document_client.post(
         f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
         headers=alice_headers,
-        files={"file": ("job-running.txt", b"Check running job status.", "text/plain")},
+        files={"file": ("job-processing.txt", b"Check processing job status.", "text/plain")},
     )
     assert upload_response.status_code == 201
     document_id = upload_response.json()["id"]
 
     seen_job_statuses: list[ProcessingJobStatus] = []
 
-    def assert_job_running_then_extract(*, source_path: Path):
+    def assert_job_processing_then_extract(*, source_path: Path):
         with test_session_factory() as db:
             current_job = db.scalar(
                 select(ProcessingJob)
@@ -2866,7 +3279,7 @@ async def test_personal_txt_process_sets_job_running_before_extract(
 
     monkeypatch.setattr(
         "app.services.document_processing.extract_text_from_txt",
-        assert_job_running_then_extract,
+        assert_job_processing_then_extract,
     )
 
     process_response = await document_client.post(
@@ -2878,7 +3291,7 @@ async def test_personal_txt_process_sets_job_running_before_extract(
 
     processing_job_runner.run_all()
 
-    assert seen_job_statuses == [ProcessingJobStatus.RUNNING]
+    assert seen_job_statuses == [ProcessingJobStatus.PROCESSING]
 
 
 @pytest.mark.anyio
@@ -2979,13 +3392,281 @@ async def test_personal_process_submission_rejects_duplicate_active_job(
         f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}/process",
         headers=alice_headers,
     )
-    assert duplicate_process_response.status_code == 409
-    assert (
-        duplicate_process_response.json()["detail"]
-        == "Document is already processing."
-    )
+    assert duplicate_process_response.status_code == 200
+    assert duplicate_process_response.json()["job_id"] == first_process_response.json()["job_id"]
 
     processing_job_runner.run_all()
+
+
+@pytest.mark.anyio
+async def test_processing_job_acquire_only_claims_queued_job(
+    document_client: AsyncClient,
+    test_session_factory: sessionmaker,
+    processing_job_runner: CapturedProcessingJobRunner,
+) -> None:
+    alice = await _register_and_login(
+        document_client,
+        email="txt-process-claim@example.com",
+        username="txt-process-claim",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+
+    knowledge_base_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(alice["access_token"]),
+        name="TXT Process Claim KB",
+    )
+    upload_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=alice_headers,
+        files={"file": ("claim.txt", b"Only one worker should claim this job.", "text/plain")},
+    )
+    assert upload_response.status_code == 201
+    document_id = upload_response.json()["id"]
+
+    process_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}/process",
+        headers=alice_headers,
+    )
+    assert process_response.status_code == 200
+    job_id = process_response.json()["job_id"]
+
+    with test_session_factory() as db:
+        claimed_job = acquire_processing_job(
+            db,
+            job_id=job_id,
+            worker_name="worker-one",
+            timeout_seconds=30,
+        )
+        second_claim = acquire_processing_job(
+            db,
+            job_id=job_id,
+            worker_name="worker-two",
+            timeout_seconds=30,
+        )
+        saved_jobs = list(
+            db.scalars(
+                select(ProcessingJob)
+                .where(ProcessingJob.document_id == document_id)
+                .order_by(ProcessingJob.id.asc())
+            )
+        )
+
+    assert claimed_job is not None
+    assert claimed_job.status == ProcessingJobStatus.PROCESSING
+    assert claimed_job.worker_name == "worker-one"
+    assert claimed_job.locked_by == "worker-one"
+    assert claimed_job.started_at is not None
+    assert claimed_job.locked_at is not None
+    assert claimed_job.timeout_at is not None
+    assert second_claim is None
+    assert len(saved_jobs) == 1
+    assert saved_jobs[0].status == ProcessingJobStatus.PROCESSING
+
+    duplicate_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}/process",
+        headers=alice_headers,
+    )
+    assert duplicate_response.status_code == 200
+    assert duplicate_response.json()["job_id"] == job_id
+
+    processing_job_runner.submissions.clear()
+
+
+@pytest.mark.anyio
+async def test_processing_job_timeout_marks_job_and_document_failed(
+    document_client: AsyncClient,
+    test_session_factory: sessionmaker,
+    processing_job_runner: CapturedProcessingJobRunner,
+) -> None:
+    alice = await _register_and_login(
+        document_client,
+        email="txt-process-timeout@example.com",
+        username="txt-process-timeout",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+
+    knowledge_base_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(alice["access_token"]),
+        name="TXT Process Timeout KB",
+    )
+    upload_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=alice_headers,
+        files={"file": ("timeout.txt", b"Timeout should fail this job.", "text/plain")},
+    )
+    assert upload_response.status_code == 201
+    document_id = upload_response.json()["id"]
+
+    process_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}/process",
+        headers=alice_headers,
+    )
+    assert process_response.status_code == 200
+    job_id = process_response.json()["job_id"]
+
+    with test_session_factory() as db:
+        claimed_job = acquire_processing_job(
+            db,
+            job_id=job_id,
+            worker_name="timeout-worker",
+            timeout_seconds=1,
+        )
+        assert claimed_job is not None
+        assert claimed_job.timeout_at is not None
+        timeout_count = fail_timed_out_processing_jobs(
+            db,
+            now=claimed_job.timeout_at + timedelta(seconds=1),
+            timeout_seconds=1,
+        )
+        timed_out_document = db.get(Document, document_id)
+        timed_out_job = db.get(ProcessingJob, job_id)
+
+    assert timeout_count == 1
+    assert timed_out_document is not None
+    assert timed_out_document.processing_status == DocumentProcessingStatus.FAILED
+    assert timed_out_document.error_message == "Processing job timed out."
+    assert timed_out_job is not None
+    assert timed_out_job.status == ProcessingJobStatus.FAILED
+    assert timed_out_job.error_code == "JOB_TIMEOUT"
+    assert timed_out_job.finished_at is not None
+
+    processing_job_runner.submissions.clear()
+
+
+@pytest.mark.anyio
+async def test_retryable_processing_error_requeues_same_job_then_succeeds(
+    document_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    test_session_factory: sessionmaker,
+    processing_job_runner: CapturedProcessingJobRunner,
+) -> None:
+    alice = await _register_and_login(
+        document_client,
+        email="txt-process-auto-retry@example.com",
+        username="txt-process-auto-retry",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+
+    knowledge_base_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(alice["access_token"]),
+        name="TXT Auto Retry KB",
+    )
+    upload_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=alice_headers,
+        files={"file": ("auto-retry.txt", b"Retryable text eventually succeeds.", "text/plain")},
+    )
+    assert upload_response.status_code == 201
+    document_id = upload_response.json()["id"]
+
+    call_count = 0
+
+    def flaky_extract_text_from_txt(*, source_path: Path):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise DocumentProcessingError(
+                "Temporary chunk persistence failure.",
+                error_code="CHUNK_PERSIST_FAILED",
+            )
+        return extract_text_from_txt(source_path=source_path)
+
+    monkeypatch.setattr(
+        "app.services.document_processing.extract_text_from_txt",
+        flaky_extract_text_from_txt,
+    )
+
+    process_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}/process",
+        headers=alice_headers,
+    )
+    assert process_response.status_code == 200
+    job_id = process_response.json()["job_id"]
+
+    processing_job_runner.run_all()
+
+    with test_session_factory() as db:
+        retried_job = db.get(ProcessingJob, job_id)
+        retried_document = db.get(Document, document_id)
+
+    assert retried_job is not None
+    assert retried_job.status == ProcessingJobStatus.QUEUED
+    assert retried_job.retry_count == 1
+    assert retried_job.error_code == "CHUNK_PERSIST_FAILED"
+    assert retried_document is not None
+    assert retried_document.processing_status == DocumentProcessingStatus.PROCESSING
+    assert len(processing_job_runner.submissions) == 1
+
+    processing_job_runner.run_all()
+
+    with test_session_factory() as db:
+        saved_jobs = list(
+            db.scalars(
+                select(ProcessingJob)
+                .where(ProcessingJob.document_id == document_id)
+                .order_by(ProcessingJob.id.asc())
+            )
+        )
+        saved_document = db.get(Document, document_id)
+
+    assert call_count == 2
+    assert saved_document is not None
+    assert saved_document.processing_status == DocumentProcessingStatus.READY
+    assert saved_jobs[0].id == job_id
+    assert saved_jobs[0].status == ProcessingJobStatus.SUCCEEDED
+    assert saved_jobs[0].retry_count == 1
+    assert saved_jobs[0].error_code is None
+    assert saved_jobs[0].started_at is not None
+    assert saved_jobs[0].finished_at is not None
+    assert saved_jobs[1].job_type == ProcessingJobType.DOCUMENT_INDEX
+    assert saved_jobs[1].status == ProcessingJobStatus.QUEUED
+
+
+@pytest.mark.anyio
+async def test_personal_txt_process_sanitizes_nul_before_persisting_chunks(
+    document_client: AsyncClient,
+    test_session_factory: sessionmaker,
+    processing_job_runner: CapturedProcessingJobRunner,
+) -> None:
+    alice = await _register_and_login(
+        document_client,
+        email="txt-process-nul@example.com",
+        username="txt-process-nul",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+
+    knowledge_base_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(alice["access_token"]),
+        name="TXT NUL Sanitizer KB",
+    )
+    upload_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=alice_headers,
+        files={"file": ("nul.txt", b"alpha\x00 beta remains readable", "text/plain")},
+    )
+    assert upload_response.status_code == 201
+    document_id = upload_response.json()["id"]
+
+    process_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}/process",
+        headers=alice_headers,
+    )
+    assert process_response.status_code == 200
+
+    processing_job_runner.run_all()
+
+    with test_session_factory() as db:
+        saved_chunk = db.scalar(
+            select(DocumentChunk).where(DocumentChunk.document_id == document_id)
+        )
+
+    assert saved_chunk is not None
+    assert "\x00" not in saved_chunk.chunk_text
+    assert "alpha beta remains readable" in saved_chunk.chunk_text
 
 
 @pytest.mark.anyio
@@ -3006,13 +3687,6 @@ async def test_personal_process_submission_failure_marks_document_failed_when_qu
         access_token=str(alice["access_token"]),
         name="TXT Process Queue Down KB",
     )
-    upload_response = await document_client.post(
-        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
-        headers=alice_headers,
-        files={"file": ("queue-down.txt", b"Queue failure should not fallback.", "text/plain")},
-    )
-    assert upload_response.status_code == 201
-    document_id = upload_response.json()["id"]
 
     def fail_submit_processing_job(*, job: ProcessingJob) -> str:
         raise RuntimeError("Redis queue is unavailable.")
@@ -3023,16 +3697,20 @@ async def test_personal_process_submission_failure_marks_document_failed_when_qu
         fail_submit_processing_job,
     )
 
-    process_response = await document_client.post(
-        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}/process",
+    upload_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
         headers=alice_headers,
+        files={"file": ("queue-down.txt", b"Queue failure should not fallback.", "text/plain")},
     )
-    assert process_response.status_code == 500
-    assert process_response.json()["detail"] == "Unable to submit processing job."
+    assert upload_response.status_code == 500
+    assert upload_response.json()["detail"] == "Unable to submit processing job."
 
     with test_session_factory() as db:
-        saved_document = db.get(Document, document_id)
+        saved_document = db.scalar(
+            select(Document).where(Document.original_filename == "queue-down.txt")
+        )
         assert saved_document is not None
+        document_id = saved_document.id
         assert saved_document.processing_status == DocumentProcessingStatus.FAILED
         assert saved_document.error_message == "Unable to submit processing job."
         saved_jobs = list(
@@ -3352,10 +4030,10 @@ async def test_personal_markdown_process_endpoint_marks_ready_creates_chunks_and
 
     assert len(saved_chunks) == 1
     metadata = json.loads(saved_chunks[0].metadata_json or "{}")
-    assert metadata["source_type"] == "md"
+    assert metadata["source_type"] == "markdown"
     assert metadata["section_title"] == "Release Notes"
     assert metadata["heading_path"] == ["Release Notes"]
-    assert metadata["source_locator"] == "section:Release Notes"
+    assert metadata["source_locator"] == "heading:Release Notes"
     assert "markdown notes searchable" in saved_chunks[0].chunk_text
 
     retrieve_response = await document_client.post(
@@ -3368,12 +4046,12 @@ async def test_personal_markdown_process_endpoint_marks_ready_creates_chunks_and
     assert retrieve_body["results"]
     assert retrieve_body["results"][0]["document_id"] == document_id
     assert retrieve_body["results"][0]["document_name"] == "release-notes.md"
-    assert retrieve_body["results"][0]["source_type"] == "md"
+    assert retrieve_body["results"][0]["source_type"] == "markdown"
     assert retrieve_body["results"][0]["section_title"] == "Release Notes"
     _assert_api_source_locator(
         retrieve_body["results"][0]["source_locator"],
         kind="text_range",
-        source_locator_text="section:Release Notes",
+        source_locator_text="heading:Release Notes",
         section_title="Release Notes",
     )
     assert retrieve_body["results"][0]["heading_path"] == ["Release Notes"]
@@ -3386,12 +4064,12 @@ async def test_personal_markdown_process_endpoint_marks_ready_creates_chunks_and
     assert ask_response.status_code == 200
     citation = ask_response.json()["citations"][0]
     assert citation["document_name"] == "release-notes.md"
-    assert citation["source_type"] == "md"
+    assert citation["source_type"] == "markdown"
     assert citation["section_title"] == "Release Notes"
     _assert_api_source_locator(
         citation["source_locator"],
         kind="text_range",
-        source_locator_text="section:Release Notes",
+        source_locator_text="heading:Release Notes",
         section_title="Release Notes",
     )
 
@@ -3403,7 +4081,7 @@ async def test_personal_pdf_process_endpoint_marks_ready_and_preserves_page_meta
     test_session_factory: sessionmaker,
     processing_job_runner: CapturedProcessingJobRunner,
 ) -> None:
-    def fail_if_pdf_ocr_used(*, source_path: Path) -> None:
+    def fail_if_pdf_ocr_used(*, source_path: Path, **kwargs) -> None:
         raise AssertionError("Text PDF should not fallback to scanned PDF OCR.")
 
     monkeypatch.setattr(
@@ -3460,6 +4138,7 @@ async def test_personal_pdf_process_endpoint_marks_ready_and_preserves_page_meta
     assert metadata["source_type"] == "pdf"
     assert metadata["page_number"] == 1
     assert metadata["source_locator"] == "page:1"
+    assert metadata["extractor"] == "pymupdf"
     assert "PDF manuals stay searchable" in saved_chunks[0].chunk_text
 
     retrieve_response = await document_client.post(
@@ -3496,6 +4175,295 @@ async def test_personal_pdf_process_endpoint_marks_ready_and_preserves_page_meta
         source_locator_text="page:1",
         page_number=1,
     )
+
+
+@pytest.mark.anyio
+async def test_personal_pdf_garbled_direct_text_falls_back_to_ocr(
+    document_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    test_session_factory: sessionmaker,
+    processing_job_runner: CapturedProcessingJobRunner,
+) -> None:
+    monkeypatch.setattr(
+        "app.services.document_processing.extract_pdf_page_segments_with_pymupdf",
+        lambda *, source_path: (
+            [
+                ExtractedTextSegment(
+                    text="\x0f\x02\x03" * 20,
+                    metadata={
+                        "source_type": "pdf",
+                        "page_number": 1,
+                        "source_locator": "page:1",
+                        "extractor": "pymupdf",
+                    },
+                )
+            ],
+            1,
+            "pymupdf",
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.document_processing.render_pdf_pages_to_images",
+        lambda source_path, output_dir: _fake_rendered_pdf_pages(
+            output_dir=output_dir,
+            page_texts=["OCR fallback text"],
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.document_processing.resolve_ocr_provider",
+        lambda: FakeOCRProvider(
+            result=OCRResult(
+                text="OCR fallback recovered readable PDF text.",
+                provider_name="fake_ocr",
+                provider_version="fake-v1",
+                language="eng",
+                confidence=92.0,
+                regions=(),
+            )
+        ),
+    )
+
+    alice = await _register_and_login(
+        document_client,
+        email="pdf-garbled-fallback@example.com",
+        username="pdf-garbled-fallback",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+    knowledge_base_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(alice["access_token"]),
+        name="PDF Garbled Fallback KB",
+    )
+    upload_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=alice_headers,
+        files={
+            "file": (
+                "garbled.pdf",
+                _build_minimal_pdf(text="placeholder"),
+                "application/pdf",
+            )
+        },
+    )
+    assert upload_response.status_code == 201
+    document_id = upload_response.json()["id"]
+
+    process_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}/process",
+        headers=alice_headers,
+    )
+    assert process_response.status_code == 200
+    processing_job_runner.run_all()
+
+    with test_session_factory() as db:
+        ready_document = db.get(Document, document_id)
+        assert ready_document is not None
+        assert ready_document.processing_status == DocumentProcessingStatus.READY
+        saved_chunk = db.scalar(
+            select(DocumentChunk).where(DocumentChunk.document_id == document_id)
+        )
+        succeeded_job = db.scalar(
+            select(ProcessingJob).where(ProcessingJob.document_id == document_id)
+        )
+
+    assert saved_chunk is not None
+    assert "OCR fallback recovered readable PDF text" in saved_chunk.chunk_text
+    metadata = json.loads(saved_chunk.metadata_json or "{}")
+    assert metadata["source_type"] == "pdf"
+    assert metadata["page_number"] == 1
+    assert metadata["source_locator"] == "page:1"
+    assert metadata["extractor"] == "ocr_pdf:fake_ocr"
+    assert "\x00" not in saved_chunk.chunk_text
+    assert succeeded_job is not None
+    assert succeeded_job.status == ProcessingJobStatus.SUCCEEDED
+
+
+@pytest.mark.anyio
+async def test_personal_pdf_garbled_direct_text_reports_ocr_unavailable(
+    document_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    test_session_factory: sessionmaker,
+    processing_job_runner: CapturedProcessingJobRunner,
+) -> None:
+    monkeypatch.setattr(
+        "app.services.document_processing.extract_pdf_page_segments_with_pymupdf",
+        lambda *, source_path: (
+            [
+                ExtractedTextSegment(
+                    text="\x00\x0f\x02" * 20,
+                    metadata={
+                        "source_type": "pdf",
+                        "page_number": 1,
+                        "source_locator": "page:1",
+                        "extractor": "pymupdf",
+                    },
+                )
+            ],
+            1,
+            "pymupdf",
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.document_processing.render_pdf_pages_to_images",
+        lambda source_path, output_dir: _fake_rendered_pdf_pages(
+            output_dir=output_dir,
+            page_texts=["OCR unavailable page"],
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.document_processing.resolve_ocr_provider",
+        lambda: (_ for _ in ()).throw(OCRProviderError("OCR provider missing.")),
+    )
+
+    alice = await _register_and_login(
+        document_client,
+        email="pdf-ocr-unavailable@example.com",
+        username="pdf-ocr-unavailable",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+    knowledge_base_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(alice["access_token"]),
+        name="PDF OCR Unavailable KB",
+    )
+    upload_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=alice_headers,
+        files={
+            "file": (
+                "ocr-unavailable.pdf",
+                _build_minimal_pdf(text="placeholder"),
+                "application/pdf",
+            )
+        },
+    )
+    assert upload_response.status_code == 201
+    document_id = upload_response.json()["id"]
+
+    process_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}/process",
+        headers=alice_headers,
+    )
+    assert process_response.status_code == 200
+    processing_job_runner.run_all()
+
+    with test_session_factory() as db:
+        failed_document = db.get(Document, document_id)
+        assert failed_document is not None
+        assert failed_document.processing_status == DocumentProcessingStatus.FAILED
+        saved_chunks = list(
+            db.scalars(
+                select(DocumentChunk).where(DocumentChunk.document_id == document_id)
+            )
+        )
+        failed_job = db.scalar(
+            select(ProcessingJob).where(ProcessingJob.document_id == document_id)
+        )
+        latest_error_code = failed_document.latest_processing_job_error_code
+
+    assert saved_chunks == []
+    assert failed_job is not None
+    assert failed_job.status == ProcessingJobStatus.FAILED
+    assert failed_job.current_step == "extract_text"
+    assert failed_job.error_code == "OCR_PROVIDER_UNAVAILABLE"
+    assert failed_job.retry_count == 0
+    assert failed_job.finished_at is not None
+    assert latest_error_code == "OCR_PROVIDER_UNAVAILABLE"
+
+
+@pytest.mark.anyio
+async def test_personal_pdf_garbled_direct_text_reports_ocr_no_text_found(
+    document_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    test_session_factory: sessionmaker,
+    processing_job_runner: CapturedProcessingJobRunner,
+) -> None:
+    monkeypatch.setattr(
+        "app.services.document_processing.extract_pdf_page_segments_with_pymupdf",
+        lambda *, source_path: (
+            [
+                ExtractedTextSegment(
+                    text="\x0f\x02\x03" * 20,
+                    metadata={
+                        "source_type": "pdf",
+                        "page_number": 1,
+                        "source_locator": "page:1",
+                        "extractor": "pymupdf",
+                    },
+                )
+            ],
+            1,
+            "pymupdf",
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.document_processing.render_pdf_pages_to_images",
+        lambda source_path, output_dir: _fake_rendered_pdf_pages(
+            output_dir=output_dir,
+            page_texts=["blank OCR page"],
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.document_processing.resolve_ocr_provider",
+        lambda: FakeOCRProvider(
+            result=OCRResult(
+                text="",
+                provider_name="fake_ocr",
+                provider_version="fake-v1",
+                language="eng",
+                confidence=0.0,
+                regions=(),
+            )
+        ),
+    )
+
+    alice = await _register_and_login(
+        document_client,
+        email="pdf-ocr-no-text@example.com",
+        username="pdf-ocr-no-text",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+    knowledge_base_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(alice["access_token"]),
+        name="PDF OCR No Text KB",
+    )
+    upload_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=alice_headers,
+        files={
+            "file": (
+                "ocr-no-text.pdf",
+                _build_minimal_pdf(text="placeholder"),
+                "application/pdf",
+            )
+        },
+    )
+    assert upload_response.status_code == 201
+    document_id = upload_response.json()["id"]
+
+    process_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}/process",
+        headers=alice_headers,
+    )
+    assert process_response.status_code == 200
+    processing_job_runner.run_all()
+
+    with test_session_factory() as db:
+        failed_job = db.scalar(
+            select(ProcessingJob).where(ProcessingJob.document_id == document_id)
+        )
+        saved_chunks = list(
+            db.scalars(
+                select(DocumentChunk).where(DocumentChunk.document_id == document_id)
+            )
+        )
+
+    assert saved_chunks == []
+    assert failed_job is not None
+    assert failed_job.status == ProcessingJobStatus.FAILED
+    assert failed_job.error_code == "OCR_NO_TEXT_FOUND"
+    assert failed_job.retry_count == 0
 
 
 @pytest.mark.anyio
@@ -3845,6 +4813,7 @@ async def test_personal_scanned_pdf_process_failure_marks_document_failed_for_oc
     assert failed_job is not None
     assert failed_job.status == ProcessingJobStatus.FAILED
     assert failed_job.error_message == "Simulated scanned PDF OCR failure."
+    assert failed_job.error_code == "OCR_PROVIDER_UNAVAILABLE"
 
 
 @pytest.mark.anyio
@@ -6038,3 +7007,140 @@ async def test_personal_docx_process_failure_marks_document_failed_for_invalid_d
         assert saved_document is not None
         assert saved_document.processing_status == DocumentProcessingStatus.FAILED
         assert saved_document.error_message == "Document is not a valid DOCX file."
+
+
+@pytest.mark.anyio
+async def test_personal_document_reindex_alias_creates_index_job(
+    document_client: AsyncClient,
+    test_session_factory: sessionmaker,
+    processing_job_runner: CapturedProcessingJobRunner,
+) -> None:
+    alice = await _register_and_login(
+        document_client,
+        email="personal-reindex-alias@example.com",
+        username="personal-reindex-alias",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+    knowledge_base_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(alice["access_token"]),
+        name="Personal Reindex Alias KB",
+    )
+
+    upload_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=alice_headers,
+        files={
+            "file": (
+                "reindex-alias.txt",
+                b"PureLink reindex alias keeps indexing on the async path.",
+                "text/plain",
+            )
+        },
+    )
+    assert upload_response.status_code == 201
+    document_id = upload_response.json()["id"]
+
+    processing_job_runner.run_all()
+    processing_job_runner.run_all()
+
+    reindex_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}/reindex",
+        headers=alice_headers,
+    )
+    assert reindex_response.status_code == 200
+    reindex_body = reindex_response.json()
+    assert reindex_body["job_type"] == "document_index"
+    assert reindex_body["job_status"] == "queued"
+    assert reindex_body["trigger_type"] == "index"
+
+    processing_job_runner.run_all()
+
+    with test_session_factory() as db:
+        index_jobs = list(
+            db.scalars(
+                select(ProcessingJob)
+                .where(
+                    ProcessingJob.document_id == document_id,
+                    ProcessingJob.job_type == ProcessingJobType.DOCUMENT_INDEX,
+                )
+                .order_by(ProcessingJob.id.asc())
+            )
+        )
+        assert len(index_jobs) == 2
+        assert [job.status for job in index_jobs] == [
+            ProcessingJobStatus.SUCCEEDED,
+            ProcessingJobStatus.SUCCEEDED,
+        ]
+
+
+@pytest.mark.anyio
+async def test_personal_knowledge_base_reindex_clears_old_index_and_queues_document_index_jobs(
+    document_client: AsyncClient,
+    tmp_path: Path,
+    test_session_factory: sessionmaker,
+    processing_job_runner: CapturedProcessingJobRunner,
+) -> None:
+    alice = await _register_and_login(
+        document_client,
+        email="personal-kb-reindex@example.com",
+        username="personal-kb-reindex",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+    knowledge_base_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(alice["access_token"]),
+        name="Personal KB Reindex",
+    )
+
+    uploaded_document_ids: list[int] = []
+    for filename, content in (
+        ("first.txt", b"First knowledge base document for reindex."),
+        ("second.txt", b"Second knowledge base document for reindex."),
+    ):
+        upload_response = await document_client.post(
+            f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+            headers=alice_headers,
+            files={"file": (filename, content, "text/plain")},
+        )
+        assert upload_response.status_code == 201
+        uploaded_document_ids.append(upload_response.json()["id"])
+
+    processing_job_runner.run_all()
+    processing_job_runner.run_all()
+
+    index_file = (
+        tmp_path
+        / "vector_store"
+        / "personal"
+        / f"knowledge_base_{knowledge_base_id}"
+        / "index.json"
+    )
+    assert index_file.exists()
+
+    reindex_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/reindex",
+        headers=alice_headers,
+    )
+    assert reindex_response.status_code == 200
+    reindex_body = reindex_response.json()
+    assert sorted(reindex_body["queued_document_ids"]) == sorted(uploaded_document_ids)
+    assert reindex_body["skipped_document_ids"] == []
+    assert len(reindex_body["queued_jobs"]) == 2
+    assert all(job["job_type"] == "document_index" for job in reindex_body["queued_jobs"])
+    assert index_file.exists() is False
+
+    processing_job_runner.run_all()
+
+    with test_session_factory() as db:
+        indexed_documents = [
+            db.get(Document, document_id) for document_id in uploaded_document_ids
+        ]
+        assert all(document is not None for document in indexed_documents)
+        assert all(
+            document.processing_status == DocumentProcessingStatus.INDEXED
+            for document in indexed_documents
+            if document is not None
+        )
+
+    assert index_file.exists()

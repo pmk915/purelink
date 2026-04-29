@@ -5,11 +5,13 @@ const API_BASE_URL =
 
 export class ApiClientError extends Error {
   status: number;
+  errorCode: string | null;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, errorCode: string | null = null) {
     super(message);
     this.name = "ApiClientError";
     this.status = status;
+    this.errorCode = errorCode;
   }
 }
 
@@ -94,17 +96,23 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   if (!response.ok) {
     let detail = `Request failed with status ${response.status}.`;
+    let errorCode: string | null = null;
 
     try {
       const payload = (await response.json()) as ApiErrorPayload;
       if (payload.detail) {
-        detail = payload.detail;
+        if (typeof payload.detail === "string") {
+          detail = payload.detail;
+        } else {
+          detail = payload.detail.message ?? payload.detail.error_code ?? detail;
+          errorCode = payload.detail.error_code ?? null;
+        }
       }
     } catch {
       // Ignore JSON parsing errors for non-JSON responses.
     }
 
-    throw new ApiClientError(detail, response.status);
+    throw new ApiClientError(detail, response.status, errorCode);
   }
 
   if (response.status === 204) {
@@ -129,17 +137,23 @@ async function requestBlob(path: string, token?: string | null): Promise<Blob> {
 
   if (!response.ok) {
     let detail = `Request failed with status ${response.status}.`;
+    let errorCode: string | null = null;
 
     try {
       const payload = (await response.json()) as ApiErrorPayload;
       if (payload.detail) {
-        detail = payload.detail;
+        if (typeof payload.detail === "string") {
+          detail = payload.detail;
+        } else {
+          detail = payload.detail.message ?? payload.detail.error_code ?? detail;
+          errorCode = payload.detail.error_code ?? null;
+        }
       }
     } catch {
       // Binary endpoints may return non-JSON error bodies.
     }
 
-    throw new ApiClientError(detail, response.status);
+    throw new ApiClientError(detail, response.status, errorCode);
   }
 
   return response.blob();
