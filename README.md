@@ -6,7 +6,7 @@
 ![Next.js](https://img.shields.io/badge/Next.js-frontend-black.svg)
 ![Docker](https://img.shields.io/badge/Docker-ready-2496ED.svg)
 
-PureLink Core 是一个轻量级 local-first 文本知识库问答系统，专注 `txt` / `md` / 普通文本型 `pdf` 的上传、处理、语义检索和带来源问答。
+PureLink Core 是一个轻量级 local-first 文本知识库问答系统，专注 `txt` / `md` / `docx` / 普通文本型 `pdf` 的上传、处理、语义检索和带来源问答。
 
 它不是多模态助手、视频处理系统，也不是默认启用 OCR / ASR 的重型 RAG 平台。当前 `Core` 版本的边界很明确：围绕团队内部文本知识沉淀、检索、问答和来源追踪，把默认部署保持在轻量、稳定、可自部署的范围内。
 
@@ -17,7 +17,7 @@ PureLink is a local-first, cloud-ready, self-hosted AI knowledge workspace for t
 PureLink Core 面向这样的主路径：
 
 ```text
-注册登录 -> 创建知识库 -> 上传 txt/md/pdf -> 自动处理 -> 建立索引 -> 提问 -> 查看 answer + citations
+注册登录 -> 创建知识库 -> 上传 txt/md/docx/pdf -> 自动处理 -> 建立索引 -> 提问 -> 查看 answer + citations
 ```
 
 适合场景：
@@ -31,7 +31,7 @@ PureLink Core 面向这样的主路径：
 
 - 用户注册 / 登录
 - 个人知识库 / 团队知识库
-- txt / md / 普通文本型 PDF 上传
+- txt / md / docx / 普通文本型 PDF 上传
 - sha256 文件去重
 - Redis + Worker 异步处理
 - `ProcessingJob` 状态管理、retry、timeout、worker 抢占
@@ -266,7 +266,7 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-  A[Upload txt/md/pdf] --> B[Auth and KB permission check]
+  A[Upload txt/md/docx/pdf] --> B[Auth and KB permission check]
   B --> C[Compute sha256]
   C --> D{Duplicate in KB?}
   D -->|Yes| E[Return duplicate document]
@@ -329,7 +329,7 @@ flowchart TD
 
 ### Short-term
 
-- 继续优化 txt / md / 普通文本型 PDF 的处理稳定性
+- 继续优化 txt / md / docx / 普通文本型 PDF 的处理稳定性
 - 改善 fastembed 检索质量和 reindex 体验
 - 完善 citation 展示和 source preview 体验
 - 持续收紧默认部署边界

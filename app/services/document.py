@@ -24,11 +24,13 @@ FEATURE_NOT_ENABLED = "FEATURE_NOT_ENABLED"
 SUPPORTED_DOCUMENT_SUFFIXES = {
     ".txt",
     ".md",
+    ".docx",
     ".pdf",
 }
 SUPPORTED_DOCUMENT_MIME_TYPES = {
     "text/plain",
     "text/markdown",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/pdf",
 }
 OCR_DOCUMENT_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
@@ -47,7 +49,7 @@ MEDIA_DOCUMENT_MIME_TYPES = {
     "video/quicktime",
     "video/x-m4v",
 }
-SUPPORTED_DOCUMENT_FORMAT_HINT = ".txt, .md, and .pdf"
+SUPPORTED_DOCUMENT_FORMAT_HINT = ".txt, .md, .docx, and .pdf"
 
 
 class DocumentUploadSupportError(ValueError):

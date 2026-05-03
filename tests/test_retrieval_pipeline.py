@@ -86,7 +86,7 @@ def _create_document(
     user: User,
     knowledge_base: KnowledgeBase,
     original_filename: str,
-    processing_status: DocumentProcessingStatus = DocumentProcessingStatus.READY,
+    processing_status: DocumentProcessingStatus = DocumentProcessingStatus.INDEXED,
 ) -> Document:
     document = Document(
         knowledge_base_id=knowledge_base.id,

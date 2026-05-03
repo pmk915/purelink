@@ -41,6 +41,7 @@ from app.services.text_quality import (
 SUPPORTED_STANDARD_PROCESS_SUFFIXES = {
     ".txt": "text",
     ".md": "markdown",
+    ".docx": "docx",
     ".pdf": "pdf",
 }
 OCR_PROCESS_SUFFIXES = {
@@ -84,7 +85,7 @@ WORDPROCESSINGML_NS = {
 }
 
 logger = logging.getLogger("purelink.documents")
-SUPPORTED_STANDARD_PROCESS_HINT = ".txt, .md, and .pdf"
+SUPPORTED_STANDARD_PROCESS_HINT = ".txt, .md, .docx, and .pdf"
 ERROR_PDF_TEXT_GARBLED = "PDF_TEXT_GARBLED"
 ERROR_PDF_TEXT_EXTRACTION_FAILED = "PDF_TEXT_EXTRACTION_FAILED"
 ERROR_OCR_PROVIDER_UNAVAILABLE = "OCR_PROVIDER_UNAVAILABLE"
@@ -339,6 +340,8 @@ def resolve_text_extractor(suffix: str) -> TextExtractor:
         return extract_text_from_txt
     if suffix == ".md":
         return extract_text_from_md
+    if suffix == ".docx":
+        return extract_text_from_docx
     if suffix == ".pdf":
         return extract_text_from_pdf
     if suffix in OCR_PROCESS_SUFFIXES:

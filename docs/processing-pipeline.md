@@ -6,7 +6,7 @@
 
 上传入口会完成以下动作：
 
-1. 文件类型校验：当前默认只支持 `txt` / `md` / 普通文本型 `pdf`
+1. 文件类型校验：当前默认只支持 `txt` / `md` / `docx` / 普通文本型 `pdf`
 2. 文件大小校验
 3. 计算 `sha256`
 4. 检查同一个 knowledge base 内是否已存在相同文件
@@ -28,6 +28,7 @@ queued -> processing
 
 - txt：直接读取文本
 - md：直接读取文本并抽取 heading
+- docx：提取 WordprocessingML 正文与 heading
 - pdf：通过 PyMuPDF 提取文本
 
 然后进入统一文本处理：
@@ -61,7 +62,7 @@ EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
 问答主链路：
 
 1. 问题进入检索
-2. retrieval 返回相关 chunks
+2. 只在 `indexed` 文档范围内做 retrieval，并返回相关 chunks
 3. 如果最高分低于 `RETRIEVAL_MIN_SCORE`，不强答
 4. 否则构建上下文
 5. 由 `LLM_PROVIDER` 或 `heuristic` 生成 answer
@@ -72,7 +73,7 @@ EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
 
 ```mermaid
 flowchart TD
-  A[Upload txt/md/pdf] --> B[Compute sha256]
+  A[Upload txt/md/docx/pdf] --> B[Compute sha256]
   B --> C{Duplicate in KB?}
   C -->|Yes| D[Return duplicate result]
   C -->|No| E[Create Document and ProcessingJob]

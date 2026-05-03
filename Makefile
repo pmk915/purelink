@@ -10,7 +10,7 @@ else
 PYTHON ?= python3
 endif
 
-.PHONY: up down logs ps build restart test test-python test-go check smoke e2e
+.PHONY: up down logs ps build restart test test-python test-go check smoke smoke-docx-rag e2e
 
 up:
 	$(COMPOSE) up --build -d
@@ -46,6 +46,9 @@ smoke:
 	if [ "$(KEEP_STACK_UP)" != "1" ]; then trap '$(COMPOSE) down' EXIT; fi; \
 	$(COMPOSE) up --build -d; \
 	scripts/e2e/01_personal_flow.sh
+
+smoke-docx-rag:
+	$(PYTHON) scripts/smoke_docx_rag.py
 
 e2e:
 	@set -euo pipefail; \

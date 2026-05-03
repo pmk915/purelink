@@ -73,10 +73,7 @@ def retrieve_chunks_for_documents(
         item
         for item in documents
         if item.review_status == required_review_status
-        and item.processing_status in {
-            DocumentProcessingStatus.INDEXED,
-            DocumentProcessingStatus.READY,
-        }
+        and item.processing_status == DocumentProcessingStatus.INDEXED
     ]
     if not searchable_documents:
         return []
@@ -85,11 +82,6 @@ def retrieve_chunks_for_documents(
         item.id
         for item in searchable_documents
         if item.processing_status == DocumentProcessingStatus.INDEXED
-    }
-    ready_document_ids = {
-        item.id
-        for item in searchable_documents
-        if item.processing_status == DocumentProcessingStatus.READY
     }
     searchable_document_ids = {item.id for item in searchable_documents}
     document_lookup = {item.id: item for item in documents}
@@ -113,20 +105,6 @@ def retrieve_chunks_for_documents(
         except DocumentEmbeddingError:
             # Keep retrieval usable from database chunks when a precomputed index is unavailable or corrupt.
             pass
-
-    if ready_document_ids:
-        vector_candidates.extend(
-            search_document_chunks(
-                db,
-                document_ids=ready_document_ids,
-                document_lookup=document_lookup,
-                scope=scope,
-                knowledge_base_id=knowledge_base_id,
-                query=processed_query.normalized_text,
-                team_id=team_id,
-                limit=candidate_limit,
-            )
-        )
 
     lexical_candidates = search_document_chunks_lexical(
         db,

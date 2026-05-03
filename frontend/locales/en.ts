@@ -149,9 +149,9 @@ export const en = {
       "The current user may not have access to this workspace.",
     uploadTitle: "Upload document",
     uploadDescriptionPersonal:
-      "The Core build supports .txt, .md, and text-based .pdf files. After upload, PureLink prepares them for search and Q&A automatically.",
+      "The Core build supports .txt, .md, .docx, and text-based .pdf files. After upload, PureLink prepares them for search and Q&A automatically.",
     uploadDescriptionTeam:
-      "The Core build supports .txt, .md, and text-based .pdf files. Admin uploads are prepared automatically; member uploads wait for review.",
+      "The Core build supports .txt, .md, .docx, and text-based .pdf files. Admin uploads are prepared automatically; member uploads wait for review.",
     documentsTitle: "Documents",
     documentsDescription:
       "Track document status while PureLink advances upload, review, and preparation automatically.",
@@ -164,9 +164,9 @@ export const en = {
       "This panel follows the latest background activity from the workspace."
   },
   documents: {
-    chooseFileError: "Choose a .txt, .md, or .pdf file first.",
-    unsupportedFileType: "This Core build focuses on text knowledge bases and currently supports only .txt, .md, and .pdf files.",
-    supportedFormats: "Supported formats: .txt, .md, .pdf",
+    chooseFileError: "Choose a .txt, .md, .docx, or .pdf file first.",
+    unsupportedFileType: "This Core build focuses on text knowledge bases and currently supports only .txt, .md, .docx, and .pdf files.",
+    supportedFormats: "Supported formats: .txt, .md, .docx, .pdf",
     uploadSubmit: "Upload document",
     uploading: "Uploading...",
     uploadFailed: "Upload failed.",

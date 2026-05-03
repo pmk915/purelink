@@ -54,7 +54,7 @@ Docker 镜像会构建 Next.js standalone production server。`NEXT_PUBLIC_API_B
 
 - 个人上传和审核通过的团队上传会自动提交到后端 `/process` job flow。
 - 团队管理员上传免审核；团队成员上传需要等待管理员审核。
-- `Core` 版本默认只处理 `.txt`、`.md` 和普通文本型 `.pdf`。
+- `Core` 版本默认只处理 `.txt`、`.md`、`.docx` 和普通文本型 `.pdf`。
 - 图片 OCR、扫描 PDF OCR、音频转写、视频转写和多模态入口默认关闭，不属于当前默认部署路径。
 - Citation 卡片使用结构化 `source_locator`，当前默认用于展示 PDF 页码和文本章节来源。
 - `parse -> chunk -> embed` legacy path 仍保留给兼容脚本、`document_tasks` 和 worker 验证使用，不建议新功能继续扩展。

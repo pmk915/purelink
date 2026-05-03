@@ -34,7 +34,7 @@
 
 因为来源追踪应该依赖真实 retrieval results，而不是让大模型自由编写。这样能保证每条 citation 都能落到真实 chunk。
 
-### 为什么默认只支持 txt / md / 普通 PDF？
+### 为什么默认只支持 txt / md / docx / 普通 PDF？
 
 这是为了保持边界清晰。默认能力越收敛，越容易保证：
 

@@ -23,6 +23,8 @@ function formatSourceLabel(sourceType: string | null) {
     case "markdown":
     case "md":
       return "Markdown";
+    case "docx":
+      return "DOCX";
     case "text":
     case "txt":
       return "Text";

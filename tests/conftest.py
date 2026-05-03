@@ -11,7 +11,6 @@ OPTIONAL_CORE_EXTENSION_PATTERNS = (
     "test_personal_scanned_pdf_process_uses_ocr_and_preserves_page_metadata",
     "test_personal_scanned_pdf_process_failure_marks_document_failed_for_ocr_error",
     "test_personal_scanned_pdf_",
-    "test_personal_docx_",
     "test_personal_image_",
     "test_personal_audio_",
     "test_personal_video_",
@@ -20,7 +19,7 @@ OPTIONAL_CORE_EXTENSION_PATTERNS = (
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     skip_optional_extension = pytest.mark.skip(
-        reason="Optional OCR/media/DOCX extension coverage is disabled in PureLink Core."
+        reason="Optional OCR/media extension coverage is disabled in PureLink Core."
     )
     optional_extension_files = {
         "tests/test_ocr_provider.py",

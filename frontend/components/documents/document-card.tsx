@@ -14,6 +14,7 @@ function supportsDocumentPreparation(filename: string) {
   return (
     normalized.endsWith(".txt") ||
     normalized.endsWith(".md") ||
+    normalized.endsWith(".docx") ||
     normalized.endsWith(".pdf")
   );
 }

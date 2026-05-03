@@ -28,6 +28,7 @@ type UploadItem = {
 const SUPPORTED_EXTENSIONS = [
   ".txt",
   ".md",
+  ".docx",
   ".pdf"
 ] as const;
 
@@ -69,7 +70,7 @@ export function DocumentUploadCard({
           ref={inputRef}
           type="file"
           multiple
-          accept=".txt,.TXT,.md,.MD,.pdf,.PDF,text/plain,text/markdown,application/pdf"
+          accept=".txt,.TXT,.md,.MD,.docx,.DOCX,.pdf,.PDF,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf"
           onChange={(event) => {
             const selectedFiles = Array.from(event.target.files ?? []);
             const unsupportedFile = selectedFiles.find(

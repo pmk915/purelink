@@ -2,7 +2,7 @@
 
 ## 1. chunk metadata 规范
 
-PureLink Core 当前支持三类默认来源。
+PureLink Core 当前支持四类默认来源。
 
 ### txt
 
@@ -15,6 +15,12 @@ PureLink Core 当前支持三类默认来源。
 - `source_type=markdown`
 - `source_locator=heading:title` 或 `markdown:chunk:n`
 - `extractor=markdown`
+
+### docx
+
+- `source_type=docx`
+- `source_locator=section:title` 或 `chars:start-end`
+- `extractor=minimal_docx_text`
 
 ### pdf
 

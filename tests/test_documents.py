@@ -317,6 +317,7 @@ async def _submit_manual_index_job(
     assert body["job_status"] == "queued"
     assert body["trigger_type"] == "index"
     processing_job_runner.run_all()
+    processing_job_runner.run_all()
     return body
 
 
@@ -3054,6 +3055,8 @@ async def test_personal_txt_process_endpoint_marks_ready_creates_chunks_and_supp
     assert list_response.status_code == 200
     assert list_response.json()[0]["processing_status"] == "ready"
 
+    processing_job_runner.run_all()
+
     retrieve_response = await document_client.post(
         f"/api/v1/knowledge-bases/{knowledge_base_id}/retrieve",
         headers=alice_headers,
@@ -3904,6 +3907,7 @@ async def test_personal_ready_document_can_reprocess_and_replace_chunks(
     assert reprocess_body["attempt_number"] == 2
 
     processing_job_runner.run_all()
+    processing_job_runner.run_all()
 
     retrieve_response = await document_client.post(
         f"/api/v1/knowledge-bases/{knowledge_base_id}/retrieve",
@@ -3918,7 +3922,7 @@ async def test_personal_ready_document_can_reprocess_and_replace_chunks(
     with test_session_factory() as db:
         saved_document = db.get(Document, document_id)
         assert saved_document is not None
-        assert saved_document.processing_status == DocumentProcessingStatus.READY
+        assert saved_document.processing_status == DocumentProcessingStatus.INDEXED
         saved_jobs = list(
             db.scalars(
                 select(ProcessingJob)
@@ -3942,11 +3946,9 @@ async def test_personal_ready_document_can_reprocess_and_replace_chunks(
     assert saved_jobs[2].status == ProcessingJobStatus.SUCCEEDED
     assert saved_jobs[2].previous_job_id == saved_jobs[0].id
     assert saved_jobs[3].trigger_type == ProcessingJobTrigger.INDEX
-    assert saved_jobs[3].status == ProcessingJobStatus.QUEUED
+    assert saved_jobs[3].status == ProcessingJobStatus.SUCCEEDED
     assert len(saved_chunks) == 1
     assert saved_chunks[0].chunk_text == "PureLink reprocessed content replaces the old chunk."
-
-    processing_job_runner.run_all()
 
     with test_session_factory() as db:
         indexed_document = db.get(Document, document_id)
@@ -4017,6 +4019,7 @@ async def test_personal_markdown_process_endpoint_marks_ready_creates_chunks_and
     assert process_response.status_code == 200
     assert process_response.json()["job_status"] == "queued"
 
+    processing_job_runner.run_all()
     processing_job_runner.run_all()
 
     with test_session_factory() as db:
@@ -4122,6 +4125,7 @@ async def test_personal_pdf_process_endpoint_marks_ready_and_preserves_page_meta
     assert process_response.status_code == 200
     assert process_response.json()["job_status"] == "queued"
 
+    processing_job_runner.run_all()
     processing_job_runner.run_all()
 
     with test_session_factory() as db:
@@ -4987,6 +4991,7 @@ async def test_personal_docx_process_endpoint_marks_ready_and_preserves_section_
     assert process_response.status_code == 200
     assert process_response.json()["job_status"] == "queued"
 
+    processing_job_runner.run_all()
     processing_job_runner.run_all()
 
     with test_session_factory() as db:
@@ -6610,8 +6615,7 @@ async def test_personal_index_failure_keeps_document_ready_and_manual_embed_can_
     )
     assert retrieve_response.status_code == 200
     retrieve_body = retrieve_response.json()
-    assert retrieve_body["results"]
-    assert retrieve_body["results"][0]["document_id"] == document_id
+    assert retrieve_body["results"] == []
 
     ask_response = await document_client.post(
         f"/api/v1/knowledge-bases/{knowledge_base_id}/ask",
@@ -6619,7 +6623,8 @@ async def test_personal_index_failure_keeps_document_ready_and_manual_embed_can_
         json={"question": "What survives indexing failure?", "top_k": 3},
     )
     assert ask_response.status_code == 200
-    assert ask_response.json()["citations"]
+    assert ask_response.json()["citations"] == []
+    assert "没有找到足够可靠的依据" in ask_response.json()["answer"]
 
     monkeypatch.setattr(
         document_indexing_service,
@@ -6856,7 +6861,7 @@ async def test_external_embedding_failure_keeps_document_ready_and_retrieval_fal
         json={"query": "lexical ready fallback", "top_k": 3},
     )
     assert retrieve_response.status_code == 200
-    assert retrieve_response.json()["results"][0]["document_id"] == document_id
+    assert retrieve_response.json()["results"] == []
 
     ask_response = await document_client.post(
         f"/api/v1/knowledge-bases/{knowledge_base_id}/ask",
@@ -6864,7 +6869,8 @@ async def test_external_embedding_failure_keeps_document_ready_and_retrieval_fal
         json={"question": "What remains available?", "top_k": 3},
     )
     assert ask_response.status_code == 200
-    assert ask_response.json()["citations"][0]["document_id"] == document_id
+    assert ask_response.json()["citations"] == []
+    assert "没有找到足够可靠的依据" in ask_response.json()["answer"]
     get_settings.cache_clear()
 
 
