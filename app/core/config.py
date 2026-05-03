@@ -157,6 +157,11 @@ class Settings:
     reranker_enabled: bool
     reranker_provider: str
     retrieval_min_score: float
+    citation_unit_min_chars: int
+    citation_unit_target_chars: int
+    citation_unit_max_chars: int
+    citation_unit_max_sentences: int
+    max_citations: int
     llm_provider: str
     llm_api_base: str
     llm_api_key: str
@@ -246,6 +251,11 @@ def get_settings() -> Settings:
         reranker_enabled=_get_bool("RERANKER_ENABLED", True),
         reranker_provider=os.getenv("RERANKER_PROVIDER", "local_rule_reranker").strip().lower(),
         retrieval_min_score=_get_float("RETRIEVAL_MIN_SCORE", 0.15),
+        citation_unit_min_chars=_get_int("CITATION_UNIT_MIN_CHARS", 40),
+        citation_unit_target_chars=_get_int("CITATION_UNIT_TARGET_CHARS", 120),
+        citation_unit_max_chars=_get_int("CITATION_UNIT_MAX_CHARS", 300),
+        citation_unit_max_sentences=_get_int("CITATION_UNIT_MAX_SENTENCES", 3),
+        max_citations=_get_int("MAX_CITATIONS", 6),
         llm_provider=os.getenv("LLM_PROVIDER", "heuristic").strip().lower(),
         llm_api_base=_get_str_alias(("LLM_API_BASE_URL", "LLM_API_BASE")),
         llm_api_key=_get_str_alias(("LLM_API_KEY", "DEEPSEEK_API_KEY")),

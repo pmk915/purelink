@@ -20,6 +20,7 @@ class Base(DeclarativeBase):
 def load_all_models() -> None:
     from app.models.conversation import Conversation  # noqa: F401
     from app.models.document import Document  # noqa: F401
+    from app.models.document_citation_unit import DocumentCitationUnit  # noqa: F401
     from app.models.document_chunk import DocumentChunk  # noqa: F401
     from app.models.document_task import DocumentTask  # noqa: F401
     from app.models.knowledge_base import KnowledgeBase  # noqa: F401

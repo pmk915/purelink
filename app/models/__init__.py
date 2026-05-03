@@ -1,5 +1,6 @@
 from app.models.conversation import Conversation
 from app.models.document import Document
+from app.models.document_citation_unit import DocumentCitationUnit
 from app.models.document_chunk import DocumentChunk
 from app.models.document_task import DocumentTask
 from app.models.enums import (
@@ -26,6 +27,7 @@ from app.models.user import User
 __all__ = [
     "Conversation",
     "Document",
+    "DocumentCitationUnit",
     "DocumentChunk",
     "DocumentProcessingStatus",
     "DocumentReviewStatus",

@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.document import Document
+from app.models.document_citation_unit import DocumentCitationUnit
 from app.models.document_chunk import DocumentChunk
 from app.models.enums import DocumentProcessingStatus
 from app.services.asr_provider import (
@@ -70,6 +71,13 @@ MARKDOWN_HEADING_PATTERN = re.compile(r"^(#{1,6})\s+(.*)$")
 MARKDOWN_LIST_MARKER_PATTERN = re.compile(r"^\s*([-*+]|\d+[.)])\s+")
 MARKDOWN_LINK_PATTERN = re.compile(r"!?\[([^\]]*)\]\([^)]+\)")
 MARKDOWN_EMPHASIS_PATTERN = re.compile(r"(\*\*|__|\*|_|~~)")
+SENTENCE_ENDING_CHARACTERS = {"。", "！", "？", "；", ".", "!", "?", ";"}
+LOW_VALUE_CITATION_TEXTS = {
+    "如下：",
+    "因此。",
+    "综上。",
+    "该方法。",
+}
 PDF_OBJECT_PATTERN = re.compile(rb"(?ms)(\d+)\s+\d+\s+obj(.*?)endobj")
 PDF_PAGE_TYPE_PATTERN = re.compile(rb"/Type\s*/Page\b")
 PDF_PAGES_TYPE_PATTERN = re.compile(rb"/Type\s*/Pages\b")
@@ -128,6 +136,16 @@ class GeneratedChunkPayload:
 
 
 @dataclass(frozen=True, slots=True)
+class GeneratedCitationUnitPayload:
+    chunk_key: str
+    unit_index: int
+    unit_text: str
+    start_char: int | None
+    end_char: int | None
+    metadata_json: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class ProcessedDocumentResult:
     chunk_count: int
     extracted_char_count: int
@@ -143,6 +161,13 @@ class PreparedTextSegment:
     metadata: dict[str, object]
     char_start: int
     char_end: int
+
+
+@dataclass(frozen=True, slots=True)
+class SentenceSpan:
+    text: str
+    start_char: int
+    end_char: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,11 +248,21 @@ def process_document(
             extracted=extracted,
             document_id=document.id,
         )
+        generated_citation_units = build_citation_unit_payloads(
+            chunks=generated_chunks,
+            document=document,
+        )
+        generated_citation_units = filter_generated_citation_units(
+            citation_units=generated_citation_units,
+            document_id=document.id,
+            knowledge_base_id=document.knowledge_base_id,
+        )
         report("persist_chunks")
         replace_document_chunks(
             db,
             document=document,
             chunks=generated_chunks,
+            citation_units=generated_citation_units,
         )
         report("finalize_document")
         update_document_processing_status(
@@ -1725,14 +1760,228 @@ def build_chunk_metadata(
     )
 
 
+def build_citation_unit_payloads(
+    *,
+    chunks: list[GeneratedChunkPayload],
+    document: Document,
+) -> list[GeneratedCitationUnitPayload]:
+    settings = get_settings()
+    generated_units: list[GeneratedCitationUnitPayload] = []
+    unit_index = 0
+
+    for chunk in chunks:
+        chunk_metadata = parse_chunk_metadata_json(chunk.metadata_json)
+        chunk_units = build_citation_units_for_chunk(
+            chunk=chunk,
+            chunk_metadata=chunk_metadata,
+            min_chars=settings.citation_unit_min_chars,
+            target_chars=settings.citation_unit_target_chars,
+            max_chars=settings.citation_unit_max_chars,
+            max_sentences=settings.citation_unit_max_sentences,
+        )
+        for unit in chunk_units:
+            generated_units.append(
+                GeneratedCitationUnitPayload(
+                    chunk_key=chunk.chunk_key,
+                    unit_index=unit_index,
+                    unit_text=unit.unit_text,
+                    start_char=unit.start_char,
+                    end_char=unit.end_char,
+                    metadata_json=unit.metadata_json,
+                )
+            )
+            unit_index += 1
+
+    return generated_units
+
+
+def parse_chunk_metadata_json(metadata_json: str | None) -> dict[str, object]:
+    if not metadata_json:
+        return {}
+    try:
+        payload = json.loads(metadata_json)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def build_citation_units_for_chunk(
+    *,
+    chunk: GeneratedChunkPayload,
+    chunk_metadata: dict[str, object],
+    min_chars: int,
+    target_chars: int,
+    max_chars: int,
+    max_sentences: int,
+) -> list[GeneratedCitationUnitPayload]:
+    sentence_spans = [
+        span
+        for span in split_text_into_sentence_spans(chunk.chunk_text)
+        if not is_low_value_sentence_span(span.text, chunk_metadata=chunk_metadata)
+    ]
+    if not sentence_spans:
+        return []
+
+    chunk_char_start = (
+        int(chunk_metadata["char_start"])
+        if isinstance(chunk_metadata.get("char_start"), int)
+        else None
+    )
+    units: list[GeneratedCitationUnitPayload] = []
+    local_unit_index = 0
+    cursor = 0
+    while cursor < len(sentence_spans):
+        merged_spans = [sentence_spans[cursor]]
+        merged_text = normalize_citation_unit_text(merged_spans[0].text)
+
+        while (
+            cursor + len(merged_spans) < len(sentence_spans)
+            and len(merged_spans) < max_sentences
+            and len(merged_text) < target_chars
+        ):
+            next_span = sentence_spans[cursor + len(merged_spans)]
+            candidate_text = normalize_citation_unit_text(
+                " ".join(span.text for span in [*merged_spans, next_span])
+            )
+            if len(candidate_text) > max_chars:
+                break
+            merged_spans.append(next_span)
+            merged_text = candidate_text
+            if len(merged_text) >= min_chars:
+                break
+
+        if len(merged_text) < min_chars and cursor + len(merged_spans) < len(sentence_spans):
+            next_span = sentence_spans[cursor + len(merged_spans)]
+            candidate_text = normalize_citation_unit_text(
+                " ".join(span.text for span in [*merged_spans, next_span])
+            )
+            if len(candidate_text) <= max_chars and len(merged_spans) < max_sentences:
+                merged_spans.append(next_span)
+                merged_text = candidate_text
+
+        if len(merged_text) > max_chars:
+            merged_text = merged_text[:max_chars].rstrip()
+
+        if not merged_text or is_low_value_sentence_span(merged_text, chunk_metadata=chunk_metadata):
+            cursor += max(1, len(merged_spans))
+            continue
+
+        unit_char_start = merged_spans[0].start_char
+        unit_char_end = merged_spans[-1].end_char
+        metadata = dict(chunk_metadata)
+        metadata["parent_chunk_index"] = chunk.chunk_index
+        metadata["char_start"] = (
+            chunk_char_start + unit_char_start if chunk_char_start is not None else unit_char_start
+        )
+        metadata["char_end"] = (
+            chunk_char_start + unit_char_end if chunk_char_start is not None else unit_char_end
+        )
+        units.append(
+            GeneratedCitationUnitPayload(
+                chunk_key=chunk.chunk_key,
+                unit_index=local_unit_index,
+                unit_text=merged_text,
+                start_char=metadata["char_start"] if isinstance(metadata["char_start"], int) else None,
+                end_char=metadata["char_end"] if isinstance(metadata["char_end"], int) else None,
+                metadata_json=json.dumps(metadata, ensure_ascii=False),
+            )
+        )
+        local_unit_index += 1
+        cursor += max(1, len(merged_spans))
+
+    return units
+
+
+def split_text_into_sentence_spans(text: str) -> list[SentenceSpan]:
+    spans: list[SentenceSpan] = []
+    start = 0
+    index = 0
+    text_length = len(text)
+
+    def flush(raw_start: int, raw_end: int) -> None:
+        trimmed_start = raw_start
+        trimmed_end = raw_end
+        while trimmed_start < trimmed_end and text[trimmed_start].isspace():
+            trimmed_start += 1
+        while trimmed_end > trimmed_start and text[trimmed_end - 1].isspace():
+            trimmed_end -= 1
+        if trimmed_start >= trimmed_end:
+            return
+        snippet = text[trimmed_start:trimmed_end]
+        spans.append(
+            SentenceSpan(
+                text=snippet,
+                start_char=trimmed_start,
+                end_char=trimmed_end,
+            )
+        )
+
+    while index < text_length:
+        character = text[index]
+        if character in SENTENCE_ENDING_CHARACTERS:
+            flush(start, index + 1)
+            start = index + 1
+        elif character == "\n":
+            newline_start = index
+            while index < text_length and text[index] == "\n":
+                index += 1
+            if index - newline_start >= 2:
+                flush(start, newline_start)
+                start = index
+            continue
+        index += 1
+
+    flush(start, text_length)
+    return spans
+
+
+def normalize_citation_unit_text(text: str) -> str:
+    return " ".join(text.split()).strip()
+
+
+def is_low_value_sentence_span(
+    text: str,
+    *,
+    chunk_metadata: dict[str, object],
+) -> bool:
+    normalized = normalize_citation_unit_text(text)
+    if not normalized:
+        return True
+    if normalized in LOW_VALUE_CITATION_TEXTS:
+        return True
+    if len(normalized) < 6 and not any(character.isalnum() for character in normalized):
+        return True
+    if len(normalized) < 8 and sum(character.isalnum() for character in normalized) < 3:
+        return True
+    if all(not character.isalnum() for character in normalized):
+        return True
+
+    section_title = chunk_metadata.get("section_title")
+    if isinstance(section_title, str) and normalize_citation_unit_text(section_title) == normalized:
+        return True
+
+    heading_path = chunk_metadata.get("heading_path")
+    if isinstance(heading_path, list):
+        for item in heading_path:
+            if isinstance(item, str) and normalize_citation_unit_text(item) == normalized:
+                return True
+
+    if normalized.endswith("...") and len(normalized) < 16:
+        return True
+    return False
+
+
 def replace_document_chunks(
     db: Session,
     *,
     document: Document,
     chunks: list[GeneratedChunkPayload],
+    citation_units: list[GeneratedCitationUnitPayload] | None = None,
 ) -> None:
     validate_generated_chunks(chunks)
+    db.execute(delete(DocumentCitationUnit).where(DocumentCitationUnit.document_id == document.id))
     db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == document.id))
+    now = datetime.now(UTC)
     for item in chunks:
         db.add(
             DocumentChunk(
@@ -1741,6 +1990,23 @@ def replace_document_chunks(
                 chunk_index=item.chunk_index,
                 chunk_text=item.chunk_text,
                 metadata_json=item.metadata_json,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+    for item in citation_units or []:
+        db.add(
+            DocumentCitationUnit(
+                document_id=document.id,
+                knowledge_base_id=document.knowledge_base_id,
+                chunk_key=item.chunk_key,
+                unit_index=item.unit_index,
+                unit_text=item.unit_text,
+                start_char=item.start_char,
+                end_char=item.end_char,
+                metadata_json=item.metadata_json,
+                created_at=now,
+                updated_at=now,
             )
         )
 
@@ -1759,6 +2025,52 @@ def validate_generated_chunks(chunks: list[GeneratedChunkPayload]) -> None:
                 "Chunk text quality is too low to save.",
                 error_code=ERROR_TEXT_QUALITY_TOO_LOW,
             )
+
+
+def validate_generated_citation_units(citation_units: list[GeneratedCitationUnitPayload]) -> None:
+    for item in citation_units:
+        quality = detect_text_quality(item.unit_text)
+        if "\x00" in item.unit_text or quality.status in {
+            TextQualityStatus.EMPTY,
+            TextQualityStatus.GARBLED,
+            TextQualityStatus.BINARY_LIKE,
+        }:
+            raise DocumentProcessingError(
+                "Citation unit text quality is too low to save.",
+                error_code=ERROR_TEXT_QUALITY_TOO_LOW,
+            )
+
+
+def filter_generated_citation_units(
+    *,
+    citation_units: list[GeneratedCitationUnitPayload],
+    document_id: int,
+    knowledge_base_id: int,
+) -> list[GeneratedCitationUnitPayload]:
+    valid_units: list[GeneratedCitationUnitPayload] = []
+    dropped_count = 0
+
+    for item in citation_units:
+        quality = detect_text_quality(item.unit_text)
+        if "\x00" in item.unit_text or quality.status in {
+            TextQualityStatus.EMPTY,
+            TextQualityStatus.GARBLED,
+            TextQualityStatus.BINARY_LIKE,
+        }:
+            dropped_count += 1
+            continue
+        valid_units.append(item)
+
+    if dropped_count:
+        logger.warning(
+            "dropped low-quality citation units document_id=%s knowledge_base_id=%s dropped_count=%s kept_count=%s",
+            document_id,
+            knowledge_base_id,
+            dropped_count,
+            len(valid_units),
+        )
+
+    return valid_units
 
 
 def extract_pdf_page_texts(raw_content: bytes) -> list[str]:

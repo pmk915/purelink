@@ -11,6 +11,7 @@ from app.models.enums import DocumentProcessingStatus, DocumentReviewStatus, enu
 from app.models.mixins import PrimaryKeyMixin, TimestampMixin
 
 if TYPE_CHECKING:
+    from app.models.document_citation_unit import DocumentCitationUnit
     from app.models.document_chunk import DocumentChunk
     from app.models.document_task import DocumentTask
     from app.models.knowledge_base import KnowledgeBase
@@ -113,6 +114,11 @@ class Document(PrimaryKeyMixin, TimestampMixin, Base):
         cascade="all, delete-orphan",
         order_by="DocumentChunk.chunk_index",
     )
+    citation_units: Mapped[list["DocumentCitationUnit"]] = relationship(
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="DocumentCitationUnit.unit_index",
+    )
     processing_jobs: Mapped[list["ProcessingJob"]] = relationship(
         back_populates="document",
         cascade="all, delete-orphan",
@@ -158,6 +164,13 @@ class Document(PrimaryKeyMixin, TimestampMixin, Base):
         if latest_job is None:
             return None
         return latest_job.error_code
+
+    @property
+    def latest_processing_job_last_error(self) -> str | None:
+        latest_job = self.latest_processing_job
+        if latest_job is None:
+            return None
+        return latest_job.last_error
 
     @property
     def latest_processing_job_trigger(self):
