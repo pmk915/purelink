@@ -152,9 +152,30 @@ export const en = {
       "The Core build supports .txt, .md, .docx, and text-based .pdf files. After upload, PureLink prepares them for search and Q&A automatically.",
     uploadDescriptionTeam:
       "The Core build supports .txt, .md, .docx, and text-based .pdf files. Admin uploads are prepared automatically; member uploads wait for review.",
+    askTab: "Q&A",
+    documentsTab: "Documents",
     documentsTitle: "Documents",
     documentsDescription:
       "Track document status while PureLink advances upload, review, and preparation automatically.",
+    documentsSummaryTitle: "Document status",
+    documentsSummaryDescription:
+      "Uploads, preparation, and retry actions stay in one place.",
+    viewAllDocuments: "View all documents",
+    recentConversationsTitle: "Recent conversations",
+    recentConversationsDescription:
+      "Questions started from this knowledge base appear here.",
+    recentConversationsEmpty:
+      "No conversations for this knowledge base yet. Ask a question to create one.",
+    qaEmptyState:
+      "This knowledge base has no documents yet. Upload a txt, md, docx, or text-based PDF first.",
+    qaPreparingState:
+      "Documents are being prepared. You can ask after processing finishes.",
+    qaWaitingReviewState:
+      "Some documents are still waiting for review before they can be used in Q&A.",
+    qaUnavailableState:
+      "No askable documents are available yet. Check failed documents or upload more content.",
+    qaReadyState:
+      "This knowledge base already has Q&A-ready documents. You can start asking now.",
     noDocuments: "No documents yet.",
     workspaceScopePersonal: "personal knowledge base",
     workspaceScopeTeam: (teamId: number) =>
@@ -235,7 +256,7 @@ export const en = {
     },
     statusUnsupported: "Unsupported format",
     statusUnsupportedHint:
-      "This Core build focuses on text knowledge bases and supports only .txt, .md, and text-based .pdf files.",
+      "This Core build focuses on text knowledge bases and supports only .txt, .md, .docx, and text-based .pdf files.",
     statusReadyToContinue: "Ready to continue",
     statusReadyToContinueHint:
       "The document was partially prepared and can continue to the final step.",
@@ -256,8 +277,13 @@ export const en = {
   qa: {
     askTitle: "Ask PureLink",
     askDescription:
-      "Ask questions about this knowledge base. Supporting sources stay visible in the side panel.",
+      "Start with a question here, then continue in the full conversation view with citations.",
     askQuestion: "Question",
+    askPlaceholder: "Ask this knowledge base...",
+    suggestedQuestions: "Suggested questions",
+    suggestionSummary: "Summarize the main topics in this knowledge base",
+    suggestionKeyPoints: "What are the key points in this knowledge base?",
+    suggestionUseKnowledgeBase: "Answer my question using these documents",
     askSubmit: "Ask",
     asking: "Answering...",
     askFailed: "Unable to generate an answer right now. Try again or contact an admin.",
@@ -358,6 +384,21 @@ export const en = {
     pageTitle: "Saved Q&A sessions",
     pageDescription:
       "Conversations are saved after you ask and stay linked to the related knowledge base.",
+    newConversation: "New conversation",
+    newConversationTitle: "What do you want to ask today?",
+    newConversationDescription:
+      "Pick a knowledge base you can access, then start asking.",
+    recentTitle: "Recent conversations",
+    currentKnowledgeBase: "Current knowledge base",
+    readyWhenYouAre: "Ready when you are",
+    noMessagesYet: "No messages yet. Start by asking this knowledge base.",
+    viewSources: (count: number) => `View sources ${count}`,
+    hideSources: (count: number) => `Hide sources ${count}`,
+    selectKnowledgeBase: "Choose a knowledge base",
+    selectKnowledgeBaseHint:
+      "Select a knowledge base before you send your first question.",
+    noKnowledgeBasesAvailable:
+      "No knowledge bases are available for this account yet. Create one or join a team first.",
     loading: "Loading conversations...",
     emptyTitle: "No conversations yet",
     emptyBody:

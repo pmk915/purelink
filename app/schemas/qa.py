@@ -25,7 +25,9 @@ class QuestionAnswerRequest(BaseModel):
 
 class CitationRead(BaseModel):
     citation_id: int | None = None
+    citation_marker: str | None = None
     citation_unit_id: int | None = None
+    chunk_db_id: int | None = None
     chunk_id: str
     document_id: int
     knowledge_base_id: int

@@ -1,12 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Sparkles } from "lucide-react";
-import { useMemo, useState } from "react";
+import { MessageSquarePlus, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 
-import { CitationCard } from "@/components/qa/citation-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -24,14 +22,15 @@ export type QaAvailability =
 
 export function AskWorkspace({
   availability,
-  onAsk
+  onAsk,
+  suggestions = []
 }: {
   availability: QaAvailability;
   onAsk: (values: AskValues) => Promise<AskResponse>;
+  suggestions?: string[];
 }) {
+  const router = useRouter();
   const { messages } = useI18n();
-  const [answerResult, setAnswerResult] = useState<AskResponse | null>(null);
-  const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
 
   const askForm = useForm<AskValues>({
     resolver: zodResolver(askSchema),
@@ -42,10 +41,6 @@ export function AskWorkspace({
     }
   });
 
-  const citations = useMemo(
-    () => answerResult?.citations ?? [],
-    [answerResult]
-  );
   const canAsk = availability === "ready";
   const availabilityMessage = {
     ready: null,
@@ -56,105 +51,91 @@ export function AskWorkspace({
   }[availability];
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_380px]">
-      <div className="space-y-6">
-        <Card>
-          <CardHeader>
+    <Card className="border-border/70 shadow-card">
+      <CardHeader className="space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+            <Sparkles className="h-5 w-5" />
+          </div>
+          <div className="space-y-1">
             <CardTitle>{messages.qa.askTitle}</CardTitle>
             <CardDescription>{messages.qa.askDescription}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form
-              className="space-y-4"
-              onSubmit={askForm.handleSubmit(async (values) => {
-                if (!canAsk) {
-                  return;
-                }
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {availabilityMessage ? (
+          <div className="rounded-2xl bg-secondary/70 px-4 py-3 text-sm text-muted-foreground">
+            {availabilityMessage}
+          </div>
+        ) : null}
 
-                try {
-                  const result = await onAsk({
-                    ...values,
-                    conversation_id: activeConversationId
-                  });
-                  setAnswerResult(result);
-                  setActiveConversationId(result.conversation_id);
-                } catch (error) {
-                  console.error("ask failed", { error });
-                  askForm.setError("root", {
-                    message: messages.qa.askFailed
-                  });
-                }
-              })}
-            >
-              {availabilityMessage ? (
-                <div className="rounded-2xl bg-secondary/70 px-4 py-3 text-sm text-muted-foreground">
-                  {availabilityMessage}
-                </div>
-              ) : null}
-              <div className="space-y-2">
-                <Label htmlFor="ask-question">{messages.qa.askQuestion}</Label>
-                <Textarea
-                  id="ask-question"
-                  rows={5}
-                  disabled={!canAsk}
-                  {...askForm.register("question")}
-                />
-                <p className="text-xs text-rose-600">{askForm.formState.errors.question?.message}</p>
-              </div>
-              {askForm.formState.errors.root?.message ? (
-                <div className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                  {askForm.formState.errors.root.message}
-                </div>
-              ) : null}
-              <div className="flex flex-wrap items-center gap-3">
-                <Button disabled={!canAsk || askForm.formState.isSubmitting}>
-                  <Sparkles className="h-4 w-4" />
-                  {askForm.formState.isSubmitting ? messages.qa.asking : messages.qa.askSubmit}
-                </Button>
-                {activeConversationId ? (
-                  <Link
-                    href={`/conversations/${activeConversationId}`}
-                    className="text-sm font-medium text-primary"
+        <form
+          className="space-y-4"
+          onSubmit={askForm.handleSubmit(async (values) => {
+            if (!canAsk) {
+              return;
+            }
+
+            try {
+              const result = await onAsk(values);
+              router.push(`/conversations/${result.conversation_id}`);
+            } catch (error) {
+              console.error("ask failed", { error });
+              askForm.setError("root", {
+                message: messages.qa.askFailed
+              });
+            }
+          })}
+        >
+          <div className="space-y-2">
+            <Label htmlFor="ask-question">{messages.qa.askQuestion}</Label>
+            <Textarea
+              id="ask-question"
+              rows={5}
+              disabled={!canAsk}
+              placeholder={messages.qa.askPlaceholder}
+              {...askForm.register("question")}
+            />
+            <p className="text-xs text-rose-600">{askForm.formState.errors.question?.message}</p>
+          </div>
+
+          {suggestions.length > 0 ? (
+            <div className="space-y-3">
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                {messages.qa.suggestedQuestions}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {suggestions.map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    type="button"
+                    className="rounded-full border border-border bg-background px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    onClick={() => askForm.setValue("question", suggestion, { shouldValidate: true })}
                   >
-                    {messages.qa.openConversation(activeConversationId)}
-                  </Link>
-                ) : null}
+                    {suggestion}
+                  </button>
+                ))}
               </div>
-            </form>
-
-            {answerResult ? (
-              <div className="mt-6 rounded-3xl bg-secondary/60 p-5">
-                <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                  {messages.qa.answerTitle}
-                </p>
-                <p className="mt-3 whitespace-pre-wrap leading-7 text-foreground">
-                  {answerResult.answer}
-                </p>
-              </div>
-            ) : null}
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="h-fit xl:sticky xl:top-28">
-        <CardHeader>
-          <CardTitle>{messages.qa.citationsTitle}</CardTitle>
-          <CardDescription>{messages.qa.citationsDescription}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {citations.length === 0 ? (
-            <div className="rounded-2xl bg-secondary/60 p-4 text-sm text-muted-foreground">
-              {answerResult ? messages.qa.noReliableSources : messages.qa.citationsEmpty}
             </div>
           ) : null}
-          {citations.map((citation) => (
-            <CitationCard
-              key={`${citation.document_id}-${citation.chunk_id}-${citation.citation_unit_id ?? "chunk"}`}
-              citation={citation}
-            />
-          ))}
-        </CardContent>
-      </Card>
-    </div>
+
+          {askForm.formState.errors.root?.message ? (
+            <div className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {askForm.formState.errors.root.message}
+            </div>
+          ) : null}
+
+          <Button disabled={!canAsk || askForm.formState.isSubmitting}>
+            {askForm.formState.isSubmitting ? (
+              <MessageSquarePlus className="h-4 w-4 animate-pulse" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+            {askForm.formState.isSubmitting ? messages.qa.asking : messages.qa.askSubmit}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
   );
 }

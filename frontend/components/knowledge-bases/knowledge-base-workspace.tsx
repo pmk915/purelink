@@ -1,15 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import * as documentApi from "@/api/documents";
-import { DocumentCard } from "@/components/documents/document-card";
+import { DocumentListItem } from "@/components/documents/document-list-item";
 import { DocumentUploadCard } from "@/components/documents/document-upload-card";
 import { AskWorkspace, type QaAvailability } from "@/components/qa/ask-workspace";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/hooks/use-auth";
+import { useConversations } from "@/hooks/use-conversations";
 import { useI18n } from "@/hooks/use-i18n";
 import {
   usePersonalDocuments,
@@ -23,6 +26,7 @@ import {
 } from "@/hooks/use-knowledge-bases";
 import { useTeam } from "@/hooks/use-teams";
 import { useAskPersonal, useAskTeam } from "@/hooks/use-qa";
+import { formatDate } from "@/lib/utils";
 import type { Document, KnowledgeBaseScope } from "@/types";
 
 function supportsDocumentPreparation(filename: string) {
@@ -56,8 +60,7 @@ function isDocumentQueryable(document: Document) {
   return (
     document.review_status !== "pending_review" &&
     document.review_status !== "rejected" &&
-    (document.processing_status === "ready" ||
-      document.processing_status === "indexed")
+    document.processing_status === "indexed"
   );
 }
 
@@ -99,6 +102,8 @@ function getQaAvailability(documents: Document[]): QaAvailability {
   return "unavailable";
 }
 
+type WorkspaceTab = "qa" | "documents";
+
 export function KnowledgeBaseWorkspace({
   scope,
   knowledgeBaseId,
@@ -111,6 +116,7 @@ export function KnowledgeBaseWorkspace({
   const { accessToken } = useAuth();
   const { messages } = useI18n();
   const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>("qa");
   const [processingDocumentIds, setProcessingDocumentIds] = useState<number[]>([]);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
 
@@ -119,6 +125,7 @@ export function KnowledgeBaseWorkspace({
   const teamQuery = useTeam(scope === "team" ? accessToken : null, teamId ?? Number.NaN);
   const personalDocumentsQuery = usePersonalDocuments(accessToken, knowledgeBaseId);
   const teamDocumentsQuery = useTeamDocuments(accessToken, teamId ?? Number.NaN, knowledgeBaseId);
+  const conversationsQuery = useConversations(accessToken);
   const uploadPersonal = useUploadPersonalDocument(accessToken, knowledgeBaseId);
   const uploadTeam = useUploadTeamDocument(accessToken, teamId ?? Number.NaN, knowledgeBaseId);
   const askPersonal = useAskPersonal(accessToken, knowledgeBaseId);
@@ -146,6 +153,22 @@ export function KnowledgeBaseWorkspace({
   );
 
   const qaAvailability = getQaAvailability(documents);
+  const totalDocuments = documents.length;
+  const askableDocuments = documents.filter(isDocumentQueryable).length;
+  const failedDocuments = documents.filter((document) => document.processing_status === "failed").length;
+  const preparingDocuments = documents.filter(isDocumentPreparing).length;
+  const recentConversations = useMemo(
+    () =>
+      (conversationsQuery.data ?? [])
+        .filter(
+          (conversation) =>
+            conversation.knowledge_base_id === knowledgeBaseId &&
+            conversation.scope === scope &&
+            conversation.team_id === (teamId ?? null)
+        )
+        .slice(0, 4),
+    [conversationsQuery.data, knowledgeBaseId, scope, teamId]
+  );
 
   const invalidateDocuments = async () => {
     if (scope === "personal") {
@@ -251,118 +274,233 @@ export function KnowledgeBaseWorkspace({
     );
   }
 
+  const tabButtonClassName = (tab: WorkspaceTab) =>
+    tab === activeTab ? "default" : "ghost";
+
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <CardTitle className="text-2xl">{knowledgeBase.name}</CardTitle>
-              <CardDescription className="mt-3 max-w-3xl text-base leading-7">
-                {knowledgeBase.description ?? messages.common.noDescription}
-              </CardDescription>
+      <Card className="border-border/70 shadow-card">
+        <CardHeader className="space-y-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={scope === "team" ? "secondary" : "default"}>
+                  {scope === "team" ? messages.common.team : messages.common.personal}
+                </Badge>
+                {teamId ? <Badge variant="outline">{messages.common.teamId(teamId)}</Badge> : null}
+                <Badge variant={askableDocuments > 0 ? "default" : "outline"}>
+                  {askableDocuments > 0 ? messages.documents.statusAvailable : messages.documents.statusProcessing}
+                </Badge>
+              </div>
+              <div>
+                <CardTitle className="text-2xl">{knowledgeBase.name}</CardTitle>
+                <CardDescription className="mt-2 max-w-3xl text-sm leading-7">
+                  {knowledgeBase.description ?? messages.common.noDescription}
+                </CardDescription>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Badge variant={scope === "team" ? "secondary" : "default"}>
-                {scope === "team" ? messages.common.team : messages.common.personal}
-              </Badge>
-              {teamId ? <Badge variant="outline">{messages.common.teamId(teamId)}</Badge> : null}
+
+            <div className="grid grid-cols-2 gap-3 text-sm text-muted-foreground sm:grid-cols-4">
+              <div className="rounded-2xl bg-secondary/60 px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em]">{messages.knowledgeBases.documentsTab}</p>
+                <p className="mt-2 text-lg font-semibold text-foreground">{totalDocuments}</p>
+              </div>
+              <div className="rounded-2xl bg-secondary/60 px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em]">{messages.knowledgeBases.askTab}</p>
+                <p className="mt-2 text-lg font-semibold text-foreground">{askableDocuments}</p>
+              </div>
+              <div className="rounded-2xl bg-secondary/60 px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em]">{messages.common.processing}</p>
+                <p className="mt-2 text-lg font-semibold text-foreground">{preparingDocuments}</p>
+              </div>
+              <div className="rounded-2xl bg-secondary/60 px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em]">{messages.documents.processingFailed}</p>
+                <p className="mt-2 text-lg font-semibold text-foreground">{failedDocuments}</p>
+              </div>
             </div>
           </div>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-          <span>{messages.common.knowledgeBaseId(knowledgeBase.id)}</span>
-          <span>
-            {messages.common.updatedAt} {new Date(knowledgeBase.updated_at).toLocaleString()}
-          </span>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+          <div className="flex flex-wrap gap-4">
+            <span>{messages.common.knowledgeBaseId(knowledgeBase.id)}</span>
+            <span>
+              {messages.common.updatedAt} {formatDate(knowledgeBase.updated_at)}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant={tabButtonClassName("qa")}
+              size="sm"
+              onClick={() => setActiveTab("qa")}
+            >
+              {messages.knowledgeBases.askTab}
+            </Button>
+            <Button
+              variant={tabButtonClassName("documents")}
+              size="sm"
+              onClick={() => setActiveTab("documents")}
+            >
+              {messages.knowledgeBases.documentsTab}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <div className="space-y-6">
-          <DocumentUploadCard
-            title={messages.knowledgeBases.uploadTitle}
-            description={
-              scope === "personal"
-                ? messages.knowledgeBases.uploadDescriptionPersonal
-                : messages.knowledgeBases.uploadDescriptionTeam
-            }
-            onUpload={async (file) => {
-              if (scope === "personal") {
-                const uploadedDocument = await uploadPersonal.mutateAsync(file);
-                setFeedback({
-                  tone: "success",
-                  message: messages.documents.uploadProcessingStarted(
-                    uploadedDocument.original_filename
-                  )
-                });
-                return;
+      {activeTab === "qa" ? (
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_340px]">
+          <div className="space-y-6">
+            <AskWorkspace
+              availability={qaAvailability}
+              suggestions={[
+                messages.qa.suggestionSummary,
+                messages.qa.suggestionKeyPoints,
+                messages.qa.suggestionUseKnowledgeBase
+              ]}
+              onAsk={(values) =>
+                scope === "personal" ? askPersonal.mutateAsync(values) : askTeam.mutateAsync(values)
               }
+            />
 
-              const uploadedDocument = await uploadTeam.mutateAsync(file);
-              if (isTeamAdmin) {
-                setFeedback({
-                  tone: "success",
-                  message: messages.documents.uploadProcessingStarted(
-                    uploadedDocument.original_filename
-                  )
-                });
-                return;
-              }
+            {feedback ? (
+              <div className={getFeedbackClassName(feedback.tone)}>{feedback.message}</div>
+            ) : null}
+          </div>
 
-              setFeedback({
-                tone: "success",
-                message: messages.documents.uploadSubmittedForReview(
-                  uploadedDocument.original_filename
-                )
-              });
-            }}
-            isUploading={uploadPersonal.isPending || uploadTeam.isPending}
-          />
+          <div className="space-y-6">
+            <Card className="border-border/70 shadow-card">
+              <CardHeader>
+                <CardTitle>{messages.knowledgeBases.recentConversationsTitle}</CardTitle>
+                <CardDescription>{messages.knowledgeBases.recentConversationsDescription}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {recentConversations.length === 0 ? (
+                  <div className="rounded-2xl bg-secondary/60 p-4 text-sm text-muted-foreground">
+                    {messages.knowledgeBases.recentConversationsEmpty}
+                  </div>
+                ) : (
+                  recentConversations.map((conversation) => (
+                    <Link
+                      key={conversation.id}
+                      href={`/conversations/${conversation.id}`}
+                      className="block rounded-2xl border border-border/70 bg-white/80 px-4 py-3 transition-colors hover:bg-accent"
+                    >
+                      <p className="text-sm font-medium text-foreground">{conversation.title}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {messages.common.updatedAt} {formatDate(conversation.updated_at)}
+                      </p>
+                    </Link>
+                  ))
+                )}
+              </CardContent>
+            </Card>
 
-          {feedback ? (
-            <div className={getFeedbackClassName(feedback.tone)}>{feedback.message}</div>
-          ) : null}
+            <Card className="border-border/70 shadow-card">
+              <CardHeader>
+                <CardTitle>{messages.knowledgeBases.documentsSummaryTitle}</CardTitle>
+                <CardDescription>{messages.knowledgeBases.documentsSummaryDescription}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-muted-foreground">
+                <div className="rounded-2xl bg-secondary/60 px-4 py-3">
+                  {qaAvailability === "empty"
+                    ? messages.knowledgeBases.qaEmptyState
+                    : qaAvailability === "preparing"
+                      ? messages.knowledgeBases.qaPreparingState
+                      : qaAvailability === "waiting_review"
+                        ? messages.knowledgeBases.qaWaitingReviewState
+                        : qaAvailability === "unavailable"
+                          ? messages.knowledgeBases.qaUnavailableState
+                          : messages.knowledgeBases.qaReadyState}
+                </div>
+                <Button variant="outline" size="sm" onClick={() => setActiveTab("documents")}>
+                  {messages.knowledgeBases.viewAllDocuments}
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
         </div>
+      ) : (
+        <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+          <div className="space-y-6">
+            <DocumentUploadCard
+              title={messages.knowledgeBases.uploadTitle}
+              description={
+                scope === "personal"
+                  ? messages.knowledgeBases.uploadDescriptionPersonal
+                  : messages.knowledgeBases.uploadDescriptionTeam
+              }
+              onUpload={async (file) => {
+                if (scope === "personal") {
+                  const uploadedDocument = await uploadPersonal.mutateAsync(file);
+                  setFeedback({
+                    tone: "success",
+                    message: messages.documents.uploadProcessingStarted(
+                      uploadedDocument.original_filename
+                    )
+                  });
+                  return;
+                }
 
-        <div className="space-y-6">
-          <Card>
+                const uploadedDocument = await uploadTeam.mutateAsync(file);
+                if (isTeamAdmin) {
+                  setFeedback({
+                    tone: "success",
+                    message: messages.documents.uploadProcessingStarted(
+                      uploadedDocument.original_filename
+                    )
+                  });
+                  return;
+                }
+
+                setFeedback({
+                  tone: "success",
+                  message: messages.documents.uploadSubmittedForReview(
+                    uploadedDocument.original_filename
+                  )
+                });
+              }}
+              isUploading={uploadPersonal.isPending || uploadTeam.isPending}
+            />
+
+            {feedback ? (
+              <div className={getFeedbackClassName(feedback.tone)}>{feedback.message}</div>
+            ) : null}
+          </div>
+
+          <Card className="border-border/70 shadow-card">
             <CardHeader>
               <CardTitle>{messages.knowledgeBases.documentsTitle}</CardTitle>
               <CardDescription>{messages.knowledgeBases.documentsDescription}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent>
               {documents.length === 0 ? (
                 <div className="rounded-2xl bg-secondary/60 p-4 text-sm text-muted-foreground">
                   {messages.knowledgeBases.noDocuments}
                 </div>
-              ) : null}
-
-              {documents.map((document) => (
-                <DocumentCard
-                  key={document.id}
-                  document={document}
-                  isProcessing={processingDocumentIds.includes(document.id)}
-                  onProcess={
-                    document.processing_status === "failed"
-                      ? async () => {
-                          await runProcessingPipeline(document);
-                        }
-                      : null
-                  }
-                />
-              ))}
+              ) : (
+                <div className="max-h-[720px] space-y-3 overflow-y-auto pr-1">
+                  {documents.map((document) => (
+                    <DocumentListItem
+                      key={document.id}
+                      document={document}
+                      scope={scope}
+                      knowledgeBaseId={knowledgeBaseId}
+                      teamId={teamId}
+                      isProcessing={processingDocumentIds.includes(document.id)}
+                      onProcess={
+                        document.processing_status === "failed"
+                          ? async () => {
+                              await runProcessingPipeline(document);
+                            }
+                          : null
+                      }
+                    />
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
-
-          <AskWorkspace
-            availability={qaAvailability}
-            onAsk={(values) =>
-              scope === "personal" ? askPersonal.mutateAsync(values) : askTeam.mutateAsync(values)
-            }
-          />
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -78,6 +78,7 @@ class RetrievedChunk:
     source_locator: str | None
     heading_path: tuple[str, ...] | None
     score: float
+    chunk_db_id: int | None = None
     ocr_provider: str | None = None
     ocr_provider_version: str | None = None
     asr_provider: str | None = None
@@ -89,6 +90,7 @@ class IndexChunkInput:
     chunk_id: str
     text: str
     metadata: dict[str, object] | None = None
+    chunk_db_id: int | None = None
 
 
 def resolve_vector_store_root(vector_store_dir: str | Path, *, base_dir: Path) -> Path:
@@ -213,6 +215,7 @@ def embed_document_chunks(
         metadata = item.get("metadata")
         chunk_inputs.append(
             IndexChunkInput(
+                chunk_db_id=None,
                 chunk_id=chunk_id,
                 text=text,
                 metadata=metadata if isinstance(metadata, dict) else None,
@@ -253,6 +256,7 @@ def embed_ready_document_chunks(
     fallback_source_type = infer_source_type_from_filename(document.original_filename)
     chunk_inputs = [
         IndexChunkInput(
+            chunk_db_id=item.id,
             chunk_id=item.chunk_key,
             text=item.chunk_text,
             metadata=_serialize_chunk_metadata_for_index(
@@ -355,6 +359,7 @@ def search_index(
             )
             results.append(
                 RetrievedChunk(
+                    chunk_db_id=_coerce_optional_int(chunk.get("chunk_db_id")),
                     chunk_id=chunk_id,
                     document_id=document_id,
                     knowledge_base_id=knowledge_base_id,
@@ -473,6 +478,7 @@ def _write_document_chunks_to_index(
             raise DocumentEmbeddingError("Embedding provider returned inconsistent vector dimensions.")
         entries.append(
             {
+                "chunk_db_id": chunk.chunk_db_id,
                 "chunk_id": chunk.chunk_id,
                 "document_id": document.id,
                 "knowledge_base_id": document.knowledge_base_id,

@@ -180,7 +180,9 @@ export interface DocumentPreview {
 
 export interface CitationLike {
   citation_id?: number | null;
+  citation_marker?: string | null;
   citation_unit_id?: number | null;
+  chunk_db_id?: number | null;
   chunk_id: string;
   document_id: number;
   knowledge_base_id: number;
@@ -262,7 +264,7 @@ export interface ConversationSummary {
   id: number;
   knowledge_base_id: number;
   title: string;
-  scope: string;
+  scope: KnowledgeBaseScope;
   team_id: number | null;
   created_at: string;
   updated_at: string;

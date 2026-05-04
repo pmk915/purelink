@@ -4,6 +4,9 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 
+STRONG_SNIPPET_BOUNDARY_CHARACTERS = {"。", "！", "？", "；", ".", "!", "?", ";"}
+WEAK_SNIPPET_BOUNDARY_CHARACTERS = {"，", ",", "、", "：", ":"}
+
 
 @dataclass(frozen=True, slots=True)
 class ChunkMetadata:
@@ -226,7 +229,72 @@ def build_chunk_snippet(text: str, *, max_length: int = 260) -> str:
     normalized = " ".join(text.split())
     if len(normalized) <= max_length:
         return normalized
-    return normalized[: max_length - 3].rstrip() + "..."
+    boundary = find_preferred_text_boundary(
+        normalized,
+        preferred_limit=max_length,
+        overflow_limit=min(len(normalized), max_length + max(40, max_length // 3)),
+    )
+    if boundary is None:
+        return normalized[: max_length - 3].rstrip() + "..."
+    trimmed = normalized[:boundary].rstrip(" ,，、:：")
+    if len(trimmed) == len(normalized):
+        return trimmed
+    return trimmed + "..."
+
+
+def find_preferred_text_boundary(
+    text: str,
+    *,
+    preferred_limit: int,
+    overflow_limit: int | None = None,
+) -> int | None:
+    normalized = " ".join(text.split())
+    if not normalized:
+        return None
+
+    effective_limit = min(len(normalized), max(preferred_limit, overflow_limit or preferred_limit))
+    strong_boundary = _find_last_boundary_index(
+        normalized,
+        limit=effective_limit,
+        boundary_characters=STRONG_SNIPPET_BOUNDARY_CHARACTERS,
+    )
+    if strong_boundary is not None:
+        return strong_boundary
+
+    weak_boundary = _find_last_boundary_index(
+        normalized,
+        limit=effective_limit,
+        boundary_characters=WEAK_SNIPPET_BOUNDARY_CHARACTERS,
+    )
+    if weak_boundary is not None:
+        return weak_boundary
+
+    whitespace_boundary = _find_last_whitespace_index(normalized, limit=effective_limit)
+    if whitespace_boundary is not None:
+        return whitespace_boundary
+
+    return None
+
+
+def _find_last_boundary_index(
+    text: str,
+    *,
+    limit: int,
+    boundary_characters: set[str],
+) -> int | None:
+    threshold = max(1, limit // 2)
+    for index in range(min(limit, len(text)) - 1, threshold - 1, -1):
+        if text[index] in boundary_characters:
+            return index + 1
+    return None
+
+
+def _find_last_whitespace_index(text: str, *, limit: int) -> int | None:
+    threshold = max(1, (limit * 2) // 3)
+    for index in range(min(limit, len(text)) - 1, threshold - 1, -1):
+        if text[index].isspace():
+            return index
+    return None
 
 
 def _coerce_int(value: object) -> int | None:

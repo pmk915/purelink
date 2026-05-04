@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -25,7 +25,10 @@ from app.services.document_embedding import build_index_relative_path
 from app.services.qa import (
     NO_RELIABLE_EVIDENCE_MESSAGE,
     answer_question,
+    extract_used_citation_ids,
+    load_citation_units_for_chunks,
     select_context_chunks_for_answer,
+    select_evidence_units,
 )
 from app.services.retrieval import (
     build_query_aware_chunk_snippet,
@@ -37,6 +40,14 @@ from app.services.retrieval import (
 
 
 load_all_models()
+
+
+class StaticAnswerGenerator:
+    def __init__(self, answer: str) -> None:
+        self.answer = answer
+
+    def generate(self, *, question: str, evidence_units, prompt) -> str:  # noqa: ANN001
+        return self.answer
 
 
 @pytest.fixture
@@ -137,8 +148,24 @@ def _create_citation_unit(
     start_char: int | None = None,
     end_char: int | None = None,
 ) -> DocumentCitationUnit:
+    parent_chunk = db.scalar(
+        select(DocumentChunk).where(
+            DocumentChunk.document_id == document.id,
+            DocumentChunk.chunk_key == chunk_key,
+        )
+    )
+    if parent_chunk is None:
+        chunk_index = int(chunk_key.rsplit(":", maxsplit=1)[-1]) if ":" in chunk_key else 0
+        parent_chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=chunk_index,
+            chunk_text=unit_text,
+            metadata=metadata,
+        )
     unit = DocumentCitationUnit(
         document_id=document.id,
+        chunk_id=parent_chunk.id,
         knowledge_base_id=document.knowledge_base_id,
         chunk_key=chunk_key,
         unit_index=unit_index,
@@ -158,6 +185,7 @@ def _retrieved_chunk(
     document_id: int,
     document_name: str,
     score: float,
+    chunk_db_id: int | None = None,
     text: str = "PureLink knowledge base chunk text",
     section_title: str | None = None,
     heading_path: tuple[str, ...] | None = None,
@@ -184,6 +212,7 @@ def _retrieved_chunk(
         source_locator=None,
         heading_path=heading_path,
         score=score,
+        chunk_db_id=chunk_db_id,
     )
 
 
@@ -300,9 +329,11 @@ def test_hybrid_merge_keeps_indexed_priority_bonus() -> None:
 
 def test_build_query_aware_chunk_snippet_centers_on_query_term() -> None:
     text = (
-        "intro " * 80
-        + "critical recovery token appears in this middle sentence "
-        + "tail " * 80
+        "开场说明。"
+        + ("前文 " * 50)
+        + "critical recovery token appears in this middle sentence."
+        + ("后文 " * 50)
+        + "结尾说明。"
     )
     processed_query = preprocess_retrieval_query("recovery token")
     snippet = build_query_aware_chunk_snippet(
@@ -314,6 +345,27 @@ def test_build_query_aware_chunk_snippet_centers_on_query_term() -> None:
     assert "recovery token" in snippet.lower()
     assert snippet.startswith("...")
     assert snippet.endswith("...")
+    assert "middle sentence." in snippet
+
+
+def test_build_query_aware_chunk_snippet_preserves_sentence_boundary_near_anchor() -> None:
+    text = (
+        "前置说明。"
+        "乌萨奇拥有除草检定5级证照。"
+        "乌萨奇通常有粉色内耳、圆眼睛和白色尾巴。"
+        "结尾说明。"
+    )
+    processed_query = preprocess_retrieval_query("乌萨奇长啥样")
+
+    snippet = build_query_aware_chunk_snippet(
+        text,
+        processed_query=processed_query,
+        max_length=36,
+    )
+
+    assert "粉色内耳" in snippet
+    assert not snippet.endswith("耳")
+    assert snippet.endswith(("。", "..."))
 
 
 def test_retrieve_falls_back_to_lexical_chunks_when_index_is_unavailable(
@@ -600,6 +652,205 @@ def test_answer_question_returns_empty_citations_when_scores_are_below_threshold
     assert result.citations == []
 
 
+def test_extract_used_citation_ids_normalizes_multiple_marker_formats() -> None:
+    answer = "乌萨奇是蓝色兔子外型 [S1]。它有粉色内耳 [1][S2]。另见 [1, 2]。"
+
+    assert extract_used_citation_ids(answer) == ["S1", "S2"]
+
+
+def test_answer_question_binds_claims_to_used_evidence_markers(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="乌萨奇.txt",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=f"{document.id}:0",
+            unit_index=0,
+            unit_text="乌萨奇是蓝色兔子外型。",
+            metadata={"source_type": "text", "source_locator": "text:chunk:0"},
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=f"{document.id}:1",
+            unit_index=1,
+            unit_text="乌萨奇有粉色内耳。",
+            metadata={"source_type": "text", "source_locator": "text:chunk:1"},
+        )
+        db.commit()
+
+        result = answer_question(
+            db=db,
+            question="乌萨奇长什么样？",
+            retrieved_chunks=[
+                _retrieved_chunk(
+                    chunk_id=f"{document.id}:0",
+                    document_id=document.id,
+                    document_name="乌萨奇.txt",
+                    score=0.93,
+                    text="乌萨奇是蓝色兔子外型。",
+                ),
+                _retrieved_chunk(
+                    chunk_id=f"{document.id}:1",
+                    document_id=document.id,
+                    document_name="乌萨奇.txt",
+                    score=0.91,
+                    text="乌萨奇有粉色内耳。",
+                ),
+            ],
+            generator=StaticAnswerGenerator(
+                "乌萨奇是蓝色兔子外型 [S1]。它有粉色内耳 [S2]。"
+            ),
+        )
+
+    assert result.answer == "乌萨奇是蓝色兔子外型 [S1]。它有粉色内耳 [S2]。"
+    assert [item.citation_marker for item in result.citations] == ["S1", "S2"]
+    assert [item.snippet for item in result.citations] == [
+        "乌萨奇是蓝色兔子外型。",
+        "乌萨奇有粉色内耳。",
+    ]
+
+
+def test_answer_question_returns_no_reliable_context_when_answer_has_no_valid_markers(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="乌萨奇.txt",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=f"{document.id}:0",
+            unit_index=0,
+            unit_text="乌萨奇只是角色之一。",
+            metadata={"source_type": "text", "source_locator": "text:chunk:0"},
+        )
+        db.commit()
+
+        result = answer_question(
+            db=db,
+            question="乌萨奇有没有白色尾巴？",
+            retrieved_chunks=[
+                _retrieved_chunk(
+                    chunk_id=f"{document.id}:0",
+                    document_id=document.id,
+                    document_name="乌萨奇.txt",
+                    score=0.93,
+                    text="乌萨奇只是角色之一。",
+                )
+            ],
+            generator=StaticAnswerGenerator("乌萨奇有白色尾巴 [S99]。"),
+        )
+
+    assert result.answer == NO_RELIABLE_EVIDENCE_MESSAGE
+    assert result.citations == []
+
+
+def test_load_citation_units_for_chunks_prefers_chunk_db_id(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="architecture.txt",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="Redis 只负责触发，ProcessingJob 保存事实来源。",
+            metadata={"source_type": "text"},
+        )
+        unit = _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=0,
+            unit_text="Redis 只负责触发，ProcessingJob 保存事实来源。",
+            metadata={"source_type": "text", "source_locator": "text:chunk:0"},
+        )
+        db.commit()
+
+        units_by_chunk = load_citation_units_for_chunks(
+            db=db,
+            chunks=[
+                _retrieved_chunk(
+                    chunk_id=chunk.chunk_key,
+                    chunk_db_id=chunk.id,
+                    document_id=document.id,
+                    document_name=document.original_filename,
+                    score=0.9,
+                    text=chunk.chunk_text,
+                )
+            ],
+        )
+
+    assert chunk.chunk_key in units_by_chunk
+    assert units_by_chunk[chunk.chunk_key][0].id == unit.id
+
+
+def test_load_citation_units_for_chunks_falls_back_to_chunk_key_when_db_id_missing(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="fallback.txt",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="Redis 只负责触发。",
+            metadata={"source_type": "text"},
+        )
+        unit = _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=0,
+            unit_text="Redis 只负责触发。",
+            metadata={"source_type": "text", "source_locator": "text:chunk:0"},
+        )
+        db.commit()
+
+        units_by_chunk = load_citation_units_for_chunks(
+            db=db,
+            chunks=[
+                _retrieved_chunk(
+                    chunk_id=chunk.chunk_key,
+                    chunk_db_id=None,
+                    document_id=document.id,
+                    document_name=document.original_filename,
+                    score=0.8,
+                    text=chunk.chunk_text,
+                )
+            ],
+        )
+
+    assert chunk.chunk_key in units_by_chunk
+    assert units_by_chunk[chunk.chunk_key][0].id == unit.id
+
+
 def test_answer_question_prefers_citation_unit_snippets(
     session_factory: sessionmaker,
 ) -> None:
@@ -650,6 +901,36 @@ def test_answer_question_prefers_citation_unit_snippets(
     assert citation.chunk_id == f"{document.id}:0"
     assert citation.snippet == "Redis 只保存 job_id，ProcessingJob 才是任务事实来源。"
     assert citation.section_title == "任务可靠性设计"
+
+
+def test_select_evidence_units_reranks_chinese_appearance_query() -> None:
+    retrieved_chunks = [
+        _retrieved_chunk(
+            chunk_id="1:0",
+            document_id=1,
+            document_name="乌萨奇.txt",
+            score=0.91,
+            text="乌萨奇的外貌特征是蓝色兔子外型。",
+        ),
+        _retrieved_chunk(
+            chunk_id="2:0",
+            document_id=2,
+            document_name="乌萨奇设定.txt",
+            score=0.9,
+            text="乌萨奇拥有除草检定5级证照。",
+        ),
+    ]
+
+    evidence_units = select_evidence_units(
+        question="乌萨奇长啥样",
+        retrieved_chunks=retrieved_chunks,
+        chunk_units={},
+        max_evidence_units=4,
+    )
+
+    assert evidence_units
+    assert evidence_units[0].chunk_id == "1:0"
+    assert evidence_units[0].lexical_relevance > evidence_units[1].lexical_relevance
 
 
 def test_answer_question_supports_multi_document_citations(
@@ -787,3 +1068,38 @@ def test_answer_question_falls_back_to_chunk_level_citation_when_units_are_missi
     assert citation.citation_unit_id is None
     assert citation.chunk_id == "1:0"
     assert citation.snippet == "Fallback chunk snippet remains available when units are missing."
+
+
+def test_answer_question_chunk_level_fallback_uses_sentence_aligned_snippet() -> None:
+    result = answer_question(
+        question="乌萨奇长啥样？",
+        retrieved_chunks=[
+            RetrievedChunk(
+                chunk_id="1:0",
+                document_id=1,
+                knowledge_base_id=1,
+                scope=KnowledgeBaseScope.PERSONAL.value,
+                team_id=None,
+                document_name="乌萨奇.txt",
+                text="乌萨奇通常有粉色内耳、圆眼睛和白色尾巴。它还拥有除草检定5级证照。",
+                snippet="乌萨奇通常有粉色内耳、圆眼",
+                source_type="text",
+                char_start=0,
+                char_end=40,
+                page_number=None,
+                start_time=None,
+                end_time=None,
+                section_title=None,
+                source_locator=None,
+                heading_path=None,
+                score=0.88,
+            )
+        ],
+    )
+
+    assert result.citations
+    citation = result.citations[0]
+    assert citation.citation_unit_id is None
+    assert citation.snippet.endswith("。")
+    assert "粉色内耳" in citation.snippet
+    assert "圆眼睛" in citation.snippet

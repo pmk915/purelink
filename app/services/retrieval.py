@@ -18,6 +18,7 @@ from app.models.enums import (
 )
 from app.services.chunk_metadata import (
     build_chunk_snippet,
+    find_preferred_text_boundary,
     infer_source_type_from_filename,
     parse_chunk_metadata,
 )
@@ -39,6 +40,7 @@ INDEXED_DOCUMENT_BONUS = 0.03
 DEFAULT_CANDIDATE_MULTIPLIER = 4
 MIN_CANDIDATE_LIMIT = 12
 WHITESPACE_PATTERN = re.compile(r"\s+")
+SNIPPET_BOUNDARY_CHARACTERS = {"。", "！", "？", "；", ".", "!", "?", ";", "，", ",", "、", "：", ":"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -421,12 +423,34 @@ def build_query_aware_chunk_snippet(
     if end - start < max_length:
         start = max(0, end - max_length)
 
+    start = _snap_snippet_start_to_boundary(normalized, start)
+    overflow_end = min(len(normalized), end + max(40, max_length // 3))
+    relative_boundary = find_preferred_text_boundary(
+        normalized[start:overflow_end],
+        preferred_limit=max(1, end - start),
+        overflow_limit=overflow_end - start,
+    )
+    if relative_boundary is not None:
+        end = start + relative_boundary
+
     snippet = normalized[start:end].strip()
     if start > 0:
         snippet = "..." + snippet
     if end < len(normalized):
         snippet = snippet.rstrip() + "..."
     return snippet
+
+
+def _snap_snippet_start_to_boundary(text: str, start: int, *, lookback: int = 80) -> int:
+    if start <= 0:
+        return 0
+    window_start = max(0, start - lookback)
+    boundary_index = None
+    for index in range(start - 1, window_start - 1, -1):
+        if text[index] in SNIPPET_BOUNDARY_CHARACTERS:
+            boundary_index = index + 1
+            break
+    return boundary_index if boundary_index is not None else start
 
 
 def _load_document_chunks(db: Session, *, document_ids: set[int]) -> list[DocumentChunk]:
@@ -462,6 +486,7 @@ def _build_retrieved_chunk_from_document_chunk(
     )
 
     return RetrievedChunk(
+        chunk_db_id=chunk.id,
         chunk_id=chunk.chunk_key,
         document_id=chunk.document_id,
         knowledge_base_id=knowledge_base_id,

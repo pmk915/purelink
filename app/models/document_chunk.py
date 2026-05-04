@@ -9,6 +9,7 @@ from app.db.base import Base
 from app.models.mixins import PrimaryKeyMixin, TimestampMixin
 
 if TYPE_CHECKING:
+    from app.models.document_citation_unit import DocumentCitationUnit
     from app.models.document import Document
 
 
@@ -37,3 +38,9 @@ class DocumentChunk(PrimaryKeyMixin, TimestampMixin, Base):
     metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     document: Mapped["Document"] = relationship(back_populates="chunks")
+    citation_units: Mapped[list["DocumentCitationUnit"]] = relationship(
+        back_populates="chunk",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="DocumentCitationUnit.unit_index",
+    )

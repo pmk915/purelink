@@ -103,6 +103,7 @@ class RetrievalQueryRequest(BaseModel):
 
 
 class RetrievedChunkRead(BaseModel):
+    chunk_db_id: int | None = None
     chunk_id: str
     document_id: int
     knowledge_base_id: int

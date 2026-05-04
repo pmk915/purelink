@@ -27,6 +27,7 @@ from app.db.base import Base, load_all_models
 from app.db.session import get_db
 from app.main import app
 from app.models.document import Document
+from app.models.document_citation_unit import DocumentCitationUnit
 from app.models.document_chunk import DocumentChunk
 from app.models.document_task import DocumentTask
 from app.models.enums import (
@@ -2586,7 +2587,7 @@ async def test_personal_knowledge_base_ask_can_use_openai_compatible_provider(
                 "choices": [
                     {
                         "message": {
-                            "content": "PureLink stores internal docs for teams."
+                            "content": "PureLink stores internal docs for teams. [S1]"
                         }
                     }
                 ]
@@ -2603,8 +2604,9 @@ async def test_personal_knowledge_base_ask_can_use_openai_compatible_provider(
     )
     assert ask_response.status_code == 200
     ask_body = ask_response.json()
-    assert ask_body["answer"] == "PureLink stores internal docs for teams."
+    assert ask_body["answer"] == "PureLink stores internal docs for teams. [S1]"
     assert ask_body["citations"]
+    assert ask_body["citations"][0]["citation_marker"] == "S1"
     assert captured_request["url"] == "https://llm.example/v1/chat/completions"
     assert captured_request["headers"] == {
         "Authorization": "Bearer test-key",
@@ -2614,6 +2616,16 @@ async def test_personal_knowledge_base_ask_can_use_openai_compatible_provider(
     payload = captured_request["json"]
     assert isinstance(payload, dict)
     assert payload["model"] == "test-model"
+    messages = payload["messages"]
+    assert isinstance(messages, list)
+    assert messages[0]["role"] == "system"
+    assert "你只能根据给定的 evidence units 回答" in messages[0]["content"]
+    assert "每个事实性结论后必须标注来源编号" in messages[0]["content"]
+    assert messages[1]["role"] == "user"
+    assert "What does PureLink store?" in messages[1]["content"]
+    assert "Evidence Units:" in messages[1]["content"]
+    assert "[S1]" in messages[1]["content"]
+    assert "PureLink stores internal docs for teams." in messages[1]["content"]
 
 
 @pytest.mark.anyio
@@ -2688,7 +2700,7 @@ async def test_personal_knowledge_base_ask_can_use_deepseek_provider(
                 "choices": [
                     {
                         "message": {
-                            "content": "PureLink stores internal docs for teams."
+                            "content": "PureLink stores internal docs for teams. [S1]"
                         }
                     }
                 ]
@@ -2705,8 +2717,9 @@ async def test_personal_knowledge_base_ask_can_use_deepseek_provider(
     )
     assert ask_response.status_code == 200
     ask_body = ask_response.json()
-    assert ask_body["answer"] == "PureLink stores internal docs for teams."
+    assert ask_body["answer"] == "PureLink stores internal docs for teams. [S1]"
     assert ask_body["citations"]
+    assert ask_body["citations"][0]["citation_marker"] == "S1"
     assert captured_request["url"] == "https://api.deepseek.com/chat/completions"
     payload = captured_request["json"]
     assert isinstance(payload, dict)
@@ -2718,15 +2731,19 @@ async def test_personal_knowledge_base_ask_can_use_deepseek_provider(
     messages = payload["messages"]
     assert isinstance(messages, list)
     assert messages[0]["role"] == "system"
-    assert "Answer only from the provided retrieval context." in messages[0]["content"]
+    assert "你只能根据给定的 evidence units 回答" in messages[0]["content"]
+    assert "每个事实性结论后必须标注来源编号" in messages[0]["content"]
     assert messages[1]["role"] == "user"
     assert "What does PureLink store?" in messages[1]["content"]
+    assert "Evidence Units:" in messages[1]["content"]
+    assert "[S1]" in messages[1]["content"]
     assert "PureLink stores internal docs for teams." in messages[1]["content"]
 
 
 @pytest.mark.anyio
 async def test_personal_ask_creates_and_reuses_conversation_history(
     document_client: AsyncClient,
+    test_session_factory: sessionmaker,
     processing_job_runner: CapturedProcessingJobRunner,
 ) -> None:
     alice = await _register_and_login(
@@ -2774,6 +2791,7 @@ async def test_personal_ask_creates_and_reuses_conversation_history(
     conversation_id = first_body["conversation_id"]
     assert isinstance(conversation_id, int)
     assert first_body["citations"]
+    assert first_body["citations"][0]["chunk_db_id"] is not None
 
     second_ask = await document_client.post(
         f"/api/v1/knowledge-bases/{knowledge_base_id}/ask",
@@ -2811,9 +2829,32 @@ async def test_personal_ask_creates_and_reuses_conversation_history(
     assert detail_body["messages"][1]["role"] == "assistant"
     assert detail_body["messages"][1]["citations"]
     assert detail_body["messages"][1]["citations"][0]["document_id"] == document_id
+    assert detail_body["messages"][1]["citations"][0]["chunk_db_id"] is not None
     assert detail_body["messages"][2]["role"] == "user"
     assert detail_body["messages"][2]["content"] == "Who is it for?"
     assert detail_body["messages"][3]["role"] == "assistant"
+
+    with test_session_factory() as db:
+        live_units = list(
+            db.scalars(
+                select(DocumentCitationUnit).where(DocumentCitationUnit.document_id == document_id)
+            )
+        )
+        assert live_units
+        for item in live_units:
+            db.delete(item)
+        db.commit()
+
+    snapshot_after_delete = await document_client.get(
+        f"/api/v1/conversations/{conversation_id}",
+        headers=alice_headers,
+    )
+    assert snapshot_after_delete.status_code == 200
+    snapshot_body = snapshot_after_delete.json()
+    assert snapshot_body["messages"][1]["citations"]
+    assert snapshot_body["messages"][1]["citations"][0]["snippet"]
+    assert snapshot_body["messages"][1]["citations"][0]["chunk_id"] == f"{document_id}:0"
+    assert snapshot_body["messages"][1]["citations"][0]["chunk_db_id"] is not None
 
     other_user_detail = await document_client.get(
         f"/api/v1/conversations/{conversation_id}",

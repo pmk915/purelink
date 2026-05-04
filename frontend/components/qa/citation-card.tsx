@@ -35,9 +35,11 @@ function formatSourceLabel(sourceType: string | null) {
 
 
 export function CitationCard({
-  citation
+  citation,
+  compact = false
 }: {
   citation: CitationLike | RetrievalResult;
+  compact?: boolean;
 }) {
   const { messages } = useI18n();
   const snippet = citation.snippet || citation.text;
@@ -63,11 +65,26 @@ export function CitationCard({
     typeof textRangeEnd === "number";
 
   return (
-    <div className="rounded-2xl border border-border/70 bg-white/80 p-4">
+    <div
+      className={
+        compact
+          ? "rounded-2xl border border-border/50 bg-white/70 px-3.5 py-3"
+          : "rounded-2xl border border-border/70 bg-white/80 p-4"
+      }
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-foreground">{documentName}</p>
-          <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-2">
+            {citation.citation_marker ? (
+              <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] font-medium text-foreground">
+                [{citation.citation_marker}]
+              </span>
+            ) : null}
+            <p className={compact ? "text-xs font-medium text-foreground" : "text-sm font-medium text-foreground"}>
+              {documentName}
+            </p>
+          </div>
+          <div className={compact ? "mt-1.5 flex flex-wrap gap-2 text-[11px] text-muted-foreground" : "mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground"}>
             <span>{sourceLabel}</span>
             {hasPageNumber ? (
               <span>{messages.qa.citationPage(pageNumber)}</span>
@@ -97,14 +114,22 @@ export function CitationCard({
           </span>
         ) : null}
       </div>
-      <p className="mt-3 text-sm leading-6 text-foreground">{snippet}</p>
+      <p
+        className={
+          compact
+            ? "mt-2 line-clamp-3 text-sm leading-6 text-foreground"
+            : "mt-3 text-sm leading-6 text-foreground"
+        }
+      >
+        {snippet}
+      </p>
       {previewUrl ? (
-        <div className="mt-4">
+        <div className={compact ? "mt-3" : "mt-4"}>
           <Link
             className={buttonVariants({
               variant: "outline",
               size: "sm",
-              className: "rounded-xl"
+              className: compact ? "h-8 rounded-xl px-2.5 text-xs" : "rounded-xl"
             })}
             href={previewUrl}
           >

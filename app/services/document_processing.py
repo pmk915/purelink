@@ -28,6 +28,7 @@ from app.services.asr_provider import (
 )
 from app.services.chunk_metadata import (
     build_chunk_metadata_payload,
+    build_source_locator,
     normalize_source_type,
 )
 from app.services.document import update_document_processing_status
@@ -72,6 +73,7 @@ MARKDOWN_LIST_MARKER_PATTERN = re.compile(r"^\s*([-*+]|\d+[.)])\s+")
 MARKDOWN_LINK_PATTERN = re.compile(r"!?\[([^\]]*)\]\([^)]+\)")
 MARKDOWN_EMPHASIS_PATTERN = re.compile(r"(\*\*|__|\*|_|~~)")
 SENTENCE_ENDING_CHARACTERS = {"。", "！", "？", "；", ".", "!", "?", ";"}
+CLAUSE_ENDING_CHARACTERS = {"，", ",", "、", "：", ":"}
 LOW_VALUE_CITATION_TEXTS = {
     "如下：",
     "因此。",
@@ -1818,7 +1820,10 @@ def build_citation_units_for_chunk(
 ) -> list[GeneratedCitationUnitPayload]:
     sentence_spans = [
         span
-        for span in split_text_into_sentence_spans(chunk.chunk_text)
+        for span in expand_sentence_spans_for_citation_units(
+            split_text_into_sentence_spans(chunk.chunk_text),
+            max_chars=max_chars,
+        )
         if not is_low_value_sentence_span(span.text, chunk_metadata=chunk_metadata)
     ]
     if not sentence_spans:
@@ -1861,9 +1866,6 @@ def build_citation_units_for_chunk(
                 merged_spans.append(next_span)
                 merged_text = candidate_text
 
-        if len(merged_text) > max_chars:
-            merged_text = merged_text[:max_chars].rstrip()
-
         if not merged_text or is_low_value_sentence_span(merged_text, chunk_metadata=chunk_metadata):
             cursor += max(1, len(merged_spans))
             continue
@@ -1877,6 +1879,15 @@ def build_citation_units_for_chunk(
         )
         metadata["char_end"] = (
             chunk_char_start + unit_char_end if chunk_char_start is not None else unit_char_end
+        )
+        metadata["source_locator"] = build_source_locator(
+            source_type=str(metadata.get("source_type")) if isinstance(metadata.get("source_type"), str) else None,
+            char_start=metadata["char_start"] if isinstance(metadata["char_start"], int) else None,
+            char_end=metadata["char_end"] if isinstance(metadata["char_end"], int) else None,
+            page_number=int(metadata["page_number"]) if isinstance(metadata.get("page_number"), int) else None,
+            start_time=float(metadata["start_time"]) if isinstance(metadata.get("start_time"), (int, float)) else None,
+            end_time=float(metadata["end_time"]) if isinstance(metadata.get("end_time"), (int, float)) else None,
+            section_title=str(metadata["section_title"]) if isinstance(metadata.get("section_title"), str) else None,
         )
         units.append(
             GeneratedCitationUnitPayload(
@@ -1892,6 +1903,92 @@ def build_citation_units_for_chunk(
         cursor += max(1, len(merged_spans))
 
     return units
+
+
+def expand_sentence_spans_for_citation_units(
+    sentence_spans: list[SentenceSpan],
+    *,
+    max_chars: int,
+) -> list[SentenceSpan]:
+    expanded: list[SentenceSpan] = []
+    for span in sentence_spans:
+        expanded.extend(split_oversized_sentence_span(span, max_chars=max_chars))
+    return expanded
+
+
+def split_oversized_sentence_span(
+    span: SentenceSpan,
+    *,
+    max_chars: int,
+) -> list[SentenceSpan]:
+    normalized = normalize_citation_unit_text(span.text)
+    if len(normalized) <= max_chars:
+        return [span]
+
+    clause_spans = split_text_into_clause_spans(span.text, base_start=span.start_char)
+    if len(clause_spans) <= 1:
+        return [span]
+
+    merged_spans: list[SentenceSpan] = []
+    cursor = 0
+    while cursor < len(clause_spans):
+        current = clause_spans[cursor]
+        current_text = normalize_citation_unit_text(current.text)
+        next_index = cursor + 1
+
+        while next_index < len(clause_spans):
+            candidate = clause_spans[next_index]
+            candidate_text = normalize_citation_unit_text(f"{current_text} {candidate.text}")
+            if len(candidate_text) > max_chars:
+                break
+            current = SentenceSpan(
+                text=span.text[current.start_char - span.start_char:candidate.end_char - span.start_char],
+                start_char=current.start_char,
+                end_char=candidate.end_char,
+            )
+            current_text = candidate_text
+            next_index += 1
+
+        merged_spans.append(
+            SentenceSpan(
+                text=normalize_citation_unit_text(current.text),
+                start_char=current.start_char,
+                end_char=current.end_char,
+            )
+        )
+        cursor = next_index
+
+    return merged_spans or [span]
+
+
+def split_text_into_clause_spans(text: str, *, base_start: int = 0) -> list[SentenceSpan]:
+    spans: list[SentenceSpan] = []
+    start = 0
+    text_length = len(text)
+
+    def flush(raw_start: int, raw_end: int) -> None:
+        trimmed_start = raw_start
+        trimmed_end = raw_end
+        while trimmed_start < trimmed_end and text[trimmed_start].isspace():
+            trimmed_start += 1
+        while trimmed_end > trimmed_start and text[trimmed_end - 1].isspace():
+            trimmed_end -= 1
+        if trimmed_start >= trimmed_end:
+            return
+        spans.append(
+            SentenceSpan(
+                text=text[trimmed_start:trimmed_end],
+                start_char=base_start + trimmed_start,
+                end_char=base_start + trimmed_end,
+            )
+        )
+
+    for index, character in enumerate(text):
+        if character in CLAUSE_ENDING_CHARACTERS:
+            flush(start, index + 1)
+            start = index + 1
+    flush(start, text_length)
+    return spans
 
 
 def split_text_into_sentence_spans(text: str) -> list[SentenceSpan]:
@@ -1979,27 +2076,38 @@ def replace_document_chunks(
     document: Document,
     chunks: list[GeneratedChunkPayload],
     citation_units: list[GeneratedCitationUnitPayload] | None = None,
-) -> None:
+) -> list[DocumentChunk]:
     validate_generated_chunks(chunks)
     db.execute(delete(DocumentCitationUnit).where(DocumentCitationUnit.document_id == document.id))
     db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == document.id))
     now = datetime.now(UTC)
+    saved_chunks: list[DocumentChunk] = []
     for item in chunks:
-        db.add(
-            DocumentChunk(
-                document_id=document.id,
-                chunk_key=item.chunk_key,
-                chunk_index=item.chunk_index,
-                chunk_text=item.chunk_text,
-                metadata_json=item.metadata_json,
-                created_at=now,
-                updated_at=now,
-            )
+        saved_chunk = DocumentChunk(
+            document_id=document.id,
+            chunk_key=item.chunk_key,
+            chunk_index=item.chunk_index,
+            chunk_text=item.chunk_text,
+            metadata_json=item.metadata_json,
+            created_at=now,
+            updated_at=now,
         )
+        db.add(saved_chunk)
+        saved_chunks.append(saved_chunk)
+    db.flush()
+
+    chunk_lookup = {item.chunk_key: item for item in saved_chunks}
     for item in citation_units or []:
+        parent_chunk = chunk_lookup.get(item.chunk_key)
+        if parent_chunk is None:
+            raise DocumentProcessingError(
+                "Citation unit parent chunk is missing.",
+                error_code=ERROR_CHUNK_PERSIST_FAILED,
+            )
         db.add(
             DocumentCitationUnit(
                 document_id=document.id,
+                chunk_id=parent_chunk.id,
                 knowledge_base_id=document.knowledge_base_id,
                 chunk_key=item.chunk_key,
                 unit_index=item.unit_index,
@@ -2011,6 +2119,7 @@ def replace_document_chunks(
                 updated_at=now,
             )
         )
+    return saved_chunks
 
 
 def validate_generated_chunks(chunks: list[GeneratedChunkPayload]) -> None:
