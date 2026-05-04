@@ -40,6 +40,7 @@ class ProcessingJobRead(BaseModel):
     locked_by: str | None
     error_code: str | None
     error_message: str | None
+    last_error: str | None
     created_at: datetime
     updated_at: datetime
     started_at: datetime | None

@@ -179,6 +179,8 @@ export interface DocumentPreview {
 }
 
 export interface CitationLike {
+  citation_id?: number | null;
+  citation_unit_id?: number | null;
   chunk_id: string;
   document_id: number;
   knowledge_base_id: number;

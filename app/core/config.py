@@ -172,6 +172,7 @@ class Settings:
     processing_queue_key: str
     processing_inflight_queue_key: str
     processing_queue_block_timeout_seconds: int
+    processing_queue_recovery_interval_seconds: int
     processing_job_timeout_seconds: int
     max_upload_size_mb: int
     max_active_jobs_per_user: int
@@ -274,6 +275,10 @@ def get_settings() -> Settings:
         processing_queue_block_timeout_seconds=_get_int(
             "PROCESSING_QUEUE_BLOCK_TIMEOUT_SECONDS",
             5,
+        ),
+        processing_queue_recovery_interval_seconds=_get_int(
+            "PROCESSING_QUEUE_RECOVERY_INTERVAL_SECONDS",
+            30,
         ),
         processing_job_timeout_seconds=_get_int(
             "PROCESSING_JOB_TIMEOUT_SECONDS",

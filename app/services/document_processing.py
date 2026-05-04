@@ -148,6 +148,7 @@ class GeneratedCitationUnitPayload:
 @dataclass(frozen=True, slots=True)
 class ProcessedDocumentResult:
     chunk_count: int
+    citation_unit_count: int
     extracted_char_count: int
     extractor: str
     source_type: str
@@ -332,6 +333,7 @@ def process_document(
     )
     return ProcessedDocumentResult(
         chunk_count=len(generated_chunks),
+        citation_unit_count=len(generated_citation_units),
         extracted_char_count=extracted.extracted_char_count,
         extractor=extracted.extractor,
         source_type=extracted.source_type,

@@ -187,9 +187,14 @@ EMBEDDING_MODEL=
 
 已有 `indexed` 文档仍然使用旧 index artifact。修改 `EMBEDDING_PROVIDER`、`EMBEDDING_MODEL` 或 `EMBEDDING_NORMALIZE` 后，需要重新索引旧文档。
 
+如果你此后又上传了新文档，PureLink 会在自动 `document_index` 阶段检测旧 index metadata；一旦发现 knowledge base 里存在旧向量配置，会优先基于现有 `DocumentChunk` 自动重建整个 knowledge base 的索引，而不是把新文档混进旧向量空间。
+
 ### provider/model 不匹配是什么意思？
 
-当前 `.env` 中的 embedding 配置，与旧 index artifact 记录的 metadata 不一致。PureLink 会拒绝混合向量空间，并提示你执行知识库级 `reindex`。
+当前 `.env` 中的 embedding 配置，与旧 index artifact 记录的 metadata 不一致。PureLink 不允许混合向量空间。
+
+- 如果系统能从数据库里的 `DocumentChunk` 重建知识库索引，就会自动重建。
+- 如果缺少可用 chunk 或你只是单纯改了配置但还没有触发新的 index job，仍然需要手动执行知识库级 `reindex`。
 
 ### `sentence_transformers` 为什么报未安装？
 

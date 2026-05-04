@@ -3673,7 +3673,7 @@ async def test_personal_txt_process_sanitizes_nul_before_persisting_chunks(
 
 
 @pytest.mark.anyio
-async def test_personal_process_submission_failure_marks_document_failed_when_queue_unavailable(
+async def test_personal_process_submission_failure_leaves_queued_job_when_queue_unavailable(
     document_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
     test_session_factory: sessionmaker,
@@ -3706,7 +3706,7 @@ async def test_personal_process_submission_failure_marks_document_failed_when_qu
         files={"file": ("queue-down.txt", b"Queue failure should not fallback.", "text/plain")},
     )
     assert upload_response.status_code == 500
-    assert upload_response.json()["detail"] == "Unable to submit processing job."
+    assert "remains queued" in upload_response.json()["detail"]
 
     with test_session_factory() as db:
         saved_document = db.scalar(
@@ -3714,8 +3714,8 @@ async def test_personal_process_submission_failure_marks_document_failed_when_qu
         )
         assert saved_document is not None
         document_id = saved_document.id
-        assert saved_document.processing_status == DocumentProcessingStatus.FAILED
-        assert saved_document.error_message == "Unable to submit processing job."
+        assert saved_document.processing_status == DocumentProcessingStatus.PROCESSING
+        assert saved_document.error_message is None
         saved_jobs = list(
             db.scalars(
                 select(ProcessingJob)
@@ -3732,8 +3732,9 @@ async def test_personal_process_submission_failure_marks_document_failed_when_qu
         )
 
     assert len(saved_jobs) == 1
-    assert saved_jobs[0].status == ProcessingJobStatus.FAILED
-    assert saved_jobs[0].error_message == "Unable to submit processing job."
+    assert saved_jobs[0].status == ProcessingJobStatus.QUEUED
+    assert saved_jobs[0].job_type == ProcessingJobType.DOCUMENT_PROCESS
+    assert saved_jobs[0].error_message is None
     assert saved_chunks == []
 
 
@@ -6452,6 +6453,8 @@ async def test_personal_ready_document_auto_upgrades_to_indexed_after_process(
     assert process_response.status_code == 200
     assert process_response.json()["job_status"] == "queued"
     assert process_response.json()["job_type"] == "document_process"
+    assert len(processing_job_runner.submissions) == 1
+    assert processing_job_runner.submissions[0]["job_type"] == "document_process"
 
     processing_job_runner.run_all()
 
@@ -6472,6 +6475,12 @@ async def test_personal_ready_document_auto_upgrades_to_indexed_after_process(
     ]
     assert jobs_after_process[0].status == ProcessingJobStatus.SUCCEEDED
     assert jobs_after_process[1].status == ProcessingJobStatus.QUEUED
+    assert len(processing_job_runner.submissions) == 1
+    assert processing_job_runner.submissions[0] == {
+        "job_id": jobs_after_process[1].id,
+        "document_id": document_id,
+        "job_type": "document_index",
+    }
 
     processing_job_runner.run_all()
 
@@ -6538,6 +6547,126 @@ async def test_personal_ready_document_auto_upgrades_to_indexed_after_process(
         source_locator_text="page:1",
         page_number=1,
     )
+
+
+@pytest.mark.anyio
+async def test_personal_new_upload_auto_rebuilds_stale_knowledge_base_index(
+    document_client: AsyncClient,
+    tmp_path: Path,
+    test_session_factory: sessionmaker,
+    processing_job_runner: CapturedProcessingJobRunner,
+) -> None:
+    alice = await _register_and_login(
+        document_client,
+        email="stale-kb-index@example.com",
+        username="stale-kb-index",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+
+    knowledge_base_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(alice["access_token"]),
+        name="Stale KB Index",
+    )
+
+    first_upload_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=alice_headers,
+        files={
+            "file": (
+                "baseline.txt",
+                b"Baseline document keeps the knowledge base indexed.",
+                "text/plain",
+            )
+        },
+    )
+    assert first_upload_response.status_code == 201
+    first_document_id = first_upload_response.json()["id"]
+
+    first_process_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{first_document_id}/process",
+        headers=alice_headers,
+    )
+    assert first_process_response.status_code == 200
+
+    processing_job_runner.run_all()
+    processing_job_runner.run_all()
+
+    index_file = tmp_path / "vector_store" / "personal" / f"knowledge_base_{knowledge_base_id}" / "index.json"
+    assert index_file.exists()
+    index_file.write_text(
+        json.dumps(
+            {
+                "embedding_provider": "fastembed",
+                "embedding_model": "BAAI/bge-small-zh-v1.5",
+                "embedding_dimension": 384,
+                "embedding_normalize": True,
+                "documents": [
+                    {
+                        "document_id": first_document_id,
+                        "document_name": "baseline.txt",
+                        "embedding_provider": "fastembed",
+                        "embedding_model": "BAAI/bge-small-zh-v1.5",
+                        "embedding_dimension": 384,
+                        "embedding_normalize": True,
+                        "chunks": [],
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    second_upload_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=alice_headers,
+        files={
+            "file": (
+                "fresh.txt",
+                b"Fresh upload should trigger a knowledge base reindex.",
+                "text/plain",
+            )
+        },
+    )
+    assert second_upload_response.status_code == 201
+    second_document_id = second_upload_response.json()["id"]
+
+    second_process_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{second_document_id}/process",
+        headers=alice_headers,
+    )
+    assert second_process_response.status_code == 200
+
+    processing_job_runner.run_all()
+    processing_job_runner.run_all()
+
+    with test_session_factory() as db:
+        first_document = db.get(Document, first_document_id)
+        second_document = db.get(Document, second_document_id)
+        assert first_document is not None
+        assert second_document is not None
+        assert first_document.processing_status == DocumentProcessingStatus.INDEXED
+        assert second_document.processing_status == DocumentProcessingStatus.INDEXED
+        second_document_jobs = list(
+            db.scalars(
+                select(ProcessingJob)
+                .where(ProcessingJob.document_id == second_document_id)
+                .order_by(ProcessingJob.id.asc())
+            )
+        )
+
+    assert [job.status for job in second_document_jobs] == [
+        ProcessingJobStatus.SUCCEEDED,
+        ProcessingJobStatus.SUCCEEDED,
+    ]
+
+    rebuilt_payload = json.loads(index_file.read_text(encoding="utf-8"))
+    assert rebuilt_payload["embedding_provider"] == "local_hashed_bow"
+    assert {item["document_id"] for item in rebuilt_payload["documents"]} == {
+        first_document_id,
+        second_document_id,
+    }
 
 
 @pytest.mark.anyio

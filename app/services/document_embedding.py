@@ -33,6 +33,7 @@ from app.services.embedding_provider import (
 EMBEDDING_DIMENSION = DEFAULT_EMBEDDING_DIMENSION
 EMBEDDING_SCHEME = HASHED_BOW_SCHEME
 INDEX_SCHEME = "json_vector_index_v1"
+KB_REINDEX_REQUIRED_ERROR_CODE = "KNOWLEDGE_BASE_REINDEX_REQUIRED"
 
 logger = logging.getLogger("purelink.documents")
 
@@ -503,7 +504,10 @@ def _write_document_chunks_to_index(
         embedding_dimension=embedding_dimension,
     )
     if mismatch_reason is not None:
-        raise DocumentEmbeddingError(mismatch_reason)
+        raise DocumentEmbeddingError(
+            mismatch_reason,
+            error_code=KB_REINDEX_REQUIRED_ERROR_CODE,
+        )
 
     existing_document_entry = _find_index_document_entry(payload, document_id=document.id)
     created_at = _coerce_optional_str(payload.get("created_at")) or indexed_at.isoformat()

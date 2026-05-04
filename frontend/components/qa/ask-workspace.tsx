@@ -149,7 +149,7 @@ export function AskWorkspace({
           ) : null}
           {citations.map((citation) => (
             <CitationCard
-              key={`${citation.chunk_id}-${citation.document_id}`}
+              key={`${citation.document_id}-${citation.chunk_id}-${citation.citation_unit_id ?? "chunk"}`}
               citation={citation}
             />
           ))}

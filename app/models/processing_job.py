@@ -114,3 +114,7 @@ class ProcessingJob(PrimaryKeyMixin, TimestampMixin, Base):
         remote_side="ProcessingJob.id",
         foreign_keys=[previous_job_id],
     )
+
+    @property
+    def last_error(self) -> str | None:
+        return self.error_message

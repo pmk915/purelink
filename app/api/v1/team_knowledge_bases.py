@@ -1294,6 +1294,7 @@ async def ask_team_knowledge_base_endpoint(
 
     try:
         qa_result = answer_question(
+            db=db,
             question=payload.question,
             retrieved_chunks=retrieved_chunks,
         )

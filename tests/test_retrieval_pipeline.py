@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.config import get_settings
 from app.db.base import Base, load_all_models
 from app.models.document import Document
+from app.models.document_citation_unit import DocumentCitationUnit
 from app.models.document_chunk import DocumentChunk
 from app.models.enums import (
     DocumentProcessingStatus,
@@ -123,6 +124,32 @@ def _create_chunk(
     db.add(chunk)
     db.flush()
     return chunk
+
+
+def _create_citation_unit(
+    db: Session,
+    *,
+    document: Document,
+    chunk_key: str,
+    unit_index: int,
+    unit_text: str,
+    metadata: dict[str, object] | None = None,
+    start_char: int | None = None,
+    end_char: int | None = None,
+) -> DocumentCitationUnit:
+    unit = DocumentCitationUnit(
+        document_id=document.id,
+        knowledge_base_id=document.knowledge_base_id,
+        chunk_key=chunk_key,
+        unit_index=unit_index,
+        unit_text=unit_text,
+        start_char=start_char,
+        end_char=end_char,
+        metadata_json=json.dumps(metadata, ensure_ascii=False) if metadata else None,
+    )
+    db.add(unit)
+    db.flush()
+    return unit
 
 
 def _retrieved_chunk(
@@ -571,3 +598,192 @@ def test_answer_question_returns_empty_citations_when_scores_are_below_threshold
     get_settings.cache_clear()
     assert result.answer == NO_RELIABLE_EVIDENCE_MESSAGE
     assert result.citations == []
+
+
+def test_answer_question_prefers_citation_unit_snippets(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="runbook.docx",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=f"{document.id}:0",
+            unit_index=0,
+            unit_text="Redis 只保存 job_id，ProcessingJob 才是任务事实来源。",
+            metadata={
+                "source_type": "docx",
+                "section_title": "任务可靠性设计",
+                "source_locator": "section:任务可靠性设计",
+                "heading_path": ["任务可靠性设计"],
+            },
+            start_char=12,
+            end_char=42,
+        )
+        db.commit()
+
+        result = answer_question(
+            db=db,
+            question="PureLink 的任务可靠性怎么保证？",
+            retrieved_chunks=[
+                _retrieved_chunk(
+                    chunk_id=f"{document.id}:0",
+                    document_id=document.id,
+                    document_name="runbook.docx",
+                    score=0.92,
+                    text="长 chunk 文本，不应该直接作为最终 citation snippet。",
+                    source_type="docx",
+                    section_title="任务可靠性设计",
+                )
+            ],
+        )
+
+    assert result.citations
+    citation = result.citations[0]
+    assert citation.citation_unit_id is not None
+    assert citation.chunk_id == f"{document.id}:0"
+    assert citation.snippet == "Redis 只保存 job_id，ProcessingJob 才是任务事实来源。"
+    assert citation.section_title == "任务可靠性设计"
+
+
+def test_answer_question_supports_multi_document_citations(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document_a = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="doc-a.txt",
+        )
+        document_b = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="doc-b.txt",
+        )
+        _create_citation_unit(
+            db,
+            document=document_a,
+            chunk_key=f"{document_a.id}:0",
+            unit_index=0,
+            unit_text="Redis 只作为任务触发器。",
+            metadata={"source_type": "text", "source_locator": "text:chunk:0"},
+        )
+        _create_citation_unit(
+            db,
+            document=document_b,
+            chunk_key=f"{document_b.id}:0",
+            unit_index=0,
+            unit_text="ProcessingJob 是任务事实来源。",
+            metadata={"source_type": "text", "source_locator": "text:chunk:0"},
+        )
+        db.commit()
+
+        result = answer_question(
+            db=db,
+            question="PureLink 的任务可靠性怎么保证？",
+            retrieved_chunks=[
+                _retrieved_chunk(
+                    chunk_id=f"{document_a.id}:0",
+                    document_id=document_a.id,
+                    document_name="doc-a.txt",
+                    score=0.93,
+                    text="Redis 只作为任务触发器。",
+                ),
+                _retrieved_chunk(
+                    chunk_id=f"{document_b.id}:0",
+                    document_id=document_b.id,
+                    document_name="doc-b.txt",
+                    score=0.91,
+                    text="ProcessingJob 是任务事实来源。",
+                ),
+            ],
+        )
+
+    assert len(result.citations) >= 2
+    assert {item.document_id for item in result.citations[:2]} == {document_a.id, document_b.id}
+
+
+def test_answer_question_supports_same_document_multiple_chunk_citations(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="architecture.txt",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=f"{document.id}:0",
+            unit_index=0,
+            unit_text="PureLink 使用 Redis 作为任务触发器。",
+            metadata={"source_type": "text", "source_locator": "text:chunk:0"},
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=f"{document.id}:1",
+            unit_index=1,
+            unit_text="PureLink 使用 ProcessingJob 保存任务状态。",
+            metadata={"source_type": "text", "source_locator": "text:chunk:1"},
+        )
+        db.commit()
+
+        result = answer_question(
+            db=db,
+            question="PureLink 的 Redis 和 ProcessingJob 分别有什么作用？",
+            retrieved_chunks=[
+                _retrieved_chunk(
+                    chunk_id=f"{document.id}:0",
+                    document_id=document.id,
+                    document_name="architecture.txt",
+                    score=0.95,
+                    text="PureLink 使用 Redis 作为任务触发器。",
+                ),
+                _retrieved_chunk(
+                    chunk_id=f"{document.id}:1",
+                    document_id=document.id,
+                    document_name="architecture.txt",
+                    score=0.93,
+                    text="PureLink 使用 ProcessingJob 保存任务状态。",
+                ),
+            ],
+        )
+
+    assert len(result.citations) >= 2
+    assert result.citations[0].document_id == document.id
+    assert result.citations[1].document_id == document.id
+    assert {item.chunk_id for item in result.citations[:2]} == {f"{document.id}:0", f"{document.id}:1"}
+
+
+def test_answer_question_falls_back_to_chunk_level_citation_when_units_are_missing() -> None:
+    result = answer_question(
+        question="What does the runbook say?",
+        retrieved_chunks=[
+            _retrieved_chunk(
+                chunk_id="1:0",
+                document_id=1,
+                document_name="runbook.txt",
+                score=0.81,
+                text="Fallback chunk snippet remains available when units are missing.",
+            )
+        ],
+    )
+
+    assert result.citations
+    citation = result.citations[0]
+    assert citation.citation_unit_id is None
+    assert citation.chunk_id == "1:0"
+    assert citation.snippet == "Fallback chunk snippet remains available when units are missing."

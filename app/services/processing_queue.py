@@ -17,8 +17,6 @@ logger = logging.getLogger("purelink.processing.queue")
 @dataclass(frozen=True, slots=True)
 class ProcessingQueueMessage:
     job_id: int
-    document_id: int
-    job_type: str
     raw_payload: str
 
 
@@ -31,8 +29,6 @@ def _build_processing_queue_payload(*, job: ProcessingJob) -> str:
     return json.dumps(
         {
             "job_id": job.id,
-            "document_id": job.document_id,
-            "job_type": job.job_type.value,
         },
         ensure_ascii=False,
         separators=(",", ":"),
@@ -105,15 +101,11 @@ def _deserialize_processing_queue_message(*, raw_payload: str) -> ProcessingQueu
 
     try:
         job_id = int(payload["job_id"])
-        document_id = int(payload["document_id"])
-        job_type = str(payload["job_type"])
     except (KeyError, TypeError, ValueError) as exc:  # pragma: no cover - defensive guard
         raise ValueError("Processing queue payload is missing required fields.") from exc
 
     return ProcessingQueueMessage(
         job_id=job_id,
-        document_id=document_id,
-        job_type=job_type,
         raw_payload=raw_payload,
     )
 

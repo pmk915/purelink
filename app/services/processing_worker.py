@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import BASE_DIR, get_settings
@@ -27,6 +28,7 @@ from app.services.processing_job import (
     can_retry_processing_job,
     create_processing_job_for_document,
     fail_timed_out_processing_jobs,
+    get_active_processing_job_for_document,
     get_processing_job,
     infer_processing_job_trigger,
 )
@@ -57,6 +59,21 @@ def submit_processing_job(
     return enqueue_processing_job(job=job)
 
 
+def _submit_processing_job_best_effort(*, job: ProcessingJob) -> bool:
+    try:
+        submit_processing_job(job=job)
+    except Exception:
+        logger.exception(
+            "processing job enqueue failed job_id=%s document_id=%s job_type=%s status=%s",
+            job.id,
+            job.document_id,
+            job.job_type,
+            job.status,
+        )
+        return False
+    return True
+
+
 def create_and_submit_processing_job(
     db: Session,
     *,
@@ -71,26 +88,11 @@ def create_and_submit_processing_job(
         triggered_by_id=triggered_by_id,
         trigger_type=selected_trigger,
     )
-    try:
-        submit_processing_job(
-            job=job,
+    if not _submit_processing_job_best_effort(job=job):
+        raise RuntimeError(
+            "Processing job was created but could not be submitted to Redis. "
+            "It remains queued and will be retried by worker recovery."
         )
-    except Exception as exc:
-        error_message = "Unable to submit processing job."
-        mark_processing_job_failed(
-            db,
-            job=job,
-            error_message=error_message,
-            error_code="PROCESSING_JOB_SUBMIT_FAILED",
-        )
-        update_document_processing_status(
-            db,
-            document=document,
-            processing_status=DocumentProcessingStatus.FAILED,
-            error_message=error_message,
-            processed_at=None,
-        )
-        raise RuntimeError(error_message) from exc
 
     return job
 
@@ -102,6 +104,16 @@ def create_and_submit_indexing_job(
     triggered_by_id: int,
     trigger_type: ProcessingJobTrigger = ProcessingJobTrigger.INDEX,
 ) -> ProcessingJob:
+    active_job = get_active_processing_job_for_document(
+        db,
+        document_id=document.id,
+        job_type=ProcessingJobType.DOCUMENT_INDEX,
+    )
+    if active_job is not None:
+        if active_job.status == ProcessingJobStatus.QUEUED:
+            _submit_processing_job_best_effort(job=active_job)
+        return active_job
+
     job = create_processing_job_for_document(
         db,
         document=document,
@@ -109,21 +121,58 @@ def create_and_submit_indexing_job(
         trigger_type=trigger_type,
         job_type=ProcessingJobType.DOCUMENT_INDEX,
     )
-    try:
-        submit_processing_job(
-            job=job,
+    if not _submit_processing_job_best_effort(job=job):
+        raise RuntimeError(
+            "Indexing job was created but could not be submitted to Redis. "
+            "It remains queued and will be retried by worker recovery."
         )
-    except Exception as exc:
-        error_message = "Unable to submit indexing job."
-        mark_processing_job_failed(
-            db,
-            job=job,
-            error_message=error_message,
-            error_code="INDEXING_JOB_SUBMIT_FAILED",
-        )
-        raise RuntimeError(error_message) from exc
 
     return job
+
+
+def ensure_indexing_job_submitted(
+    db: Session,
+    *,
+    document: Document,
+    triggered_by_id: int,
+) -> tuple[ProcessingJob, bool, bool]:
+    active_job = get_active_processing_job_for_document(
+        db,
+        document_id=document.id,
+        job_type=ProcessingJobType.DOCUMENT_INDEX,
+    )
+    if active_job is not None:
+        enqueue_result = False
+        if active_job.status == ProcessingJobStatus.QUEUED:
+            enqueue_result = _submit_processing_job_best_effort(job=active_job)
+        return active_job, False, enqueue_result
+
+    job = create_processing_job_for_document(
+        db,
+        document=document,
+        triggered_by_id=triggered_by_id,
+        trigger_type=ProcessingJobTrigger.INDEX,
+        job_type=ProcessingJobType.DOCUMENT_INDEX,
+    )
+    enqueue_result = _submit_processing_job_best_effort(job=job)
+    return job, True, enqueue_result
+
+
+def requeue_queued_processing_jobs() -> int:
+    db = open_processing_session()
+    try:
+        queued_jobs = list(
+            db.scalars(
+                select(ProcessingJob)
+                .where(ProcessingJob.status == ProcessingJobStatus.QUEUED)
+                .order_by(ProcessingJob.id.asc())
+            )
+        )
+        for job in queued_jobs:
+            submit_processing_job(job=job)
+        return len(queued_jobs)
+    finally:
+        db.close()
 
 
 def execute_processing_job(
@@ -322,9 +371,26 @@ def run_processing_job_worker(
         db,
         job=job,
     )
+    indexing_job_id = None
+    indexing_job_enqueued = False
+    indexing_job_created = False
+    try:
+        index_job, indexing_job_created, indexing_job_enqueued = ensure_indexing_job_submitted(
+            db,
+            document=job.document,
+            triggered_by_id=job.triggered_by_id,
+        )
+        indexing_job_id = index_job.id
+    except Exception:
+        logger.exception(
+            "failed to create or submit automatic indexing job document_id=%s",
+            job.document_id,
+        )
+
     logger.info(
         "processing job succeeded job_id=%s document_id=%s job_type=%s retry_count=%s max_retries=%s "
-        "locked_by=%s current_step=%s duration_ms=%s",
+        "locked_by=%s current_step=%s duration_ms=%s chunk_count=%s citation_unit_count=%s "
+        "created_index_job_id=%s created_index_job=%s enqueue_index_job_result=%s",
         job.id,
         job.document_id,
         job.job_type,
@@ -333,18 +399,12 @@ def run_processing_job_worker(
         job.locked_by or worker_name,
         job.current_step,
         int((datetime.now(UTC) - started_at).total_seconds() * 1000),
+        result.chunk_count,
+        result.citation_unit_count,
+        indexing_job_id,
+        indexing_job_created,
+        indexing_job_enqueued,
     )
-    try:
-        create_and_submit_indexing_job(
-            db,
-            document=job.document,
-            triggered_by_id=job.triggered_by_id,
-        )
-    except Exception:
-        logger.exception(
-            "failed to submit automatic indexing job document_id=%s",
-            job.document_id,
-        )
     return result
 
 
@@ -385,7 +445,7 @@ def run_indexing_job_worker(
     )
     logger.info(
         "indexing job succeeded job_id=%s document_id=%s job_type=%s retry_count=%s max_retries=%s "
-        "locked_by=%s current_step=%s duration_ms=%s",
+        "locked_by=%s current_step=%s duration_ms=%s chunk_count=%s embedding_provider=%s index_path=%s final_status=%s",
         job.id,
         job.document_id,
         job.job_type,
@@ -394,6 +454,10 @@ def run_indexing_job_worker(
         job.locked_by or worker_name,
         job.current_step,
         int((datetime.now(UTC) - started_at).total_seconds() * 1000),
+        result.embedded_chunk_count,
+        result.embedding_provider,
+        result.index_path,
+        ProcessingJobStatus.SUCCEEDED,
     )
     return result
 

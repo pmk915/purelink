@@ -114,6 +114,11 @@ ASR_PROVIDER=disabled
 MULTIMODAL_PROVIDER=disabled
 
 RETRIEVAL_MIN_SCORE=0.15
+CITATION_UNIT_MIN_CHARS=40
+CITATION_UNIT_TARGET_CHARS=120
+CITATION_UNIT_MAX_CHARS=300
+CITATION_UNIT_MAX_SENTENCES=3
+MAX_CITATIONS=6
 ```
 
 说明：
@@ -125,6 +130,7 @@ RETRIEVAL_MIN_SCORE=0.15
 - `LLM_PROVIDER=heuristic` 适合本地 demo；如需更强回答能力，可改为 `openai_compatible` 或 `deepseek`
 - `OCR_PROVIDER`、`ASR_PROVIDER`、`MULTIMODAL_PROVIDER` 在 Core 中默认关闭
 - `RETRIEVAL_MIN_SCORE` 用于控制“是否有足够可靠来源可以回答”
+- citation 会先从 retrieval chunk 中挑选更短的 `citation unit` 片段，再返回给前端展示
 
 如果你不想下载任何 embedding 模型，可以切到：
 

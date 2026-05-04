@@ -83,7 +83,7 @@ export default function ConversationDetailPage({
                 <div className="mt-4 grid gap-3">
                   {message.citations.map((citation) => (
                     <CitationCard
-                      key={`${message.id}-${citation.chunk_id}`}
+                      key={`${message.id}-${citation.chunk_id}-${citation.citation_unit_id ?? "chunk"}`}
                       citation={citation}
                     />
                   ))}
