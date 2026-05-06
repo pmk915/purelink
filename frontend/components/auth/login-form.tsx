@@ -49,12 +49,17 @@ export function LoginForm() {
         <form className="space-y-5" onSubmit={onSubmit}>
           <div className="space-y-2">
             <Label htmlFor="identifier">{messages.auth.login.identifier}</Label>
-            <Input id="identifier" {...form.register("identifier")} />
+            <Input id="identifier" data-testid="login-identifier" {...form.register("identifier")} />
             <p className="text-xs text-rose-600">{form.formState.errors.identifier?.message}</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">{messages.auth.login.password}</Label>
-            <Input id="password" type="password" {...form.register("password")} />
+            <Input
+              id="password"
+              type="password"
+              data-testid="login-password"
+              {...form.register("password")}
+            />
             <p className="text-xs text-rose-600">{form.formState.errors.password?.message}</p>
           </div>
           {form.formState.errors.root?.message ? (
@@ -62,7 +67,12 @@ export function LoginForm() {
               {form.formState.errors.root.message}
             </div>
           ) : null}
-          <Button className="w-full" size="lg" disabled={form.formState.isSubmitting}>
+          <Button
+            className="w-full"
+            size="lg"
+            disabled={form.formState.isSubmitting}
+            data-testid="login-submit"
+          >
             {form.formState.isSubmitting
               ? messages.auth.login.submitting
               : messages.auth.login.submit}

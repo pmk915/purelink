@@ -66,6 +66,7 @@ export function CitationCard({
 
   return (
     <div
+      data-testid="citation-card"
       className={
         compact
           ? "rounded-2xl border border-border/50 bg-white/70 px-3.5 py-3"
@@ -117,8 +118,8 @@ export function CitationCard({
       <p
         className={
           compact
-            ? "mt-2 line-clamp-3 text-sm leading-6 text-foreground"
-            : "mt-3 text-sm leading-6 text-foreground"
+            ? "mt-2 line-clamp-4 whitespace-pre-wrap break-words text-sm leading-6 text-foreground [overflow-wrap:anywhere]"
+            : "mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-foreground [overflow-wrap:anywhere]"
         }
       >
         {snippet}

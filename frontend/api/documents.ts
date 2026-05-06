@@ -38,6 +38,10 @@ export function uploadPersonalDocument(token: string, kbId: number, file: File) 
   return apiClient.upload<Document>(`/knowledge-bases/${kbId}/documents`, file, token);
 }
 
+export function deletePersonalDocument(token: string, kbId: number, documentId: number) {
+  return apiClient.delete<void>(`/knowledge-bases/${kbId}/documents/${documentId}`, token);
+}
+
 export function listTeamDocuments(token: string, teamId: number, kbId: number) {
   return apiClient.get<Document[]>(`/teams/${teamId}/knowledge-bases/${kbId}/documents`, token);
 }
@@ -75,6 +79,18 @@ export function uploadTeamDocument(
   return apiClient.upload<Document>(
     `/teams/${teamId}/knowledge-bases/${kbId}/documents`,
     file,
+    token
+  );
+}
+
+export function deleteTeamDocument(
+  token: string,
+  teamId: number,
+  kbId: number,
+  documentId: number
+) {
+  return apiClient.delete<void>(
+    `/teams/${teamId}/knowledge-bases/${kbId}/documents/${documentId}`,
     token
   );
 }

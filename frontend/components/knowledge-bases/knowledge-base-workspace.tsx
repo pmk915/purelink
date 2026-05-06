@@ -11,10 +11,13 @@ import { AskWorkspace, type QaAvailability } from "@/components/qa/ask-workspace
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useAuth } from "@/hooks/use-auth";
 import { useConversations } from "@/hooks/use-conversations";
 import { useI18n } from "@/hooks/use-i18n";
 import {
+  useDeletePersonalDocument,
+  useDeleteTeamDocument,
   usePersonalDocuments,
   useTeamDocuments,
   useUploadPersonalDocument,
@@ -113,12 +116,13 @@ export function KnowledgeBaseWorkspace({
   knowledgeBaseId: number;
   teamId?: number;
 }) {
-  const { accessToken } = useAuth();
+  const { accessToken, currentUser } = useAuth();
   const { messages } = useI18n();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("qa");
   const [processingDocumentIds, setProcessingDocumentIds] = useState<number[]>([]);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+  const [pendingDeleteDocument, setPendingDeleteDocument] = useState<Document | null>(null);
 
   const personalKbQuery = usePersonalKnowledgeBase(accessToken, knowledgeBaseId);
   const teamKbQuery = useTeamKnowledgeBase(accessToken, teamId ?? Number.NaN, knowledgeBaseId);
@@ -128,6 +132,12 @@ export function KnowledgeBaseWorkspace({
   const conversationsQuery = useConversations(accessToken);
   const uploadPersonal = useUploadPersonalDocument(accessToken, knowledgeBaseId);
   const uploadTeam = useUploadTeamDocument(accessToken, teamId ?? Number.NaN, knowledgeBaseId);
+  const deletePersonalDocument = useDeletePersonalDocument(accessToken, knowledgeBaseId);
+  const deleteTeamDocument = useDeleteTeamDocument(
+    accessToken,
+    teamId ?? Number.NaN,
+    knowledgeBaseId
+  );
   const askPersonal = useAskPersonal(accessToken, knowledgeBaseId);
   const askTeam = useAskTeam(accessToken, teamId ?? Number.NaN, knowledgeBaseId);
 
@@ -182,6 +192,9 @@ export function KnowledgeBaseWorkspace({
       queryKey: ["documents", "team", teamId, knowledgeBaseId]
     });
   };
+
+  const deleteDisabledReason =
+    scope === "team" ? messages.documents.onlyTeamAdminsOrOwnersCanDelete : null;
 
   const runProcessingPipeline = async (
     document: Document,
@@ -279,6 +292,56 @@ export function KnowledgeBaseWorkspace({
 
   return (
     <div className="space-y-6">
+      <ConfirmDialog
+        open={pendingDeleteDocument !== null}
+        title={messages.documents.deleteDialogTitle}
+        description={
+          pendingDeleteDocument
+            ? messages.documents.deleteDialogDescription(pendingDeleteDocument.original_filename)
+            : undefined
+        }
+        cancelLabel={messages.common.cancel}
+        confirmLabel={
+          deletePersonalDocument.isPending || deleteTeamDocument.isPending
+            ? messages.common.deleting
+            : messages.common.delete
+        }
+        destructive
+        loading={deletePersonalDocument.isPending || deleteTeamDocument.isPending}
+        onCancel={() => setPendingDeleteDocument(null)}
+        onConfirm={async () => {
+          if (!pendingDeleteDocument) {
+            return;
+          }
+
+          try {
+            if (scope === "personal") {
+              await deletePersonalDocument.mutateAsync(pendingDeleteDocument.id);
+            } else if (teamId) {
+              await deleteTeamDocument.mutateAsync(pendingDeleteDocument.id);
+            }
+
+            setFeedback({
+              tone: "success",
+              message: messages.documents.deleteSucceeded(pendingDeleteDocument.original_filename)
+            });
+            setPendingDeleteDocument(null);
+          } catch (error) {
+            console.error("document delete failed", {
+              error,
+              documentId: pendingDeleteDocument.id,
+              knowledgeBaseId,
+              scope,
+              teamId: teamId ?? null
+            });
+            setFeedback({
+              tone: "error",
+              message: messages.documents.deleteFailed
+            });
+          }
+        }}
+      />
+
       <Card className="border-border/70 shadow-card">
         <CardHeader className="space-y-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -477,7 +540,7 @@ export function KnowledgeBaseWorkspace({
                   {messages.knowledgeBases.noDocuments}
                 </div>
               ) : (
-                <div className="max-h-[720px] space-y-3 overflow-y-auto pr-1">
+                <div className="max-h-[520px] space-y-3 overflow-y-auto pr-1">
                   {documents.map((document) => (
                     <DocumentListItem
                       key={document.id}
@@ -493,6 +556,19 @@ export function KnowledgeBaseWorkspace({
                             }
                           : null
                       }
+                      canDelete={
+                        scope === "personal"
+                          ? true
+                          : Boolean(isTeamAdmin || document.owner_id === currentUser?.id)
+                      }
+                      deleteDisabledReason={
+                        scope === "team" &&
+                        !isTeamAdmin &&
+                        document.owner_id !== currentUser?.id
+                          ? deleteDisabledReason
+                          : null
+                      }
+                      onDelete={() => setPendingDeleteDocument(document)}
                     />
                   ))}
                 </div>

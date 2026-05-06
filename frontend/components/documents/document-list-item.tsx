@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FileText, LoaderCircle } from "lucide-react";
+import { FileText, LoaderCircle, Trash2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -38,7 +38,10 @@ export function DocumentListItem({
   knowledgeBaseId,
   teamId,
   onProcess,
-  isProcessing
+  isProcessing,
+  onDelete,
+  canDelete = false,
+  deleteDisabledReason
 }: {
   document: Document;
   scope: KnowledgeBaseScope;
@@ -46,6 +49,9 @@ export function DocumentListItem({
   teamId?: number;
   onProcess?: (() => Promise<void> | void) | null;
   isProcessing?: boolean;
+  onDelete?: (() => void) | null;
+  canDelete?: boolean;
+  deleteDisabledReason?: string | null;
 }) {
   const { messages } = useI18n();
   const isSupported = supportsDocumentPreparation(document.original_filename);
@@ -192,6 +198,19 @@ export function DocumentListItem({
                 <LoaderCircle className="h-4 w-4 animate-spin" />
               ) : null}
               {messages.documents.processRetry}
+            </Button>
+          ) : null}
+          {onDelete || deleteDisabledReason ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+              disabled={!canDelete}
+              title={!canDelete ? deleteDisabledReason ?? undefined : undefined}
+              onClick={canDelete ? onDelete ?? undefined : undefined}
+            >
+              <Trash2 className="h-4 w-4" />
+              {messages.common.delete}
             </Button>
           ) : null}
         </div>

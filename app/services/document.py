@@ -16,6 +16,8 @@ from app.models.enums import (
     KnowledgeBaseScope,
 )
 from app.models.knowledge_base import KnowledgeBase
+from app.services.document_chunker import build_chunk_relative_path
+from app.services.document_parser import build_parsed_relative_path
 
 
 UNSET = object()
@@ -304,3 +306,35 @@ def store_document_file(
     destination.write_bytes(content)
 
     return internal_filename, relative_path.as_posix()
+
+
+def delete_document_and_artifacts(
+    db: Session,
+    *,
+    document: Document,
+    scope: KnowledgeBaseScope,
+    upload_root: Path,
+    parsed_root: Path,
+    chunks_root: Path,
+    team_id: int | None = None,
+) -> None:
+    upload_path = upload_root / document.storage_path
+    parsed_path = parsed_root / build_parsed_relative_path(
+        scope=scope,
+        knowledge_base_id=document.knowledge_base_id,
+        document_id=document.id,
+        team_id=team_id,
+    )
+    chunk_path = chunks_root / build_chunk_relative_path(
+        scope=scope,
+        knowledge_base_id=document.knowledge_base_id,
+        document_id=document.id,
+        team_id=team_id,
+    )
+
+    db.delete(document)
+    db.commit()
+
+    upload_path.unlink(missing_ok=True)
+    parsed_path.unlink(missing_ok=True)
+    chunk_path.unlink(missing_ok=True)

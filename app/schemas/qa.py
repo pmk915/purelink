@@ -57,3 +57,4 @@ class QuestionAnswerResponse(BaseModel):
     conversation_id: int
     answer: str
     citations: list[CitationRead]
+    intent: str | None = None

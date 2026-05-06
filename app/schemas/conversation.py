@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.enums import MessageRole
 from app.schemas.qa import CitationRead
@@ -28,3 +28,21 @@ class ConversationMessageRead(BaseModel):
 
 class ConversationRead(ConversationSummaryRead):
     messages: list[ConversationMessageRead]
+
+
+class ConversationMessageCreateRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=4000)
+
+    @field_validator("content")
+    @classmethod
+    def normalize_content(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Message content cannot be empty.")
+        return normalized
+
+
+class AppendConversationMessageResponse(BaseModel):
+    conversation: ConversationSummaryRead
+    user_message: ConversationMessageRead
+    assistant_message: ConversationMessageRead

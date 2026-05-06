@@ -37,6 +37,7 @@ from app.schemas.knowledge_base import (
 from app.services.document import (
     compute_document_sha256,
     create_document,
+    delete_document_and_artifacts,
     DocumentUploadSupportError,
     ensure_supported_document_upload,
     get_document_by_sha256_for_knowledge_base,
@@ -52,6 +53,7 @@ from app.services.document_chunker import (
     resolve_chunks_root,
 )
 from app.services.document_embedding import (
+    delete_document_from_knowledge_base_index,
     DocumentEmbeddingError,
     delete_knowledge_base_index_artifact,
     resolve_vector_store_root,
@@ -542,6 +544,55 @@ async def get_personal_document_file_endpoint(
             "Content-Disposition": f'inline; filename="{document.original_filename}"',
         },
     )
+
+
+@router.delete(
+    "/{knowledge_base_id}/documents/{document_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_personal_document_endpoint(
+    knowledge_base_id: int,
+    document_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+) -> Response:
+    knowledge_base = _get_owned_knowledge_base_or_404(
+        db,
+        knowledge_base_id=knowledge_base_id,
+        user_id=current_user.id,
+    )
+    document = get_document_for_knowledge_base(
+        db,
+        knowledge_base_id=knowledge_base.id,
+        document_id=document_id,
+    )
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found.",
+        )
+
+    settings = get_settings()
+    upload_root = resolve_upload_root(settings.upload_dir, base_dir=BASE_DIR)
+    parsed_root = resolve_parsed_root(settings.parsed_dir, base_dir=BASE_DIR)
+    chunks_root = resolve_chunks_root(settings.chunks_dir, base_dir=BASE_DIR)
+    vector_root = resolve_vector_store_root(settings.vector_store_dir, base_dir=BASE_DIR)
+
+    delete_document_and_artifacts(
+        db,
+        document=document,
+        scope=KnowledgeBaseScope.PERSONAL,
+        upload_root=upload_root,
+        parsed_root=parsed_root,
+        chunks_root=chunks_root,
+    )
+    delete_document_from_knowledge_base_index(
+        vector_root=vector_root,
+        scope=KnowledgeBaseScope.PERSONAL,
+        knowledge_base_id=knowledge_base.id,
+        document_id=document_id,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(
@@ -1117,6 +1168,10 @@ async def ask_personal_knowledge_base_endpoint(
             db=db,
             question=payload.question,
             retrieved_chunks=retrieved_chunks,
+            documents=documents,
+            knowledge_base_id=knowledge_base.id,
+            scope=KnowledgeBaseScope.PERSONAL,
+            required_review_status=DocumentReviewStatus.NOT_REQUIRED,
         )
     except AnswerGenerationError as exc:
         raise HTTPException(
@@ -1154,6 +1209,7 @@ async def ask_personal_knowledge_base_endpoint(
         conversation_id=conversation.id,
         answer=qa_result.answer,
         citations=qa_result.citations,
+        intent=qa_result.intent,
     )
 
 

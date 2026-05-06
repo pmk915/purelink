@@ -157,6 +157,11 @@ class Settings:
     reranker_enabled: bool
     reranker_provider: str
     retrieval_min_score: float
+    overview_max_chunks: int
+    overview_max_chunks_per_document: int
+    conversation_recent_messages_limit: int
+    conversation_context_max_chars: int
+    conversation_message_max_chars: int
     citation_unit_min_chars: int
     citation_unit_target_chars: int
     citation_unit_max_chars: int
@@ -252,6 +257,20 @@ def get_settings() -> Settings:
         reranker_enabled=_get_bool("RERANKER_ENABLED", True),
         reranker_provider=os.getenv("RERANKER_PROVIDER", "local_rule_reranker").strip().lower(),
         retrieval_min_score=_get_float("RETRIEVAL_MIN_SCORE", 0.15),
+        overview_max_chunks=_get_int("OVERVIEW_MAX_CHUNKS", 10),
+        overview_max_chunks_per_document=_get_int("OVERVIEW_MAX_CHUNKS_PER_DOCUMENT", 2),
+        conversation_recent_messages_limit=_get_int(
+            "CONVERSATION_RECENT_MESSAGES_LIMIT",
+            8,
+        ),
+        conversation_context_max_chars=_get_int(
+            "CONVERSATION_CONTEXT_MAX_CHARS",
+            3000,
+        ),
+        conversation_message_max_chars=_get_int(
+            "CONVERSATION_MESSAGE_MAX_CHARS",
+            800,
+        ),
         citation_unit_min_chars=_get_int("CITATION_UNIT_MIN_CHARS", 40),
         citation_unit_target_chars=_get_int("CITATION_UNIT_TARGET_CHARS", 120),
         citation_unit_max_chars=_get_int("CITATION_UNIT_MAX_CHARS", 300),

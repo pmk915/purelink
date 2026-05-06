@@ -58,7 +58,7 @@ export function KnowledgeBaseSelector({
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="max-h-[360px] space-y-4 overflow-y-auto pr-1">
       {sections.map((section) =>
         section.items.length === 0 ? null : (
           <div key={section.key} className="space-y-2">

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 import json
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, desc, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.conversation import Conversation
@@ -11,6 +11,7 @@ from app.models.enums import KnowledgeBaseScope, MessageRole, TeamMemberStatus
 from app.models.knowledge_base import KnowledgeBase
 from app.models.message import Message
 from app.models.team import TeamMember
+from app.schemas.conversation import ConversationMessageRead
 from app.schemas.qa import CitationRead
 
 
@@ -109,6 +110,45 @@ def persist_question_answer_exchange(
     db.refresh(question_message)
     db.refresh(answer_message)
     return question_message, answer_message
+
+
+def delete_conversation(
+    db: Session,
+    *,
+    conversation: Conversation,
+) -> None:
+    db.delete(conversation)
+    db.commit()
+
+
+def get_recent_conversation_messages(
+    db: Session,
+    *,
+    conversation_id: int,
+    limit: int = 8,
+) -> list[Message]:
+    if limit <= 0:
+        return []
+
+    statement = (
+        select(Message)
+        .where(Message.conversation_id == conversation_id)
+        .order_by(desc(Message.created_at), desc(Message.id))
+        .limit(limit)
+    )
+    messages = list(db.execute(statement).scalars())
+    messages.reverse()
+    return messages
+
+
+def build_conversation_message_read(message: Message) -> ConversationMessageRead:
+    return ConversationMessageRead(
+        id=message.id,
+        role=message.role,
+        content=message.content,
+        citations=deserialize_citations(message),
+        created_at=message.created_at,
+    )
 
 
 def deserialize_citations(message: Message) -> list[CitationRead]:

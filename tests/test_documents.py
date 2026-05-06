@@ -33,22 +33,28 @@ from app.models.document_task import DocumentTask
 from app.models.enums import (
     DocumentProcessingStatus,
     DocumentTaskStatus,
+    KnowledgeBaseScope,
     ProcessingJobStatus,
     ProcessingJobTrigger,
     ProcessingJobType,
 )
+from app.models.message import Message
 from app.models.processing_job import ProcessingJob
 from app.services.document_embedding import DocumentEmbeddingError
+from app.services.document_embedding import build_index_relative_path
 from app.services.document_processing import (
     DocumentProcessingError,
     ExtractedTextSegment,
     RenderedPDFPage,
     extract_text_from_txt,
 )
+from app.services.document_chunker import build_chunk_relative_path
+from app.services.document_parser import build_parsed_relative_path
 from app.services.asr_provider import ASRProviderError, ASRResult, ASRSegment
 from app.services.ocr_provider import OCRProviderError, OCRRegion, OCRResult
 from app.services import document_indexing as document_indexing_service
 from app.services import processing_worker as processing_worker_service
+from app.services.qa import NO_RELIABLE_EVIDENCE_MESSAGE
 from app.services.processing_job import (
     acquire_processing_job,
     fail_timed_out_processing_jobs,
@@ -607,6 +613,143 @@ async def test_personal_document_upload_and_list_respect_owner_boundary(
 
 
 @pytest.mark.anyio
+async def test_personal_document_delete_removes_artifacts_index_and_qa_access(
+    document_client: AsyncClient,
+    tmp_path: Path,
+    test_session_factory: sessionmaker,
+    processing_job_runner: CapturedProcessingJobRunner,
+) -> None:
+    alice = await _register_and_login(
+        document_client,
+        email="personal-delete@example.com",
+        username="personal-delete",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+    knowledge_base_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(alice["access_token"]),
+        name="Personal Delete KB",
+    )
+
+    upload_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=alice_headers,
+        files={
+            "file": (
+                "delete-me.txt",
+                b"PureLink delete target fact for personal documents.",
+                "text/plain",
+            )
+        },
+    )
+    assert upload_response.status_code == 201
+    upload_body = upload_response.json()
+    document_id = upload_body["id"]
+    processing_job_runner.run_all()
+    processing_job_runner.run_all()
+
+    ask_before_delete = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/ask",
+        headers=alice_headers,
+        json={"question": "What is the delete target fact?"},
+    )
+    assert ask_before_delete.status_code == 200
+    ask_before_delete_body = ask_before_delete.json()
+    assert ask_before_delete_body["citations"]
+    assert ask_before_delete_body["citations"][0]["document_id"] == document_id
+
+    upload_path = tmp_path / "uploads" / upload_body["storage_path"]
+    parsed_path = tmp_path / "parsed" / build_parsed_relative_path(
+        scope=KnowledgeBaseScope.PERSONAL,
+        knowledge_base_id=knowledge_base_id,
+        document_id=document_id,
+    )
+    chunk_path = tmp_path / "chunks" / build_chunk_relative_path(
+        scope=KnowledgeBaseScope.PERSONAL,
+        knowledge_base_id=knowledge_base_id,
+        document_id=document_id,
+    )
+    index_path = tmp_path / "vector_store" / build_index_relative_path(
+        scope=KnowledgeBaseScope.PERSONAL,
+        knowledge_base_id=knowledge_base_id,
+    )
+
+    assert upload_path.exists()
+    assert index_path.exists()
+
+    with test_session_factory() as db:
+        assert db.get(Document, document_id) is not None
+        assert list(
+            db.scalars(
+                select(DocumentChunk).where(DocumentChunk.document_id == document_id)
+            )
+        )
+        assert list(
+            db.scalars(
+                select(DocumentCitationUnit).where(
+                    DocumentCitationUnit.document_id == document_id
+                )
+            )
+        )
+        assert list(
+            db.scalars(
+                select(ProcessingJob).where(ProcessingJob.document_id == document_id)
+            )
+        )
+
+    delete_response = await document_client.delete(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}",
+        headers=alice_headers,
+    )
+    assert delete_response.status_code == 204
+
+    list_response = await document_client.get(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=alice_headers,
+    )
+    assert list_response.status_code == 200
+    assert list_response.json() == []
+
+    with test_session_factory() as db:
+        assert db.get(Document, document_id) is None
+        assert (
+            db.scalar(
+                select(DocumentChunk).where(DocumentChunk.document_id == document_id)
+            )
+            is None
+        )
+        assert (
+            db.scalar(
+                select(DocumentCitationUnit).where(
+                    DocumentCitationUnit.document_id == document_id
+                )
+            )
+            is None
+        )
+        assert (
+            db.scalar(
+                select(ProcessingJob).where(ProcessingJob.document_id == document_id)
+            )
+            is None
+        )
+
+    assert not upload_path.exists()
+    assert not parsed_path.exists()
+    assert not chunk_path.exists()
+    assert not index_path.exists()
+
+    ask_after_delete = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/ask",
+        headers=alice_headers,
+        json={"question": "What is the delete target fact?"},
+    )
+    assert ask_after_delete.status_code == 200
+    ask_after_delete_body = ask_after_delete.json()
+    assert ask_after_delete_body["answer"] == NO_RELIABLE_EVIDENCE_MESSAGE
+    assert ask_after_delete_body["citations"] == []
+
+
+@pytest.mark.anyio
 async def test_personal_upload_rejects_file_larger_than_configured_limit(
     document_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -984,6 +1127,121 @@ async def test_team_document_submission_is_pending_review_and_not_visible_as_app
     assert member_documents[0]["id"] == document_body["id"]
     assert admin_documents[0]["review_status"] == "pending_review"
     assert admin_documents[0]["processing_status"] == "uploaded"
+
+
+@pytest.mark.anyio
+async def test_team_document_delete_requires_admin_or_document_owner(
+    document_client: AsyncClient,
+    test_session_factory: sessionmaker,
+) -> None:
+    admin = await _register_and_login(
+        document_client,
+        email="team-delete-admin@example.com",
+        username="team-delete-admin",
+    )
+    owner_member = await _register_and_login(
+        document_client,
+        email="team-delete-owner@example.com",
+        username="team-delete-owner",
+    )
+    other_member = await _register_and_login(
+        document_client,
+        email="team-delete-member@example.com",
+        username="team-delete-member",
+    )
+    outsider = await _register_and_login(
+        document_client,
+        email="team-delete-outsider@example.com",
+        username="team-delete-outsider",
+    )
+
+    admin_headers = {"Authorization": f"Bearer {admin['access_token']}"}
+    owner_headers = {"Authorization": f"Bearer {owner_member['access_token']}"}
+    other_member_headers = {"Authorization": f"Bearer {other_member['access_token']}"}
+    outsider_headers = {"Authorization": f"Bearer {outsider['access_token']}"}
+
+    team_id = await _create_team(
+        document_client,
+        access_token=str(admin["access_token"]),
+        name="Team Delete Permissions",
+    )
+    invite_code = await _create_team_invite(
+        document_client,
+        access_token=str(admin["access_token"]),
+        team_id=team_id,
+    )
+    await _join_team(
+        document_client,
+        access_token=str(owner_member["access_token"]),
+        code=invite_code,
+    )
+    second_invite_code = await _create_team_invite(
+        document_client,
+        access_token=str(admin["access_token"]),
+        team_id=team_id,
+    )
+    await _join_team(
+        document_client,
+        access_token=str(other_member["access_token"]),
+        code=second_invite_code,
+    )
+    knowledge_base_id = await _create_team_knowledge_base(
+        document_client,
+        access_token=str(admin["access_token"]),
+        team_id=team_id,
+        name="Team Delete KB",
+    )
+
+    first_upload = await document_client.post(
+        f"/api/v1/teams/{team_id}/knowledge-bases/{knowledge_base_id}/documents",
+        headers=owner_headers,
+        files={"file": ("owner-delete.txt", b"team owner delete file", "text/plain")},
+    )
+    assert first_upload.status_code == 201
+    first_document_id = first_upload.json()["id"]
+
+    forbidden_delete = await document_client.delete(
+        f"/api/v1/teams/{team_id}/knowledge-bases/{knowledge_base_id}/documents/{first_document_id}",
+        headers=other_member_headers,
+    )
+    assert forbidden_delete.status_code == 403
+
+    outsider_delete = await document_client.delete(
+        f"/api/v1/teams/{team_id}/knowledge-bases/{knowledge_base_id}/documents/{first_document_id}",
+        headers=outsider_headers,
+    )
+    assert outsider_delete.status_code == 404
+
+    owner_delete = await document_client.delete(
+        f"/api/v1/teams/{team_id}/knowledge-bases/{knowledge_base_id}/documents/{first_document_id}",
+        headers=owner_headers,
+    )
+    assert owner_delete.status_code == 204
+
+    second_upload = await document_client.post(
+        f"/api/v1/teams/{team_id}/knowledge-bases/{knowledge_base_id}/documents",
+        headers=owner_headers,
+        files={"file": ("admin-delete.txt", b"team admin delete file", "text/plain")},
+    )
+    assert second_upload.status_code == 201
+    second_document_id = second_upload.json()["id"]
+
+    admin_delete = await document_client.delete(
+        f"/api/v1/teams/{team_id}/knowledge-bases/{knowledge_base_id}/documents/{second_document_id}",
+        headers=admin_headers,
+    )
+    assert admin_delete.status_code == 204
+
+    list_response = await document_client.get(
+        f"/api/v1/teams/{team_id}/knowledge-bases/{knowledge_base_id}/documents",
+        headers=admin_headers,
+    )
+    assert list_response.status_code == 200
+    assert list_response.json() == []
+
+    with test_session_factory() as db:
+        assert db.get(Document, first_document_id) is None
+        assert db.get(Document, second_document_id) is None
 
 
 @pytest.mark.anyio
@@ -2379,6 +2637,7 @@ async def test_personal_knowledge_base_ask_returns_answer_and_citations(
     ask_body = ask_response.json()
     assert "PureLink" in ask_body["answer"]
     assert ask_body["citations"]
+    assert ask_body["intent"] == "kb_fact_qa"
     citation = ask_body["citations"][0]
     assert citation["chunk_id"] == f"{document_id}:0"
     assert citation["document_id"] == document_id
@@ -2503,6 +2762,7 @@ async def test_team_knowledge_base_ask_uses_only_approved_indexed_documents(
     approved_body = ask_approved.json()
     assert "Knowledge base answers" in approved_body["answer"]
     assert approved_body["citations"]
+    assert approved_body["intent"] == "kb_fact_qa"
     citation = approved_body["citations"][0]
     assert citation["document_id"] == approved_document_id
     assert citation["knowledge_base_id"] == knowledge_base_id
@@ -2793,16 +3053,18 @@ async def test_personal_ask_creates_and_reuses_conversation_history(
     assert first_body["citations"]
     assert first_body["citations"][0]["chunk_db_id"] is not None
 
-    second_ask = await document_client.post(
-        f"/api/v1/knowledge-bases/{knowledge_base_id}/ask",
+    append_response = await document_client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
         headers=alice_headers,
-        json={
-            "question": "Who is it for?",
-            "conversation_id": conversation_id,
-        },
+        json={"content": "Who is it for?"},
     )
-    assert second_ask.status_code == 200
-    assert second_ask.json()["conversation_id"] == conversation_id
+    assert append_response.status_code == 200
+    append_body = append_response.json()
+    assert append_body["conversation"]["id"] == conversation_id
+    assert append_body["user_message"]["role"] == "user"
+    assert append_body["user_message"]["content"] == "Who is it for?"
+    assert append_body["assistant_message"]["role"] == "assistant"
+    assert append_body["assistant_message"]["citations"]
 
     list_response = await document_client.get(
         "/api/v1/conversations",
@@ -2861,6 +3123,192 @@ async def test_personal_ask_creates_and_reuses_conversation_history(
         headers=bob_headers,
     )
     assert other_user_detail.status_code == 404
+
+    other_user_append = await document_client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers=bob_headers,
+        json={"content": "Can I access this conversation?"},
+    )
+    assert other_user_append.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_personal_conversation_delete_removes_messages_and_blocks_other_users(
+    document_client: AsyncClient,
+    test_session_factory: sessionmaker,
+    processing_job_runner: CapturedProcessingJobRunner,
+) -> None:
+    alice = await _register_and_login(
+        document_client,
+        email="conversation-delete-owner@example.com",
+        username="conversation-delete-owner",
+    )
+    bob = await _register_and_login(
+        document_client,
+        email="conversation-delete-other@example.com",
+        username="conversation-delete-other",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+    bob_headers = {"Authorization": f"Bearer {bob['access_token']}"}
+
+    knowledge_base_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(alice["access_token"]),
+        name="Conversation Delete KB",
+    )
+    upload_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=alice_headers,
+        files={
+            "file": (
+                "conversation-delete.txt",
+                b"PureLink keeps conversation delete facts in one knowledge base.",
+                "text/plain",
+            )
+        },
+    )
+    assert upload_response.status_code == 201
+    document_id = upload_response.json()["id"]
+    processing_job_runner.submissions.clear()
+
+    for action in ("parse", "chunk"):
+        response = await document_client.post(
+            f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}/{action}",
+            headers=alice_headers,
+        )
+        assert response.status_code == 200
+
+    await _submit_manual_index_job(
+        document_client,
+        path=f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}/embed",
+        headers=alice_headers,
+        processing_job_runner=processing_job_runner,
+    )
+
+    ask_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/ask",
+        headers=alice_headers,
+        json={"question": "What does PureLink keep?"},
+    )
+    assert ask_response.status_code == 200
+    conversation_id = ask_response.json()["conversation_id"]
+
+    forbidden_delete = await document_client.delete(
+        f"/api/v1/conversations/{conversation_id}",
+        headers=bob_headers,
+    )
+    assert forbidden_delete.status_code == 404
+
+    delete_response = await document_client.delete(
+        f"/api/v1/conversations/{conversation_id}",
+        headers=alice_headers,
+    )
+    assert delete_response.status_code == 204
+
+    list_response = await document_client.get(
+        "/api/v1/conversations",
+        headers=alice_headers,
+    )
+    assert list_response.status_code == 200
+    assert list_response.json() == []
+
+    detail_response = await document_client.get(
+        f"/api/v1/conversations/{conversation_id}",
+        headers=alice_headers,
+    )
+    assert detail_response.status_code == 404
+
+    append_response = await document_client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers=alice_headers,
+        json={"content": "Can this still be appended?"},
+    )
+    assert append_response.status_code == 404
+
+    with test_session_factory() as db:
+        assert (
+            db.scalar(select(Message).where(Message.conversation_id == conversation_id))
+            is None
+        )
+
+
+@pytest.mark.anyio
+async def test_personal_conversation_append_supports_kb_overview_follow_up(
+    document_client: AsyncClient,
+    processing_job_runner: CapturedProcessingJobRunner,
+) -> None:
+    alice = await _register_and_login(
+        document_client,
+        email="conversation-overview@example.com",
+        username="conversation-overview",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+
+    knowledge_base_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(alice["access_token"]),
+        name="Overview Follow Up KB",
+    )
+
+    uploads = [
+        (
+            "appearance.txt",
+            b"\xe4\xb9\x8c\xe8\x90\xa8\xe5\xa5\x87\xe7\x9a\x84\xe5\xa4\x96\xe8\xb2\x8c\xe7\x89\xb9\xe5\xbe\x81\xe5\x8c\x85\xe6\x8b\xac\xe6\x98\x8e\xe9\xbb\x84\xe8\x89\xb2\xe5\xa4\x96\xe5\xbd\xa2\xe5\x92\x8c\xe7\xb2\x89\xe8\x89\xb2\xe5\x86\x85\xe8\x80\xb3\xe3\x80\x82",
+        ),
+        (
+            "background.txt",
+            b"\xe8\xbf\x99\xe4\xbb\xbd\xe8\xb5\x84\xe6\x96\x99\xe4\xbb\x8b\xe7\xbb\x8d\xe4\xb9\x8c\xe8\x90\xa8\xe5\xa5\x87\xe6\x89\x80\xe5\xb1\x9e\xe4\xbd\x9c\xe5\x93\x81\xe3\x80\x81\xe8\xa7\x92\xe8\x89\xb2\xe5\xae\x9a\xe4\xbd\x8d\xe5\x92\x8c\xe7\xb3\xbb\xe5\x88\x97\xe8\x83\x8c\xe6\x99\xaf\xe3\x80\x82",
+        ),
+    ]
+    for filename, content in uploads:
+        upload_response = await document_client.post(
+            f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+            headers=alice_headers,
+            files={"file": (filename, content, "text/plain")},
+        )
+        assert upload_response.status_code == 201
+        document_id = upload_response.json()["id"]
+        for action in ("parse", "chunk", "embed"):
+            response = await document_client.post(
+                f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}/{action}",
+                headers=alice_headers,
+            )
+            assert response.status_code == 200
+            if action == "embed":
+                processing_job_runner.run_all()
+
+    first_ask = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/ask",
+        headers=alice_headers,
+        json={"question": "乌萨奇是谁？"},
+    )
+    assert first_ask.status_code == 200
+    conversation_id = first_ask.json()["conversation_id"]
+
+    append_response = await document_client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers=alice_headers,
+        json={"content": "总结这个知识库的主要内容"},
+    )
+    assert append_response.status_code == 200
+    append_body = append_response.json()
+    assert append_body["conversation"]["id"] == conversation_id
+    assert append_body["user_message"]["content"] == "总结这个知识库的主要内容"
+    assert append_body["assistant_message"]["citations"]
+
+    detail_response = await document_client.get(
+        f"/api/v1/conversations/{conversation_id}",
+        headers=alice_headers,
+    )
+    assert detail_response.status_code == 200
+    detail_body = detail_response.json()
+    assert len(detail_body["messages"]) == 4
+    overview_message = detail_body["messages"][3]
+    assert overview_message["role"] == "assistant"
+    assert "[S" in overview_message["content"]
+    assert overview_message["citations"]
+    cited_document_ids = {item["document_id"] for item in overview_message["citations"]}
+    assert len(cited_document_ids) >= 2
 
 
 @pytest.mark.anyio
@@ -2940,6 +3388,17 @@ async def test_team_conversation_history_is_user_owned_and_team_scoped(
     assert ask_response.status_code == 200
     conversation_id = ask_response.json()["conversation_id"]
 
+    append_response = await document_client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers=member_headers,
+        json={"content": "Who can use the approved answer?"},
+    )
+    assert append_response.status_code == 200
+    append_body = append_response.json()
+    assert append_body["conversation"]["id"] == conversation_id
+    assert append_body["user_message"]["content"] == "Who can use the approved answer?"
+    assert append_body["assistant_message"]["citations"]
+
     member_list = await document_client.get(
         "/api/v1/conversations",
         headers=member_headers,
@@ -2957,10 +3416,11 @@ async def test_team_conversation_history_is_user_owned_and_team_scoped(
     )
     assert member_detail.status_code == 200
     member_messages = member_detail.json()["messages"]
-    assert len(member_messages) == 2
+    assert len(member_messages) == 4
     assert member_messages[1]["citations"]
     assert member_messages[1]["citations"][0]["document_id"] == document_id
     assert member_messages[1]["citations"][0]["team_id"] == team_id
+    assert member_messages[3]["citations"]
 
     admin_detail = await document_client.get(
         f"/api/v1/conversations/{conversation_id}",
@@ -2970,8 +3430,20 @@ async def test_team_conversation_history_is_user_owned_and_team_scoped(
         f"/api/v1/conversations/{conversation_id}",
         headers=outsider_headers,
     )
+    admin_append = await document_client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers=admin_headers,
+        json={"content": "Can an admin continue this conversation?"},
+    )
+    outsider_append = await document_client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers=outsider_headers,
+        json={"content": "Can an outsider continue this conversation?"},
+    )
     assert admin_detail.status_code == 404
     assert outsider_detail.status_code == 404
+    assert admin_append.status_code == 404
+    assert outsider_append.status_code == 404
 
 
 @pytest.mark.anyio

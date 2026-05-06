@@ -16,13 +16,18 @@ export const zh: Messages = {
     signOut: "退出登录",
     apiDocs: "API 文档",
     open: "打开",
+    cancel: "取消",
+    delete: "删除",
+    deleting: "删除中...",
     anonymous: "访客",
     openNavigation: "打开导航",
     review: "审核",
     processing: "准备中",
     status: "状态",
     personal: "个人",
+    personalKnowledgeBase: "个人知识库",
     team: "团队",
+    teamKnowledgeBase: "团队知识库",
     admin: "管理员",
     member: "成员",
     user: "用户",
@@ -199,6 +204,12 @@ export const zh: Messages = {
       `${filename} 正在准备中，请稍后刷新查看最新状态。`,
     uploadReady: (filename: string) =>
       `${filename} 已可用于搜索和问答。`,
+    deleteDialogTitle: "删除文件？",
+    deleteDialogDescription: (filename: string) =>
+      `这会删除“${filename}”，并从知识库检索索引中移除。`,
+    deleteSucceeded: (filename: string) => `${filename} 已删除。`,
+    deleteFailed: "删除失败，请稍后重试。",
+    onlyTeamAdminsOrOwnersCanDelete: "只有团队管理员或文件 owner 可以删除文件。",
     uploadedAt: "上传于",
     reviewComment: "审核备注",
     processRetry: "重试",
@@ -260,9 +271,9 @@ export const zh: Messages = {
     askQuestion: "问题",
     askPlaceholder: "问这个知识库里的内容...",
     suggestedQuestions: "建议问题",
-    suggestionSummary: "总结这个知识库的主要内容",
-    suggestionKeyPoints: "这个知识库里有哪些关键点？",
-    suggestionUseKnowledgeBase: "根据这些文档回答我的问题",
+    suggestionSummary: "根据文档，介绍一下这个知识库中的核心对象",
+    suggestionKeyPoints: "文档中明确提到了哪些事实？",
+    suggestionUseKnowledgeBase: "根据已上传文档回答一个具体问题",
     askSubmit: "开始问答",
     asking: "回答中...",
     askFailed: "暂时无法生成回答，请稍后重试或联系管理员。",
@@ -272,9 +283,17 @@ export const zh: Messages = {
       "当前回答对应的来源片段会显示在这里。",
     citationsEmpty: "提问后，相关引用会显示在这里。",
     noQueryableDocuments: "当前知识库还没有可问答的文档，请先上传文件。",
+    noQueryablePersonalKnowledgeBase:
+      "当前个人知识库暂无可问答文档，请先上传文档并等待处理完成。",
+    noQueryableTeamKnowledgeBase:
+      "当前团队知识库暂无可问答文档，可能还在审核或处理中。",
     documentsWaitingReview:
       "文档正在等待审核，审核通过并准备完成后即可提问。",
     documentsPreparing: "文档正在准备中，完成后即可提问。",
+    documentsReadyButNotIndexed:
+      "文档已完成处理，但还没有进入可问答索引，请稍后刷新或重新索引知识库。",
+    documentsNeedReindex:
+      "当前知识库中的部分文档尚未完成索引，可能需要重新索引后才能正常问答。",
     noAvailableDocuments:
       "当前知识库还没有可用于问答的文档，请检查文档状态或上传新的文件。",
     noReliableSources:
@@ -359,6 +378,7 @@ export const zh: Messages = {
     newConversationDescription:
       "先选择一个你有权限访问的知识库，再开始提问。",
     recentTitle: "最近会话",
+    moreActions: "更多操作",
     currentKnowledgeBase: "当前知识库",
     readyWhenYouAre: "准备好了，随时开始",
     noMessagesYet: "暂无消息，先问这个知识库里的内容。",
@@ -375,6 +395,9 @@ export const zh: Messages = {
     summaryLabel: "会话概览",
     messagesTitle: "消息",
     messagesDescription: "这里会展示已保存的用户消息、助手回答和引用片段。",
+    deleteDialogTitle: "删除聊天？",
+    deleteDialogDescription: (title: string) => `这会删除“${title}”。`,
+    deleteFailed: "删除失败，请稍后重试。",
     notFound: "会话不存在",
     loadingSingle: "正在加载会话..."
   }

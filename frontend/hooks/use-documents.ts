@@ -89,11 +89,34 @@ export function useUploadPersonalDocument(token: string | null, kbId: number) {
   });
 }
 
+export function useDeletePersonalDocument(token: string | null, kbId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (documentId: number) =>
+      documentApi.deletePersonalDocument(token as string, kbId, documentId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["documents", "personal", kbId] });
+    }
+  });
+}
+
 export function useUploadTeamDocument(token: string | null, teamId: number, kbId: number) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (file: File) =>
       documentApi.uploadTeamDocument(token as string, teamId, kbId, file),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["documents", "team", teamId, kbId] });
+      await queryClient.invalidateQueries({ queryKey: ["team-review-tasks", teamId] });
+    }
+  });
+}
+
+export function useDeleteTeamDocument(token: string | null, teamId: number, kbId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (documentId: number) =>
+      documentApi.deleteTeamDocument(token as string, teamId, kbId, documentId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["documents", "team", teamId, kbId] });
       await queryClient.invalidateQueries({ queryKey: ["team-review-tasks", teamId] });

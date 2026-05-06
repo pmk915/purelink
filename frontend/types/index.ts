@@ -258,6 +258,7 @@ export interface AskResponse {
   conversation_id: number;
   answer: string;
   citations: Citation[];
+  intent?: string | null;
 }
 
 export interface ConversationSummary {
@@ -280,4 +281,10 @@ export interface ConversationMessage {
 
 export interface Conversation extends ConversationSummary {
   messages: ConversationMessage[];
+}
+
+export interface AppendConversationMessageResponse {
+  conversation: ConversationSummary;
+  user_message: ConversationMessage;
+  assistant_message: ConversationMessage;
 }

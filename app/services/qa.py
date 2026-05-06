@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass
 import logging
 import re
@@ -10,7 +11,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
+from app.models.document import Document
 from app.models.document_citation_unit import DocumentCitationUnit
+from app.models.enums import (
+    DocumentProcessingStatus,
+    DocumentReviewStatus,
+    KnowledgeBaseScope,
+)
 from app.schemas.llm import (
     DEEPSEEK_PROVIDER,
     HEURISTIC_PROVIDER,
@@ -20,6 +27,8 @@ from app.schemas.qa import CitationRead
 from app.services.chunk_metadata import build_chunk_snippet, parse_chunk_metadata
 from app.services.document_embedding import RetrievedChunk, tokenize_text
 from app.services.llm import LLMProviderError, generate_openai_compatible_chat_completion
+from app.services.overview_retrieval import collect_overview_chunks
+from app.services.qa_intent import QAIntent, classify_qa_intent
 from app.services.source_locator import (
     build_preview_target_for_chunk,
     build_source_locator_for_chunk,
@@ -67,6 +76,13 @@ class QuestionAnswerResult:
     answer: str
     citations: list[CitationRead]
     prompt: PromptBundle
+    intent: str
+
+
+@dataclass(frozen=True, slots=True)
+class MessageContext:
+    role: str
+    content: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,41 +185,207 @@ def answer_question(
     db: Session | None = None,
     question: str,
     retrieved_chunks: list[RetrievedChunk],
+    documents: Sequence[Document] | None = None,
+    knowledge_base_id: int | None = None,
+    scope: KnowledgeBaseScope | None = None,
+    required_review_status: DocumentReviewStatus | None = None,
+    team_id: int | None = None,
+    conversation_context: list[MessageContext] | None = None,
+    retrieval_query: str | None = None,
     generator: AnswerGenerator | None = None,
     settings: Settings | None = None,
 ) -> QuestionAnswerResult:
     active_settings = settings or get_settings()
+    intent = classify_qa_intent(question)
+    logger.info(
+        "qa intent resolved knowledge_base_id=%s question=%s qa_intent=%s retrieved_chunk_count=%s",
+        knowledge_base_id,
+        question,
+        intent.value,
+        len(retrieved_chunks),
+    )
+    if intent == QAIntent.KB_OVERVIEW:
+        return _answer_kb_overview_question(
+            db=db,
+            question=question,
+            retrieved_chunks=retrieved_chunks,
+            documents=documents,
+            knowledge_base_id=knowledge_base_id,
+            scope=scope,
+            required_review_status=required_review_status,
+            team_id=team_id,
+            conversation_context=conversation_context,
+            retrieval_query=retrieval_query,
+            generator=generator,
+            settings=active_settings,
+        )
+
+    return _answer_kb_fact_question(
+        db=db,
+        question=question,
+        retrieved_chunks=retrieved_chunks,
+        conversation_context=conversation_context,
+        retrieval_query=retrieval_query,
+        generator=generator,
+        settings=active_settings,
+    )
+
+
+def _answer_kb_fact_question(
+    *,
+    db: Session | None,
+    question: str,
+    retrieved_chunks: list[RetrievedChunk],
+    conversation_context: list[MessageContext] | None,
+    retrieval_query: str | None,
+    generator: AnswerGenerator | None,
+    settings: Settings,
+) -> QuestionAnswerResult:
     context_chunks = select_context_chunks_for_answer(retrieved_chunks)
+    return _answer_with_context_chunks(
+        db=db,
+        question=question,
+        context_chunks=context_chunks,
+        intent=QAIntent.KB_FACT_QA,
+        conversation_context=conversation_context,
+        retrieval_query=retrieval_query,
+        generator=generator,
+        settings=settings,
+    )
+
+
+def _answer_kb_overview_question(
+    *,
+    db: Session | None,
+    question: str,
+    retrieved_chunks: list[RetrievedChunk],
+    documents: Sequence[Document] | None,
+    knowledge_base_id: int | None,
+    scope: KnowledgeBaseScope | None,
+    required_review_status: DocumentReviewStatus | None,
+    team_id: int | None,
+    conversation_context: list[MessageContext] | None,
+    retrieval_query: str | None,
+    generator: AnswerGenerator | None,
+    settings: Settings,
+) -> QuestionAnswerResult:
+    if (
+        db is None
+        or documents is None
+        or knowledge_base_id is None
+        or scope is None
+        or required_review_status is None
+    ):
+        logger.info(
+            "qa overview fallback question=%s reason=%s",
+            question,
+            "missing_database_or_document_context",
+        )
+        return _answer_kb_fact_question(
+            db=db,
+            question=question,
+            retrieved_chunks=retrieved_chunks,
+            conversation_context=conversation_context,
+            retrieval_query=retrieval_query,
+            generator=generator,
+            settings=settings,
+        )
+
+    context_chunks = collect_overview_chunks(
+        db=db,
+        documents=documents,
+        knowledge_base_id=knowledge_base_id,
+        scope=scope,
+        required_review_status=required_review_status,
+        team_id=team_id,
+        max_chunks=settings.overview_max_chunks,
+        max_chunks_per_document=settings.overview_max_chunks_per_document,
+    )
+    indexed_document_count = sum(
+        1
+        for item in documents
+        if item.review_status == required_review_status
+        and item.processing_status == DocumentProcessingStatus.INDEXED
+    )
+    logger.info(
+        "qa overview chunks collected knowledge_base_id=%s question=%s indexed_document_count=%s overview_chunk_count=%s",
+        knowledge_base_id,
+        question,
+        indexed_document_count,
+        len(context_chunks),
+    )
+    return _answer_with_context_chunks(
+        db=db,
+        question=question,
+        context_chunks=context_chunks,
+        intent=QAIntent.KB_OVERVIEW,
+        conversation_context=conversation_context,
+        retrieval_query=retrieval_query,
+        generator=generator,
+        settings=settings,
+    )
+
+
+def _answer_with_context_chunks(
+    *,
+    db: Session | None,
+    question: str,
+    context_chunks: list[RetrievedChunk],
+    intent: QAIntent,
+    conversation_context: list[MessageContext] | None,
+    retrieval_query: str | None,
+    generator: AnswerGenerator | None,
+    settings: Settings,
+) -> QuestionAnswerResult:
     chunk_units = load_citation_units_for_chunks(db=db, chunks=context_chunks) if db is not None else {}
     evidence_units = select_evidence_units(
         question=question,
         retrieved_chunks=context_chunks,
         chunk_units=chunk_units,
-        max_evidence_units=max(MAX_ASK_EVIDENCE_UNITS, active_settings.max_citations),
+        max_evidence_units=max(MAX_ASK_EVIDENCE_UNITS, settings.max_citations),
     )
     logger.info(
-        "qa evidence selected question=%s selected_chunk_ids=%s candidate_evidence_unit_count=%s fallback_chunk_citation_count=%s evidence_content_lengths=%s",
+        "qa evidence selected question=%s qa_intent=%s selected_chunk_ids=%s candidate_evidence_unit_count=%s fallback_chunk_citation_count=%s evidence_content_lengths=%s",
         question,
+        intent.value,
         [item.chunk_id for item in context_chunks],
         len(evidence_units),
         sum(1 for item in evidence_units if item.citation_unit_id is None),
         [len(item.text) for item in evidence_units],
     )
-    prompt = build_prompt(question=question, evidence_units=evidence_units)
-    if not _has_reliable_retrieval_results(
-        context_chunks,
-        min_score=active_settings.retrieval_min_score,
-    ) or not evidence_units:
+    prompt = (
+        build_overview_prompt(
+            question=question,
+            evidence_units=evidence_units,
+            conversation_context=conversation_context,
+        )
+        if intent == QAIntent.KB_OVERVIEW
+        else build_fact_prompt(
+            question=question,
+            evidence_units=evidence_units,
+            conversation_context=conversation_context,
+        )
+    )
+    has_reliable_context = (
+        bool(evidence_units)
+        if intent == QAIntent.KB_OVERVIEW
+        else _has_reliable_retrieval_results(
+            context_chunks,
+            min_score=settings.retrieval_min_score,
+        ) and bool(evidence_units)
+    )
+    if not has_reliable_context:
         answer = NO_RELIABLE_EVIDENCE_MESSAGE
         citations: list[CitationRead] = []
         logger.info(
-            "qa answer skipped question=%s selected_chunk_ids=%s reason=%s",
+            "qa answer skipped question=%s qa_intent=%s selected_chunk_ids=%s reason=%s",
             question,
+            intent.value,
             [item.chunk_id for item in context_chunks],
             "insufficient_retrieval_or_evidence",
         )
     else:
-        answer_generator = generator or resolve_answer_generator(active_settings)
+        answer_generator = generator or resolve_answer_generator(settings)
         answer = answer_generator.generate(
             question=question,
             evidence_units=evidence_units,
@@ -218,8 +400,9 @@ def answer_question(
             answer = NO_RELIABLE_EVIDENCE_MESSAGE
             citations = []
             logger.info(
-                "qa answer rejected question=%s used_marker_ids=%s reason=%s",
+                "qa answer rejected question=%s qa_intent=%s used_marker_ids=%s reason=%s",
                 question,
+                intent.value,
                 used_markers,
                 "no_valid_citation_markers",
             )
@@ -227,13 +410,14 @@ def answer_question(
             citations = build_answer_citations(
                 evidence_units=evidence_units,
                 used_markers=used_markers,
-                max_citations=active_settings.max_citations,
+                max_citations=settings.max_citations,
             )
             if not citations:
                 answer = NO_RELIABLE_EVIDENCE_MESSAGE
             logger.info(
-                "qa citations resolved question=%s used_marker_ids=%s used_citation_unit_ids=%s fallback_chunk_citation_count=%s returned_citation_count=%s",
+                "qa citations resolved question=%s qa_intent=%s used_marker_ids=%s used_citation_unit_ids=%s fallback_chunk_citation_count=%s returned_citation_count=%s",
                 question,
+                intent.value,
                 used_markers,
                 [item.citation_unit_id for item in citations if item.citation_unit_id is not None],
                 sum(1 for item in citations if item.citation_unit_id is None),
@@ -243,7 +427,83 @@ def answer_question(
         answer=answer,
         citations=citations,
         prompt=prompt,
+        intent=intent.value,
     )
+
+
+def build_conversation_context(
+    *,
+    messages: Sequence[object],
+    max_total_chars: int,
+    max_message_chars: int,
+) -> list[MessageContext]:
+    contexts_reversed: list[MessageContext] = []
+    total_chars = 0
+
+    for message in reversed(messages):
+        raw_content = str(getattr(message, "content", "") or "").strip()
+        if not raw_content:
+            continue
+
+        role = str(getattr(message, "role", "") or "").lower()
+        if role not in {"user", "assistant"}:
+            continue
+
+        content = _trim_text_for_prompt(raw_content, max_chars=max_message_chars)
+        if not content:
+            continue
+
+        remaining_chars = max_total_chars - total_chars
+        if remaining_chars <= 0:
+            break
+        if len(content) > remaining_chars:
+            content = _trim_text_for_prompt(content, max_chars=remaining_chars)
+        if not content:
+            break
+
+        contexts_reversed.append(MessageContext(role=role, content=content))
+        total_chars += len(content)
+
+    contexts_reversed.reverse()
+    return contexts_reversed
+
+
+def build_conversation_retrieval_query(
+    *,
+    question: str,
+    recent_messages: Sequence[MessageContext],
+) -> str:
+    selected_user_messages = [
+        item.content
+        for item in recent_messages
+        if item.role == "user"
+    ][-2:]
+    last_assistant_message = next(
+        (item.content for item in reversed(recent_messages) if item.role == "assistant"),
+        None,
+    )
+
+    parts: list[str] = []
+    parts.extend(selected_user_messages)
+    if last_assistant_message:
+        parts.append(
+            _trim_text_for_prompt(
+                _strip_citation_markers(last_assistant_message),
+                max_chars=200,
+            )
+        )
+    parts.append(question.strip())
+
+    seen: set[str] = set()
+    deduped_parts: list[str] = []
+    for part in parts:
+        normalized = _normalize_text(part)
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped_parts.append(part.strip())
+
+    return "\n".join(deduped_parts)
 
 
 def _has_reliable_retrieval_results(
@@ -655,13 +915,15 @@ def resolve_answer_generator(settings: Settings | None = None) -> AnswerGenerato
     )
 
 
-def build_prompt(
+def build_fact_prompt(
     *,
     question: str,
     evidence_units: list[CitationUnitCandidate],
+    conversation_context: Sequence[MessageContext] | None = None,
 ) -> PromptBundle:
     system_prompt = (
         "你是 PureLink 的知识库问答助手。"
+        "以下最近对话上下文仅用于理解用户当前问题中的指代关系，不可作为事实依据。"
         "你只能根据给定的 evidence units 回答。"
         "每个事实性结论后必须标注来源编号，例如 [S1] 或 [S1][S2]。"
         f"如果证据不足，请直接回答：{NO_RELIABLE_EVIDENCE_MESSAGE}"
@@ -669,7 +931,58 @@ def build_prompt(
         "不要编造来源编号。"
         "不要引用未提供的编号。"
     )
+    conversation_block = _build_conversation_context_block(conversation_context)
+    context_block = _build_evidence_context_block(evidence_units)
+    prompt_sections = [
+        f"Question:\n{question}",
+        f"Evidence Units:\n{context_block}",
+    ]
+    if conversation_block:
+        prompt_sections.insert(0, f"Recent Conversation:\n{conversation_block}")
+    user_prompt = "\n\n".join(prompt_sections)
+    rendered_prompt = f"System:\n{system_prompt}\n\nUser:\n{user_prompt}"
+    return PromptBundle(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        rendered_prompt=rendered_prompt,
+    )
 
+
+def build_overview_prompt(
+    *,
+    question: str,
+    evidence_units: list[CitationUnitCandidate],
+    conversation_context: Sequence[MessageContext] | None = None,
+) -> PromptBundle:
+    system_prompt = (
+        "你是 PureLink 的知识库总结助手。"
+        "以下最近对话上下文仅用于理解用户当前问题中的指代关系，不可作为事实依据。"
+        "你只能根据提供的 evidence units 总结当前知识库。"
+        "请用 3 到 6 个要点概括主要内容。"
+        "每个要点后必须标注来源编号，例如 [S1] 或 [S1][S2]。"
+        "如果资料不足，请明确说明当前知识库内容有限。"
+        "不要使用 evidence units 之外的信息。"
+        "不要编造来源编号。"
+        "不要引用未提供的编号。"
+    )
+    conversation_block = _build_conversation_context_block(conversation_context)
+    context_block = _build_evidence_context_block(evidence_units)
+    prompt_sections = [
+        f"Question:\n{question}",
+        f"Evidence Units:\n{context_block}",
+    ]
+    if conversation_block:
+        prompt_sections.insert(0, f"Recent Conversation:\n{conversation_block}")
+    user_prompt = "\n\n".join(prompt_sections)
+    rendered_prompt = f"System:\n{system_prompt}\n\nUser:\n{user_prompt}"
+    return PromptBundle(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        rendered_prompt=rendered_prompt,
+    )
+
+
+def _build_evidence_context_block(evidence_units: list[CitationUnitCandidate]) -> str:
     context_lines: list[str] = []
     for unit in evidence_units:
         locator_parts = [f"document_name: {unit.document_name}"]
@@ -685,21 +998,24 @@ def build_prompt(
             locator_parts.append(f"section_title: {unit.section_title}")
         if unit.source_locator:
             locator_parts.append(f"source_locator: {unit.source_locator}")
-        context_lines.append(
-            f"[{unit.marker}]"
-        )
+        context_lines.append(f"[{unit.marker}]")
         context_lines.extend(locator_parts)
         context_lines.append(f"content: {unit.text}")
         context_lines.append("")
 
-    context_block = "\n".join(context_lines).strip() if context_lines else "[no evidence]"
-    user_prompt = f"Question:\n{question}\n\nEvidence Units:\n{context_block}"
-    rendered_prompt = f"System:\n{system_prompt}\n\nUser:\n{user_prompt}"
-    return PromptBundle(
-        system_prompt=system_prompt,
-        user_prompt=user_prompt,
-        rendered_prompt=rendered_prompt,
-    )
+    return "\n".join(context_lines).strip() if context_lines else "[no evidence]"
+
+
+def _build_conversation_context_block(
+    conversation_context: Sequence[MessageContext] | None,
+) -> str:
+    if not conversation_context:
+        return ""
+
+    lines: list[str] = []
+    for item in conversation_context:
+        lines.append(f"{item.role}: {item.content}")
+    return "\n".join(lines)
 
 
 def _compress_text(text: str, *, max_length: int = 260) -> str:
@@ -707,6 +1023,17 @@ def _compress_text(text: str, *, max_length: int = 260) -> str:
     if len(normalized) <= max_length:
         return normalized
     return normalized[: max_length - 3].rstrip() + "..."
+
+
+def _trim_text_for_prompt(text: str, *, max_chars: int) -> str:
+    normalized = _normalize_text(text)
+    if len(normalized) <= max_chars:
+        return normalized
+    return normalized[: max_chars - 3].rstrip() + "..."
+
+
+def _strip_citation_markers(text: str) -> str:
+    return CITATION_MARKER_PATTERN.sub("", text)
 
 
 def _is_redundant_chunk(candidate: RetrievedChunk, existing: list[RetrievedChunk]) -> bool:

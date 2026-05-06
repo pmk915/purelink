@@ -22,14 +22,22 @@ from app.models.knowledge_base import KnowledgeBase
 from app.models.user import User
 from app.services.document_embedding import DocumentEmbeddingError, RetrievedChunk
 from app.services.document_embedding import build_index_relative_path
+from app.services.overview_retrieval import (
+    collect_overview_chunks,
+    is_near_duplicate,
+    overview_score_chunk,
+)
 from app.services.qa import (
+    MessageContext,
     NO_RELIABLE_EVIDENCE_MESSAGE,
     answer_question,
+    build_conversation_retrieval_query,
     extract_used_citation_ids,
     load_citation_units_for_chunks,
     select_context_chunks_for_answer,
     select_evidence_units,
 )
+from app.services.qa_intent import QAIntent, classify_qa_intent
 from app.services.retrieval import (
     build_query_aware_chunk_snippet,
     merge_hybrid_candidates,
@@ -48,6 +56,228 @@ class StaticAnswerGenerator:
 
     def generate(self, *, question: str, evidence_units, prompt) -> str:  # noqa: ANN001
         return self.answer
+
+
+class CapturingAnswerGenerator:
+    def __init__(self, answer: str) -> None:
+        self.answer = answer
+        self.last_prompt = None
+
+    def generate(self, *, question: str, evidence_units, prompt) -> str:  # noqa: ANN001
+        self.last_prompt = prompt
+        return self.answer
+
+
+def test_classify_qa_intent_routes_fact_and_overview_questions() -> None:
+    assert classify_qa_intent("乌萨奇长啥样？") == QAIntent.KB_FACT_QA
+    assert classify_qa_intent("乌萨奇是什么颜色？") == QAIntent.KB_FACT_QA
+    assert classify_qa_intent("总结这个知识库的主要内容") == QAIntent.KB_OVERVIEW
+    assert classify_qa_intent("这个知识库里有哪些关键点？") == QAIntent.KB_OVERVIEW
+    assert classify_qa_intent("梳理这些文档") == QAIntent.KB_OVERVIEW
+
+
+def test_build_conversation_retrieval_query_uses_recent_messages_for_follow_up() -> None:
+    retrieval_query = build_conversation_retrieval_query(
+        question="那它叫什么名字？",
+        recent_messages=[
+            MessageContext(role="user", content="乌萨奇长啥样？"),
+            MessageContext(role="assistant", content="乌萨奇是明黄色的小兔子，有粉色内耳 [S1]。"),
+        ],
+    )
+
+    assert "乌萨奇长啥样？" in retrieval_query
+    assert "乌萨奇是明黄色的小兔子" in retrieval_query
+    assert "那它叫什么名字？" in retrieval_query
+    assert "[S1]" not in retrieval_query
+
+
+def test_overview_score_chunk_prefers_overview_section_title_over_boilerplate(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="overview-score.txt",
+        )
+        overview_chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=5,
+            chunk_text="本节概述 PureLink 的核心能力，包括队列处理、语义检索和引用回答。",
+            metadata={"source_type": "text", "section_title": "概述"},
+        )
+        toc_chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="目录 第一章 引言 第二章 架构设计 第三章 参考文献。",
+            metadata={"source_type": "text", "section_title": "目录"},
+        )
+
+        overview_score = overview_score_chunk(
+            overview_chunk,
+            document_name=document.original_filename,
+        )
+        toc_score = overview_score_chunk(
+            toc_chunk,
+            document_name=document.original_filename,
+        )
+
+    assert overview_score > toc_score
+
+
+def test_collect_overview_chunks_prefers_overview_sections_over_table_of_contents(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="overview-sections.txt",
+            processing_status=DocumentProcessingStatus.INDEXED,
+        )
+        _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="目录 第一章 引言 第二章 部署 第三章 参考文献。",
+            metadata={"source_type": "text", "section_title": "目录"},
+        )
+        _create_chunk(
+            db,
+            document=document,
+            chunk_index=1,
+            chunk_text="本节概述了 PureLink 的整体能力，包括上传、索引和知识库问答。",
+            metadata={"source_type": "text", "section_title": "概述"},
+        )
+        _create_chunk(
+            db,
+            document=document,
+            chunk_index=2,
+            chunk_text="正文详细说明 ProcessingJob、Worker 和 Redis 队列的协作方式。",
+            metadata={"source_type": "text", "section_title": "正文"},
+        )
+        db.commit()
+
+        chunks = collect_overview_chunks(
+            db=db,
+            documents=[document],
+            knowledge_base_id=knowledge_base.id,
+            scope=KnowledgeBaseScope.PERSONAL,
+            required_review_status=DocumentReviewStatus.NOT_REQUIRED,
+            max_chunks=2,
+            max_chunks_per_document=2,
+        )
+
+    assert chunks
+    assert any(item.section_title == "概述" for item in chunks)
+    assert chunks[0].section_title != "目录"
+
+
+def test_collect_overview_chunks_balances_documents(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        documents = [
+            _create_document(
+                db,
+                user=user,
+                knowledge_base=knowledge_base,
+                original_filename=f"balanced-{index}.txt",
+                processing_status=DocumentProcessingStatus.INDEXED,
+            )
+            for index in range(3)
+        ]
+        for index, document in enumerate(documents):
+            for chunk_index in range(3):
+                _create_chunk(
+                    db,
+                    document=document,
+                    chunk_index=chunk_index,
+                    chunk_text=(
+                        f"文档 {index} 的第 {chunk_index} 段，概述 PureLink 在场景 {index} 中的能力。"
+                    ),
+                    metadata={
+                        "source_type": "text",
+                        "section_title": "概述" if chunk_index == 0 else f"正文 {chunk_index}",
+                    },
+                )
+        db.commit()
+
+        chunks = collect_overview_chunks(
+            db=db,
+            documents=documents,
+            knowledge_base_id=knowledge_base.id,
+            scope=KnowledgeBaseScope.PERSONAL,
+            required_review_status=DocumentReviewStatus.NOT_REQUIRED,
+            max_chunks=6,
+            max_chunks_per_document=2,
+        )
+
+    assert len(chunks) <= 6
+    counts_by_document: dict[int, int] = {}
+    for chunk in chunks:
+        counts_by_document[chunk.document_id] = counts_by_document.get(chunk.document_id, 0) + 1
+    assert all(count <= 2 for count in counts_by_document.values())
+    assert set(counts_by_document) == {item.id for item in documents}
+
+
+def test_collect_overview_chunks_deduplicates_near_duplicate_chunks(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="dedup-overview.txt",
+            processing_status=DocumentProcessingStatus.INDEXED,
+        )
+        _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="PureLink 支持上传、索引、检索和带引用的问答能力。",
+            metadata={"source_type": "text", "section_title": "概述"},
+        )
+        _create_chunk(
+            db,
+            document=document,
+            chunk_index=1,
+            chunk_text="PureLink 支持上传、索引、检索和带引用的问答能力。 这是几乎相同的改写。",
+            metadata={"source_type": "text", "section_title": "概述扩展"},
+        )
+        _create_chunk(
+            db,
+            document=document,
+            chunk_index=2,
+            chunk_text="ProcessingJob 用来持久化任务状态，Worker 负责后台执行。",
+            metadata={"source_type": "text", "section_title": "任务系统"},
+        )
+        db.commit()
+
+        chunks = collect_overview_chunks(
+            db=db,
+            documents=[document],
+            knowledge_base_id=knowledge_base.id,
+            scope=KnowledgeBaseScope.PERSONAL,
+            required_review_status=DocumentReviewStatus.NOT_REQUIRED,
+            max_chunks=3,
+            max_chunks_per_document=3,
+        )
+
+    assert len(chunks) == 2
+    assert is_near_duplicate(
+        "PureLink 支持上传、索引、检索和带引用的问答能力。",
+        ["PureLink 支持上传、索引、检索和带引用的问答能力。 这是几乎相同的改写。"],
+    )
 
 
 @pytest.fixture
@@ -650,6 +880,72 @@ def test_answer_question_returns_empty_citations_when_scores_are_below_threshold
     get_settings.cache_clear()
     assert result.answer == NO_RELIABLE_EVIDENCE_MESSAGE
     assert result.citations == []
+    assert result.intent == QAIntent.KB_FACT_QA.value
+
+
+def test_answer_question_includes_recent_conversation_in_prompt_but_keeps_evidence_boundary(
+    session_factory: sessionmaker,
+) -> None:
+    generator = CapturingAnswerGenerator("乌萨奇叫乌萨奇 [S1]。")
+
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="乌萨奇.txt",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=f"{document.id}:0",
+            unit_index=0,
+            unit_text="乌萨奇的名字是乌萨奇。",
+            metadata={"source_type": "text", "source_locator": "text:chunk:0"},
+        )
+        db.commit()
+
+        result = answer_question(
+            db=db,
+            question="那它叫什么名字？",
+            retrieved_chunks=[
+                _retrieved_chunk(
+                    chunk_id=f"{document.id}:0",
+                    document_id=document.id,
+                    document_name="乌萨奇.txt",
+                    score=0.93,
+                    text="乌萨奇的名字是乌萨奇。",
+                )
+            ],
+            conversation_context=[
+                MessageContext(role="user", content="乌萨奇长啥样？"),
+                MessageContext(role="assistant", content="乌萨奇是明黄色的小兔子，有粉色内耳 [S1]。"),
+            ],
+            generator=generator,
+        )
+
+    assert result.answer == "乌萨奇叫乌萨奇 [S1]。"
+    assert generator.last_prompt is not None
+    assert "Recent Conversation:" in generator.last_prompt.user_prompt
+    assert "乌萨奇长啥样？" in generator.last_prompt.user_prompt
+    assert "Evidence Units:" in generator.last_prompt.user_prompt
+    assert "不可作为事实依据" in generator.last_prompt.system_prompt
+
+
+def test_answer_question_does_not_treat_history_as_evidence_without_current_support() -> None:
+    result = answer_question(
+        question="那它叫什么名字？",
+        retrieved_chunks=[],
+        conversation_context=[
+            MessageContext(role="user", content="乌萨奇长啥样？"),
+            MessageContext(role="assistant", content="乌萨奇叫乌萨奇 [S1]。"),
+        ],
+        generator=StaticAnswerGenerator("乌萨奇叫乌萨奇 [S1]。"),
+    )
+
+    assert result.answer == NO_RELIABLE_EVIDENCE_MESSAGE
+    assert result.citations == []
 
 
 def test_extract_used_citation_ids_normalizes_multiple_marker_formats() -> None:
@@ -717,6 +1013,7 @@ def test_answer_question_binds_claims_to_used_evidence_markers(
         "乌萨奇是蓝色兔子外型。",
         "乌萨奇有粉色内耳。",
     ]
+    assert result.intent == QAIntent.KB_FACT_QA.value
 
 
 def test_answer_question_returns_no_reliable_context_when_answer_has_no_valid_markers(
@@ -755,6 +1052,183 @@ def test_answer_question_returns_no_reliable_context_when_answer_has_no_valid_ma
             generator=StaticAnswerGenerator("乌萨奇有白色尾巴 [S99]。"),
         )
 
+    assert result.answer == NO_RELIABLE_EVIDENCE_MESSAGE
+    assert result.citations == []
+    assert result.intent == QAIntent.KB_FACT_QA.value
+
+
+def test_answer_question_routes_overview_questions_to_indexed_document_chunks(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document_a = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="overview-a.txt",
+            processing_status=DocumentProcessingStatus.INDEXED,
+        )
+        document_b = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="overview-b.txt",
+            processing_status=DocumentProcessingStatus.INDEXED,
+        )
+        chunk_a = _create_chunk(
+            db,
+            document=document_a,
+            chunk_index=0,
+            chunk_text="第一份文档介绍 Redis 只负责触发 worker。",
+            metadata={"source_type": "text", "source_locator": "text:chunk:0"},
+        )
+        chunk_b = _create_chunk(
+            db,
+            document=document_b,
+            chunk_index=0,
+            chunk_text="第二份文档介绍 ProcessingJob 保存任务事实来源。",
+            metadata={"source_type": "text", "source_locator": "text:chunk:0"},
+        )
+        _create_citation_unit(
+            db,
+            document=document_a,
+            chunk_key=chunk_a.chunk_key,
+            unit_index=0,
+            unit_text="第一份文档介绍 Redis 只负责触发 worker。",
+            metadata={"source_type": "text", "source_locator": "text:chunk:0"},
+        )
+        _create_citation_unit(
+            db,
+            document=document_b,
+            chunk_key=chunk_b.chunk_key,
+            unit_index=0,
+            unit_text="第二份文档介绍 ProcessingJob 保存任务事实来源。",
+            metadata={"source_type": "text", "source_locator": "text:chunk:0"},
+        )
+        db.commit()
+
+        result = answer_question(
+            db=db,
+            question="总结这个知识库的主要内容",
+            retrieved_chunks=[],
+            documents=[document_a, document_b],
+            knowledge_base_id=knowledge_base.id,
+            scope=KnowledgeBaseScope.PERSONAL,
+            required_review_status=DocumentReviewStatus.NOT_REQUIRED,
+            generator=StaticAnswerGenerator(
+                "- 资料说明 Redis 只负责触发 worker [S1]\n"
+                "- 资料说明 ProcessingJob 保存任务事实来源 [S2]"
+            ),
+        )
+
+    assert result.intent == QAIntent.KB_OVERVIEW.value
+    assert result.answer
+    assert "[S1]" in result.answer
+    assert len(result.citations) == 2
+    assert {item.document_id for item in result.citations} == {document_a.id, document_b.id}
+
+
+def test_answer_question_routes_overview_questions_with_conversation_history_without_biasing_to_last_topic(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document_a = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="appearance.txt",
+            processing_status=DocumentProcessingStatus.INDEXED,
+        )
+        document_b = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="series.txt",
+            processing_status=DocumentProcessingStatus.INDEXED,
+        )
+        chunk_a = _create_chunk(
+            db,
+            document=document_a,
+            chunk_index=0,
+            chunk_text="这份文档介绍乌萨奇的外貌特征，包括明黄色外形和粉色内耳。",
+            metadata={"source_type": "text", "source_locator": "text:chunk:0", "section_title": "外貌"},
+        )
+        chunk_b = _create_chunk(
+            db,
+            document=document_b,
+            chunk_index=0,
+            chunk_text="这份文档介绍乌萨奇所属作品、角色定位以及系列背景。",
+            metadata={"source_type": "text", "source_locator": "text:chunk:0", "section_title": "背景"},
+        )
+        _create_citation_unit(
+            db,
+            document=document_a,
+            chunk_key=chunk_a.chunk_key,
+            unit_index=0,
+            unit_text="这份文档介绍乌萨奇的外貌特征，包括明黄色外形和粉色内耳。",
+            metadata={"source_type": "text", "source_locator": "text:chunk:0", "section_title": "外貌"},
+        )
+        _create_citation_unit(
+            db,
+            document=document_b,
+            chunk_key=chunk_b.chunk_key,
+            unit_index=0,
+            unit_text="这份文档介绍乌萨奇所属作品、角色定位以及系列背景。",
+            metadata={"source_type": "text", "source_locator": "text:chunk:0", "section_title": "背景"},
+        )
+        db.commit()
+
+        result = answer_question(
+            db=db,
+            question="这个知识库有哪些关键点？",
+            retrieved_chunks=[],
+            documents=[document_a, document_b],
+            knowledge_base_id=knowledge_base.id,
+            scope=KnowledgeBaseScope.PERSONAL,
+            required_review_status=DocumentReviewStatus.NOT_REQUIRED,
+            conversation_context=[
+                MessageContext(role="user", content="乌萨奇长啥样？"),
+                MessageContext(role="assistant", content="乌萨奇有明黄色外形 [S1]。"),
+            ],
+            generator=StaticAnswerGenerator(
+                "- 一份资料介绍乌萨奇的外貌特征 [S1]\n"
+                "- 另一份资料介绍乌萨奇所属作品和系列背景 [S2]"
+            ),
+        )
+
+    assert result.intent == QAIntent.KB_OVERVIEW.value
+    assert len(result.citations) == 2
+    assert {item.document_id for item in result.citations} == {document_a.id, document_b.id}
+
+
+def test_answer_question_overview_returns_no_reliable_context_without_indexed_documents(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="overview-empty.txt",
+            processing_status=DocumentProcessingStatus.READY,
+        )
+        db.commit()
+
+        result = answer_question(
+            db=db,
+            question="梳理这些文档",
+            retrieved_chunks=[],
+            documents=[document],
+            knowledge_base_id=knowledge_base.id,
+            scope=KnowledgeBaseScope.PERSONAL,
+            required_review_status=DocumentReviewStatus.NOT_REQUIRED,
+            generator=StaticAnswerGenerator("- 这里本来不该成功 [S1]"),
+        )
+
+    assert result.intent == QAIntent.KB_OVERVIEW.value
     assert result.answer == NO_RELIABLE_EVIDENCE_MESSAGE
     assert result.citations == []
 

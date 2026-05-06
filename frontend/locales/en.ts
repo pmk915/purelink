@@ -14,13 +14,18 @@ export const en = {
     signOut: "Sign out",
     apiDocs: "API docs",
     open: "Open",
+    cancel: "Cancel",
+    delete: "Delete",
+    deleting: "Deleting...",
     anonymous: "Anonymous",
     openNavigation: "Open navigation",
     review: "review",
     processing: "preparing",
     status: "Status",
     personal: "Personal",
+    personalKnowledgeBase: "Personal knowledge base",
     team: "Team",
+    teamKnowledgeBase: "Team knowledge base",
     admin: "Admin",
     member: "Member",
     user: "User",
@@ -210,6 +215,12 @@ export const en = {
       `${filename} is being prepared. Refresh in a moment to see the latest status.`,
     uploadReady: (filename: string) =>
       `${filename} is ready for search and Q&A.`,
+    deleteDialogTitle: "Delete file?",
+    deleteDialogDescription: (filename: string) =>
+      `This will delete “${filename}” and remove it from the knowledge base index.`,
+    deleteSucceeded: (filename: string) => `${filename} was deleted.`,
+    deleteFailed: "Delete failed. Please try again.",
+    onlyTeamAdminsOrOwnersCanDelete: "Only team admins or the document owner can delete files.",
     uploadedAt: "Uploaded",
     reviewComment: "Review comment",
     processRetry: "Retry",
@@ -281,9 +292,9 @@ export const en = {
     askQuestion: "Question",
     askPlaceholder: "Ask this knowledge base...",
     suggestedQuestions: "Suggested questions",
-    suggestionSummary: "Summarize the main topics in this knowledge base",
-    suggestionKeyPoints: "What are the key points in this knowledge base?",
-    suggestionUseKnowledgeBase: "Answer my question using these documents",
+    suggestionSummary: "Based on the documents, describe the core subject in this knowledge base",
+    suggestionKeyPoints: "What facts are explicitly stated in these documents?",
+    suggestionUseKnowledgeBase: "Answer a concrete question using the uploaded documents",
     askSubmit: "Ask",
     asking: "Answering...",
     askFailed: "Unable to generate an answer right now. Try again or contact an admin.",
@@ -295,10 +306,18 @@ export const en = {
       "Citations will appear here after you ask a question.",
     noQueryableDocuments:
       "This knowledge base has no Q&A-ready documents yet. Upload a file first.",
+    noQueryablePersonalKnowledgeBase:
+      "This personal knowledge base does not have any askable documents yet. Upload documents and wait for processing to finish.",
+    noQueryableTeamKnowledgeBase:
+      "This team knowledge base does not have any askable documents yet. Documents may still be under review or processing.",
     documentsWaitingReview:
       "Documents are waiting for review. You can ask questions after approval and preparation finish.",
     documentsPreparing:
       "Documents are being prepared. You can ask questions after preparation finishes.",
+    documentsReadyButNotIndexed:
+      "Documents finished processing but are not in the askable index yet. Refresh in a moment or reindex the knowledge base.",
+    documentsNeedReindex:
+      "Some documents in this knowledge base have not finished indexing. Reindexing the knowledge base may be required before Q&A works normally.",
     noAvailableDocuments:
       "No documents are currently available for Q&A. Check document status or upload another file.",
     noReliableSources:
@@ -389,6 +408,7 @@ export const en = {
     newConversationDescription:
       "Pick a knowledge base you can access, then start asking.",
     recentTitle: "Recent conversations",
+    moreActions: "More actions",
     currentKnowledgeBase: "Current knowledge base",
     readyWhenYouAre: "Ready when you are",
     noMessagesYet: "No messages yet. Start by asking this knowledge base.",
@@ -408,6 +428,9 @@ export const en = {
     messagesTitle: "Messages",
     messagesDescription:
       "Stored user and assistant messages, including citations.",
+    deleteDialogTitle: "Delete chat?",
+    deleteDialogDescription: (title: string) => `This will delete “${title}”.`,
+    deleteFailed: "Delete failed. Please try again.",
     notFound: "Conversation not found",
     loadingSingle: "Loading conversation..."
   }

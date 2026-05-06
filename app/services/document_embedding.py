@@ -119,6 +119,49 @@ def delete_knowledge_base_index_artifact(
     return True
 
 
+def delete_document_from_knowledge_base_index(
+    *,
+    vector_root: Path,
+    scope: KnowledgeBaseScope,
+    knowledge_base_id: int,
+    document_id: int,
+    team_id: int | None = None,
+) -> bool:
+    index_relative_path = build_index_relative_path(
+        scope=scope,
+        knowledge_base_id=knowledge_base_id,
+        team_id=team_id,
+    )
+    index_source = vector_root / index_relative_path
+    if not index_source.exists():
+        return False
+
+    payload = _load_index_payload(index_source)
+    documents = payload.get("documents", [])
+    if not isinstance(documents, list):
+        raise DocumentEmbeddingError("Vector index is not valid.")
+
+    remaining_documents = [
+        item
+        for item in documents
+        if not isinstance(item, dict) or item.get("document_id") != document_id
+    ]
+    if len(remaining_documents) == len(documents):
+        return False
+
+    if not remaining_documents:
+        index_source.unlink(missing_ok=True)
+        return True
+
+    payload["documents"] = remaining_documents
+    payload["indexed_at"] = datetime.now(UTC).isoformat()
+    index_source.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return True
+
+
 def read_knowledge_base_index_metadata(
     *,
     vector_root: Path,

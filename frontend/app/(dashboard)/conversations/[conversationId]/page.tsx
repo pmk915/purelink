@@ -11,13 +11,48 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
-import { useConversation, useConversations } from "@/hooks/use-conversations";
+import { usePersonalDocuments, useTeamDocuments } from "@/hooks/use-documents";
+import {
+  useAppendConversationMessage,
+  useConversation,
+  useConversations
+} from "@/hooks/use-conversations";
 import { useI18n } from "@/hooks/use-i18n";
 import { usePersonalKnowledgeBase, useTeamKnowledgeBase } from "@/hooks/use-knowledge-bases";
-import { useAskPersonal, useAskTeam } from "@/hooks/use-qa";
 import { useTeam } from "@/hooks/use-teams";
 import { formatDate } from "@/lib/utils";
+import type { Document } from "@/types";
 import { askSchema, type AskValues } from "@/schemas/qa";
+
+function isDocumentQueryable(document: Document) {
+  return (
+    document.review_status !== "pending_review" &&
+    document.review_status !== "rejected" &&
+    document.processing_status === "indexed"
+  );
+}
+
+function isDocumentPreparing(document: Document) {
+  if (
+    document.review_status === "pending_review" ||
+    document.review_status === "rejected"
+  ) {
+    return false;
+  }
+
+  return (
+    document.processing_status === "uploaded" ||
+    document.processing_status === "processing" ||
+    document.processing_status === "parsed" ||
+    document.latest_processing_job_status === "queued" ||
+    document.latest_processing_job_status === "processing" ||
+    document.latest_processing_job_status === "retrying"
+  );
+}
+
+function needsKnowledgeBaseReindex(document: Document) {
+  return document.latest_processing_job_error_code === "DOCUMENT_INDEXING_FAILED";
+}
 
 export default function ConversationDetailPage({
   params
@@ -45,15 +80,16 @@ export default function ConversationDetailPage({
     conversation?.scope === "team" ? accessToken : null,
     conversation?.team_id ?? Number.NaN
   );
-  const askPersonal = useAskPersonal(
+  const personalDocumentsQuery = usePersonalDocuments(
     accessToken,
     conversation?.scope === "personal" ? conversation.knowledge_base_id : Number.NaN
   );
-  const askTeam = useAskTeam(
+  const teamDocumentsQuery = useTeamDocuments(
     accessToken,
     conversation?.scope === "team" ? conversation.team_id ?? Number.NaN : Number.NaN,
     conversation?.scope === "team" ? conversation.knowledge_base_id : Number.NaN
   );
+  const appendMessage = useAppendConversationMessage(accessToken, conversationId);
 
   const askForm = useForm<AskValues>({
     resolver: zodResolver(askSchema),
@@ -78,6 +114,44 @@ export default function ConversationDetailPage({
 
   const knowledgeBase =
     conversation.scope === "team" ? teamKbQuery.data : personalKbQuery.data;
+  const documents =
+    conversation.scope === "team"
+      ? teamDocumentsQuery.data ?? []
+      : personalDocumentsQuery.data ?? [];
+  const documentsLoading =
+    conversation.scope === "team"
+      ? teamDocumentsQuery.isLoading
+      : personalDocumentsQuery.isLoading;
+  const hasQueryableDocuments = documents.some(isDocumentQueryable);
+  const hasPendingReviewDocuments = documents.some(
+    (document) => document.review_status === "pending_review"
+  );
+  const hasPreparingDocuments = documents.some(isDocumentPreparing);
+  const hasReadyButUnindexedDocuments = documents.some(
+    (document) => document.processing_status === "ready"
+  );
+  const hasReindexRequiredDocuments = documents.some(needsKnowledgeBaseReindex);
+  const blockingAvailabilityMessage = documentsLoading
+    ? null
+    : documents.length === 0
+      ? conversation.scope === "personal"
+        ? messages.qa.noQueryablePersonalKnowledgeBase
+        : messages.qa.noQueryableTeamKnowledgeBase
+      : !hasQueryableDocuments && hasPendingReviewDocuments
+        ? messages.qa.documentsWaitingReview
+        : !hasQueryableDocuments && hasPreparingDocuments
+          ? messages.qa.documentsPreparing
+          : !hasQueryableDocuments && hasReadyButUnindexedDocuments
+            ? messages.qa.documentsReadyButNotIndexed
+            : !hasQueryableDocuments
+              ? conversation.scope === "personal"
+                ? messages.qa.noQueryablePersonalKnowledgeBase
+                : messages.qa.noQueryableTeamKnowledgeBase
+              : null;
+  const warningAvailabilityMessage =
+    !documentsLoading && hasReindexRequiredDocuments ? messages.qa.documentsNeedReindex : null;
+  const canAppendMessage =
+    appendMessage.isPending || askForm.formState.isSubmitting ? false : !blockingAvailabilityMessage;
   const toggleSources = (messageId: number) => {
     setExpandedSourceMessageIds((current) =>
       current.includes(messageId)
@@ -87,16 +161,19 @@ export default function ConversationDetailPage({
   };
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
-      <div className="hidden xl:block xl:sticky xl:top-24 xl:h-[calc(100vh-7rem)]">
+    <div
+      data-testid="conversation-thread-page"
+      className="grid h-[calc(100vh-8rem)] min-h-0 gap-4 overflow-hidden md:h-[calc(100vh-9rem)] xl:grid-cols-[280px_minmax(0,1fr)]"
+    >
+      <div className="hidden h-full min-h-0 xl:block">
         <ConversationSidebar
           conversations={conversationsQuery.data ?? []}
           activeConversationId={conversationId}
         />
       </div>
 
-      <section className="flex min-h-[calc(100vh-7rem)] flex-col overflow-hidden rounded-[28px] border border-border/50 bg-white/75 shadow-soft backdrop-blur">
-        <header className="border-b border-border/50 px-5 py-3 sm:px-6">
+      <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] border border-border/50 bg-white/75 shadow-soft backdrop-blur">
+        <header className="shrink-0 border-b border-border/50 px-5 py-3 sm:px-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
               <h1 className="truncate text-sm font-semibold text-foreground">
@@ -118,8 +195,14 @@ export default function ConversationDetailPage({
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
-          <div className="mx-auto flex w-full max-w-4xl flex-col gap-8">
+        <div
+          data-testid="conversation-message-list-scroller"
+          className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6"
+        >
+          <div
+            data-testid="conversation-message-list"
+            className="mx-auto flex w-full max-w-3xl min-w-0 flex-col gap-8"
+          >
             {conversation.messages.length === 0 ? (
               <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3 text-center">
                 <p className="text-2xl font-semibold text-foreground">
@@ -134,7 +217,13 @@ export default function ConversationDetailPage({
               const sourcesExpanded = expandedSourceMessageIds.includes(message.id);
 
               return (
-                <div key={message.id} className="space-y-3">
+                <div
+                  key={message.id}
+                  className="space-y-3"
+                  data-testid="conversation-message-item"
+                  data-message-role={message.role}
+                  data-message-id={message.id}
+                >
                   <div className={isAssistant ? "flex justify-start" : "flex justify-end"}>
                     <div className={isAssistant ? "max-w-[880px]" : "max-w-[75%]"}>
                       {isAssistant ? (
@@ -145,8 +234,8 @@ export default function ConversationDetailPage({
                       <div
                         className={
                           isAssistant
-                            ? "px-1 text-sm leading-7 text-foreground"
-                            : "rounded-3xl bg-secondary/80 px-4 py-3 text-sm leading-7 text-foreground"
+                            ? "px-1 text-sm leading-7 text-foreground break-words [overflow-wrap:anywhere]"
+                            : "rounded-3xl bg-secondary/80 px-4 py-3 text-sm leading-7 text-foreground break-words [overflow-wrap:anywhere]"
                         }
                       >
                         <p className="whitespace-pre-wrap">{message.content}</p>
@@ -164,9 +253,10 @@ export default function ConversationDetailPage({
                   </div>
 
                   {isAssistant && message.citations.length > 0 ? (
-                    <div className="max-w-[880px] pl-1">
+                    <div className="max-w-[880px] min-w-0 pl-1">
                       <button
                         type="button"
+                        data-testid={`conversation-sources-toggle-${message.id}`}
                         className="inline-flex items-center gap-2 rounded-full bg-secondary/60 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                         onClick={() => toggleSources(message.id)}
                       >
@@ -181,7 +271,7 @@ export default function ConversationDetailPage({
                       </button>
 
                       {sourcesExpanded ? (
-                        <div className="mt-3 grid gap-2.5">
+                        <div className="mt-3 grid max-h-80 gap-2.5 overflow-y-auto pr-1">
                           {message.citations.map((citation, index) => (
                             <CitationCard
                               key={`${message.id}-${citation.citation_unit_id ?? citation.chunk_db_id ?? citation.chunk_id}-${index}`}
@@ -199,22 +289,18 @@ export default function ConversationDetailPage({
           </div>
         </div>
 
-        <footer className="border-t border-border/50 bg-white/85 px-4 py-4 sm:px-6">
+        <footer className="shrink-0 border-t border-border/50 bg-white/85 px-4 py-4 sm:px-6">
           <form
             className="mx-auto w-full max-w-3xl space-y-3"
             onSubmit={askForm.handleSubmit(async (values) => {
+              if (blockingAvailabilityMessage) {
+                return;
+              }
+
               try {
-                if (conversation.scope === "team" && conversation.team_id) {
-                  await askTeam.mutateAsync({
-                    ...values,
-                    conversation_id: conversation.id
-                  });
-                } else {
-                  await askPersonal.mutateAsync({
-                    ...values,
-                    conversation_id: conversation.id
-                  });
-                }
+                await appendMessage.mutateAsync({
+                  content: values.question
+                });
 
                 askForm.reset({
                   question: "",
@@ -230,6 +316,18 @@ export default function ConversationDetailPage({
               }
             })}
           >
+            {blockingAvailabilityMessage ? (
+              <div className="rounded-2xl bg-secondary/80 px-4 py-2.5 text-sm text-muted-foreground">
+                {blockingAvailabilityMessage}
+              </div>
+            ) : null}
+
+            {warningAvailabilityMessage ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+                {warningAvailabilityMessage}
+              </div>
+            ) : null}
+
             {askForm.formState.errors.root?.message ? (
               <div className="rounded-2xl bg-rose-50 px-4 py-2.5 text-sm text-rose-700">
                 {askForm.formState.errors.root.message}
@@ -239,9 +337,11 @@ export default function ConversationDetailPage({
             <div className="rounded-[28px] border border-border/60 bg-background px-4 py-3 shadow-soft">
               <Textarea
                 id="conversation-question"
+                data-testid="conversation-question-input"
                 rows={4}
+                disabled={!canAppendMessage}
                 placeholder={messages.qa.askPlaceholder}
-                className="min-h-[64px] resize-none border-0 bg-transparent px-0 py-0 text-sm leading-6 shadow-none focus-visible:ring-0"
+                className="min-h-[64px] resize-none border-0 bg-transparent px-0 py-0 text-sm leading-6 shadow-none focus-visible:ring-0 [overflow-wrap:anywhere]"
                 {...askForm.register("question")}
               />
 
@@ -249,10 +349,13 @@ export default function ConversationDetailPage({
                 <p className="text-xs text-rose-600">{askForm.formState.errors.question?.message}</p>
                 <Button
                   className="rounded-2xl"
-                  disabled={askForm.formState.isSubmitting}
+                  disabled={!canAppendMessage}
+                  data-testid="conversation-question-submit"
                 >
                   <Sparkles className="h-4 w-4" />
-                  {askForm.formState.isSubmitting ? messages.qa.asking : messages.qa.askSubmit}
+                  {askForm.formState.isSubmitting || appendMessage.isPending
+                    ? messages.qa.asking
+                    : messages.qa.askSubmit}
                 </Button>
               </div>
             </div>
