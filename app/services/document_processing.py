@@ -32,6 +32,9 @@ from app.services.chunk_metadata import (
     normalize_source_type,
 )
 from app.services.document import update_document_processing_status
+from app.services.document_parsing import get_parser
+from app.services.document_parsing.block_persistence import replace_document_blocks
+from app.services.document_parsing.types import ParsedDocument
 from app.services.ocr_provider import OCRProviderError, OCRRegion, resolve_ocr_provider
 from app.services.text_quality import (
     TextQualityStatus,
@@ -208,7 +211,6 @@ def process_document(
             error_code=ERROR_UNSUPPORTED_FILE_TYPE,
         )
 
-    extractor = resolve_text_extractor(suffix)
     update_document_processing_status(
         db,
         document=document,
@@ -235,7 +237,13 @@ def process_document(
     try:
         report("resolve_source")
         report("extract_text")
-        extracted = extractor(source_path=source_path)
+        parser = get_parser(filename=document.original_filename, mime_type=document.file_type)
+        parsed_document = parser.parse(
+            source_path,
+            filename=document.original_filename,
+            mime_type=document.file_type,
+        )
+        extracted = build_extracted_text_result_from_parsed_document(parsed_document)
         logger.info(
             "document text extracted document_id=%s knowledge_base_id=%s source_type=%s extractor=%s current_step=%s page_count=%s extracted_char_count=%s",
             document.id,
@@ -245,6 +253,12 @@ def process_document(
             current_step,
             extracted.page_count,
             extracted.extracted_char_count,
+        )
+        report("persist_blocks")
+        replace_document_blocks(
+            db,
+            document_id=document.id,
+            blocks=parsed_document.blocks,
         )
         report("chunk_content")
         generated_chunks = chunk_extracted_text_result(
@@ -404,6 +418,49 @@ def resolve_text_extractor(suffix: str) -> TextExtractor:
         f"Only {SUPPORTED_STANDARD_PROCESS_HINT} documents are supported by this processing flow.",
         error_code=ERROR_UNSUPPORTED_FILE_TYPE,
     )
+
+
+def build_extracted_text_result_from_parsed_document(
+    parsed_document: ParsedDocument,
+) -> ExtractedTextResult:
+    source_type = str(parsed_document.metadata.get("source_type") or "text")
+    extractor = str(parsed_document.metadata.get("extractor") or parsed_document.metadata.get("parser") or "unknown")
+    raw_segments = [
+        ExtractedTextSegment(
+            text=block.text,
+            metadata={
+                "source_type": source_type,
+                **block.metadata,
+                **({"source_locator": block.source_locator} if block.source_locator else {}),
+                **({"heading_level": block.heading_level} if block.heading_level is not None else {}),
+                "block_type": block.block_type.value,
+            },
+        )
+        for block in parsed_document.blocks
+        if block.text.strip()
+    ]
+    if not raw_segments and parsed_document.text.strip():
+        raw_segments = [
+            ExtractedTextSegment(
+                text=parsed_document.text,
+                metadata={"source_type": source_type},
+            )
+        ]
+    return build_extracted_text_result(
+        source_type=source_type,
+        extractor=extractor,
+        raw_segments=raw_segments,
+        encoding=_coerce_optional_str(parsed_document.metadata.get("encoding")),
+        page_count=_coerce_optional_int(parsed_document.metadata.get("page_count")),
+    )
+
+
+def _coerce_optional_str(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def _coerce_optional_int(value: object) -> int | None:
+    return value if isinstance(value, int) else None
 
 
 def extract_text_from_txt(*, source_path: Path) -> ExtractedTextResult:

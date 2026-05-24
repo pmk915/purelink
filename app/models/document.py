@@ -11,8 +11,10 @@ from app.models.enums import DocumentProcessingStatus, DocumentReviewStatus, enu
 from app.models.mixins import PrimaryKeyMixin, TimestampMixin
 
 if TYPE_CHECKING:
+    from app.models.document_block import DocumentBlock
     from app.models.document_citation_unit import DocumentCitationUnit
     from app.models.document_chunk import DocumentChunk
+    from app.models.document_index import DocumentIndex
     from app.models.document_task import DocumentTask
     from app.models.knowledge_base import KnowledgeBase
     from app.models.processing_job import ProcessingJob
@@ -114,10 +116,19 @@ class Document(PrimaryKeyMixin, TimestampMixin, Base):
         cascade="all, delete-orphan",
         order_by="DocumentChunk.chunk_index",
     )
+    blocks: Mapped[list["DocumentBlock"]] = relationship(
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="DocumentBlock.order_index",
+    )
     citation_units: Mapped[list["DocumentCitationUnit"]] = relationship(
         back_populates="document",
         cascade="all, delete-orphan",
         order_by="DocumentCitationUnit.unit_index",
+    )
+    indexes: Mapped[list["DocumentIndex"]] = relationship(
+        back_populates="document",
+        cascade="all, delete-orphan",
     )
     processing_jobs: Mapped[list["ProcessingJob"]] = relationship(
         back_populates="document",

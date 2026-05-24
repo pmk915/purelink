@@ -30,7 +30,6 @@ from app.services.document_embedding import (
     search_index,
     tokenize_text,
 )
-from app.services.reranking import rerank_candidates
 
 
 HYBRID_VECTOR_WEIGHT = 0.55
@@ -126,11 +125,7 @@ def retrieve_chunks_for_documents(
         indexed_document_ids=indexed_document_ids,
         top_k=candidate_limit,
     )
-    return rerank_candidates(
-        query=processed_query.normalized_text,
-        candidates=hybrid_results,
-        top_k=top_k,
-    )
+    return hybrid_results[:top_k]
 
 
 def preprocess_retrieval_query(query: str) -> ProcessedRetrievalQuery:

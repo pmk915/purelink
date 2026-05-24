@@ -8,6 +8,7 @@ import pytest
 from app.services.document_embedding import RetrievedChunk
 from app.services.qa import organize_citations, select_context_chunks_for_answer
 from app.services.reranking import RerankerError, rerank_candidates
+from app.core.config import get_settings
 
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "retrieval_eval_cases.json"
@@ -49,7 +50,10 @@ def _chunk(
     )
 
 
-def test_rerank_promotes_more_relevant_chunk() -> None:
+def test_rerank_promotes_more_relevant_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RERANKER_ENABLED", "true")
+    monkeypatch.setenv("RERANKER_PROVIDER", "local_rule_reranker")
+    get_settings.cache_clear()
     candidates = [
         _chunk(
             chunk_id="1:0",
@@ -73,9 +77,13 @@ def test_rerank_promotes_more_relevant_chunk() -> None:
 
     assert reranked[0].chunk_id == "2:0"
     assert reranked[0].score >= reranked[1].score
+    get_settings.cache_clear()
 
 
-def test_rerank_uses_metadata_hits_to_improve_order() -> None:
+def test_rerank_uses_metadata_hits_to_improve_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RERANKER_ENABLED", "true")
+    monkeypatch.setenv("RERANKER_PROVIDER", "local_rule_reranker")
+    get_settings.cache_clear()
     candidates = [
         _chunk(
             chunk_id="1:0",
@@ -101,6 +109,7 @@ def test_rerank_uses_metadata_hits_to_improve_order() -> None:
     )
 
     assert reranked[0].chunk_id == "2:0"
+    get_settings.cache_clear()
 
 
 def test_ask_context_selection_limits_single_document_overlap() -> None:
@@ -187,6 +196,9 @@ def test_citation_organization_preserves_order_and_deduplicates_locator() -> Non
 def test_rerank_falls_back_to_hybrid_order_when_provider_errors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("RERANKER_ENABLED", "true")
+    monkeypatch.setenv("RERANKER_PROVIDER", "local_rule_reranker")
+    get_settings.cache_clear()
     candidates = [
         _chunk(chunk_id="1:0", document_id=1, score=0.91, text="First chunk"),
         _chunk(chunk_id="2:0", document_id=2, score=0.82, text="Second chunk"),
@@ -204,6 +216,7 @@ def test_rerank_falls_back_to_hybrid_order_when_provider_errors(
     )
 
     assert [item.chunk_id for item in reranked] == ["1:0", "2:0"]
+    get_settings.cache_clear()
 
 
 def test_retrieval_eval_fixture_is_well_formed() -> None:

@@ -10,7 +10,7 @@ else
 PYTHON ?= python3
 endif
 
-.PHONY: up down logs ps build restart test test-python test-go check smoke smoke-docx-rag e2e
+.PHONY: up down logs ps build restart test test-python test-go check smoke smoke-docx-rag e2e eval-rag
 
 up:
 	$(COMPOSE) up --build -d
@@ -49,6 +49,9 @@ smoke:
 
 smoke-docx-rag:
 	$(PYTHON) scripts/smoke_docx_rag.py
+
+eval-rag:
+	$(PYTHON) scripts/eval/run_rag_eval.py --cases tests/eval/purelink_rag_cases.jsonl --output tests/eval/reports/latest.json
 
 e2e:
 	@set -euo pipefail; \

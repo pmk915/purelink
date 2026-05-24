@@ -20,7 +20,8 @@ async def test_provider_status_local_fallback_is_configured(
     monkeypatch.setenv("OCR_PROVIDER", "disabled")
     monkeypatch.setenv("ENABLE_MEDIA", "false")
     monkeypatch.setenv("ASR_PROVIDER", "disabled")
-    monkeypatch.setenv("RERANKER_PROVIDER", "local_rule_reranker")
+    monkeypatch.setenv("RERANKER_ENABLED", "false")
+    monkeypatch.setenv("RERANKER_PROVIDER", "noop")
     get_settings.cache_clear()
 
     async with AsyncClient(
@@ -39,6 +40,57 @@ async def test_provider_status_local_fallback_is_configured(
     assert payload["embedding"]["mode"] == "local_demo"
     assert payload["ocr"]["mode"] == "disabled"
     assert payload["asr"]["mode"] == "disabled"
+    assert payload["reranker"]["mode"] == "disabled"
+    assert payload["reranker"]["enabled"] is False
+    assert payload["reranker"]["provider"] == "noop"
+
+    get_settings.cache_clear()
+
+
+@pytest.mark.anyio
+async def test_provider_status_reranker_local_rule_can_be_enabled(monkeypatch) -> None:
+    monkeypatch.setenv("RERANKER_ENABLED", "true")
+    monkeypatch.setenv("RERANKER_PROVIDER", "local_rule_reranker")
+    get_settings.cache_clear()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        response = await client.get("/api/v1/system/providers")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["reranker"]["configured"] is True
+    assert payload["reranker"]["mode"] == "local_demo"
+    assert payload["reranker"]["enabled"] is True
+    assert payload["reranker"]["model_name"] == "local_rule_reranker"
+
+    get_settings.cache_clear()
+
+
+@pytest.mark.anyio
+async def test_provider_status_flagembedding_missing_dependency_is_not_500(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("RERANKER_ENABLED", "true")
+    monkeypatch.setenv("RERANKER_PROVIDER", "flagembedding")
+    monkeypatch.setenv("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
+    get_settings.cache_clear()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
+    ) as client:
+        response = await client.get("/api/v1/system/providers")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["reranker"]["provider"] == "flagembedding"
+    assert payload["reranker"]["enabled"] is True
+    assert payload["reranker"]["model_name"] == "BAAI/bge-reranker-v2-m3"
+    if payload["reranker"]["available"] is False:
+        assert "FlagEmbedding is required" in payload["reranker"]["error"]
 
     get_settings.cache_clear()
 

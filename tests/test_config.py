@@ -20,6 +20,11 @@ def test_settings_accept_self_hosted_env_aliases(monkeypatch) -> None:
     monkeypatch.setenv("ENABLE_MEDIA", "true")
     monkeypatch.setenv("ASR_MODEL_PATH", "/models/vosk")
     monkeypatch.setenv("MULTIMODAL_PROVIDER", "disabled")
+    monkeypatch.setenv("RERANKER_ENABLED", "false")
+    monkeypatch.setenv("RERANKER_PROVIDER", "noop")
+    monkeypatch.setenv("RERANKER_MODEL", "")
+    monkeypatch.setenv("RERANKER_TOP_N", "40")
+    monkeypatch.setenv("FINAL_CONTEXT_TOP_K", "7")
 
     get_settings.cache_clear()
     settings = get_settings()
@@ -45,5 +50,10 @@ def test_settings_accept_self_hosted_env_aliases(monkeypatch) -> None:
     assert settings.enable_media is True
     assert settings.asr_vosk_model_path == "/models/vosk"
     assert settings.multimodal_provider == "disabled"
+    assert settings.reranker_enabled is False
+    assert settings.reranker_provider == "noop"
+    assert settings.reranker_model == ""
+    assert settings.reranker_top_n == 40
+    assert settings.final_context_top_k == 7
 
     get_settings.cache_clear()

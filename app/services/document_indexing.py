@@ -8,6 +8,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
 from app.models.enums import (
@@ -25,6 +26,13 @@ from app.services.document_embedding import (
     embed_ready_document_chunks,
     resolve_vector_store_root,
 )
+from app.services.indexing.index_metadata_service import (
+    get_vector_index_identity_from_settings,
+    mark_vector_failed,
+    mark_vector_indexed,
+    mark_vector_indexing,
+)
+from app.services.knowledge_graph.graph_index_service import build_document_graph_index
 from app.services.processing_job import (
     INDEXING_STEP_BUILD_EMBEDDINGS,
     INDEXING_STEP_FINALIZE_INDEX,
@@ -60,11 +68,23 @@ def build_document_index(
 
     scope = document.knowledge_base.scope
     team_id = document.knowledge_base.team_id if scope == KnowledgeBaseScope.TEAM else None
+    provider_name, model_name, model_dim, model_version = get_vector_index_identity_from_settings(
+        get_settings()
+    )
 
     _report(progress_callback, INDEXING_STEP_LOAD_CHUNKS)
     has_database_chunks = _document_has_database_chunks(db, document_id=document.id)
 
     try:
+        mark_vector_indexing(
+            db,
+            document_id=document.id,
+            knowledge_base_id=document.knowledge_base_id,
+            provider=provider_name,
+            model_name=model_name,
+            model_dim=model_dim,
+            model_version=model_version,
+        )
         _report(progress_callback, INDEXING_STEP_BUILD_EMBEDDINGS)
         if has_database_chunks:
             try:
@@ -94,9 +114,30 @@ def build_document_index(
                 team_id=team_id,
             )
     except DocumentEmbeddingError as exc:
+        mark_vector_failed(
+            db,
+            document_id=document.id,
+            knowledge_base_id=document.knowledge_base_id,
+            provider=provider_name,
+            model_name=model_name,
+            model_dim=model_dim,
+            model_version=model_version,
+            error_message=str(exc),
+        )
         raise DocumentIndexingError(str(exc), error_code=getattr(exc, "error_code", None)) from exc
 
     _report(progress_callback, INDEXING_STEP_WRITE_INDEX)
+    mark_vector_indexed(
+        db,
+        document_id=document.id,
+        knowledge_base_id=document.knowledge_base_id,
+        provider=embedded_result.embedding_provider,
+        model_name=embedded_result.embedding_model,
+        model_dim=embedded_result.embedding_dimension,
+        model_version=embedded_result.embedding_version,
+        indexed_at=embedded_result.indexed_at,
+    )
+    build_document_graph_index(db, document=document)
     _report(progress_callback, INDEXING_STEP_FINALIZE_INDEX)
     update_document_processing_status(
         db,
@@ -165,12 +206,34 @@ def _rebuild_knowledge_base_index_from_database_chunks(
     for candidate in eligible_documents:
         if not _document_has_database_chunks(db, document_id=candidate.id):
             continue
+        provider_name, model_name, model_dim, model_version = get_vector_index_identity_from_settings(
+            get_settings()
+        )
+        mark_vector_indexing(
+            db,
+            document_id=candidate.id,
+            knowledge_base_id=candidate.knowledge_base_id,
+            provider=provider_name,
+            model_name=model_name,
+            model_dim=model_dim,
+            model_version=model_version,
+        )
         embedded_result = embed_ready_document_chunks(
             db,
             document=candidate,
             vector_root=vector_root,
             scope=scope,
             team_id=team_id,
+        )
+        mark_vector_indexed(
+            db,
+            document_id=candidate.id,
+            knowledge_base_id=candidate.knowledge_base_id,
+            provider=embedded_result.embedding_provider,
+            model_name=embedded_result.embedding_model,
+            model_dim=embedded_result.embedding_dimension,
+            model_version=embedded_result.embedding_version,
+            indexed_at=embedded_result.indexed_at,
         )
         update_document_processing_status(
             db,

@@ -31,7 +31,11 @@ from app.services.qa import (
     build_conversation_retrieval_query,
 )
 from app.services.qa_intent import QAIntent, classify_qa_intent
-from app.services.retrieval import retrieve_chunks_for_documents
+from app.services.retrieval import (
+    RetrievalMode,
+    RetrievalRequest,
+    retrieve as retrieve_knowledge,
+)
 
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -155,34 +159,41 @@ async def append_conversation_message_endpoint(
         else DocumentReviewStatus.NOT_REQUIRED
     )
     team_id = knowledge_base.team_id if scope == KnowledgeBaseScope.TEAM else None
-    intent = classify_qa_intent(payload.content)
-
     vector_root = resolve_vector_store_root(settings.vector_store_dir, base_dir=BASE_DIR)
-    retrieved_chunks = []
-    if intent == QAIntent.KB_FACT_QA:
-        try:
-            retrieved_chunks = retrieve_chunks_for_documents(
+    intent = classify_qa_intent(payload.content)
+    retrieval_mode = (
+        RetrievalMode.OVERVIEW
+        if intent == QAIntent.KB_OVERVIEW
+        else RetrievalMode.CHUNK_ONLY
+    )
+    try:
+        retrieval_result = await retrieve_knowledge(
+            RetrievalRequest(
                 db=db,
                 documents=documents,
                 vector_root=vector_root,
                 scope=scope,
                 knowledge_base_id=knowledge_base.id,
+                user_id=current_user.id,
                 team_id=team_id,
                 query=retrieval_query,
+                evidence_query=payload.content,
                 top_k=5,
+                mode=retrieval_mode,
                 required_review_status=required_review_status,
             )
-        except DocumentEmbeddingError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(exc),
-            ) from exc
+        )
+    except DocumentEmbeddingError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
 
     try:
         qa_result = answer_question(
             db=db,
             question=payload.content,
-            retrieved_chunks=retrieved_chunks,
+            retrieved_chunks=retrieval_result.metadata.get("retrieved_chunks", []),
             documents=documents,
             knowledge_base_id=knowledge_base.id,
             scope=scope,
@@ -190,6 +201,7 @@ async def append_conversation_message_endpoint(
             team_id=team_id,
             conversation_context=conversation_context,
             retrieval_query=retrieval_query,
+            retrieval_result=retrieval_result,
             settings=settings,
         )
     except AnswerGenerationError as exc:

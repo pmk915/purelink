@@ -156,6 +156,9 @@ class Settings:
     multimodal_provider: str
     reranker_enabled: bool
     reranker_provider: str
+    reranker_model: str
+    reranker_top_n: int
+    final_context_top_k: int
     retrieval_min_score: float
     overview_max_chunks: int
     overview_max_chunks_per_document: int
@@ -254,8 +257,11 @@ def get_settings() -> Settings:
             "/app/models/vosk",
         ).strip(),
         multimodal_provider=os.getenv("MULTIMODAL_PROVIDER", "disabled").strip().lower(),
-        reranker_enabled=_get_bool("RERANKER_ENABLED", True),
-        reranker_provider=os.getenv("RERANKER_PROVIDER", "local_rule_reranker").strip().lower(),
+        reranker_enabled=_get_bool("RERANKER_ENABLED", False),
+        reranker_provider=os.getenv("RERANKER_PROVIDER", "noop").strip().lower(),
+        reranker_model=os.getenv("RERANKER_MODEL", "").strip(),
+        reranker_top_n=_get_int("RERANKER_TOP_N", 50),
+        final_context_top_k=_get_int("FINAL_CONTEXT_TOP_K", 8),
         retrieval_min_score=_get_float("RETRIEVAL_MIN_SCORE", 0.15),
         overview_max_chunks=_get_int("OVERVIEW_MAX_CHUNKS", 10),
         overview_max_chunks_per_document=_get_int("OVERVIEW_MAX_CHUNKS_PER_DOCUMENT", 2),

@@ -10,10 +10,14 @@ class ProviderStatusRead(BaseModel):
     mode: str
     message: str
     model: str | None = None
+    model_name: str | None = None
     base_url_configured: bool | None = None
     api_key_configured: bool | None = None
     model_path_exists: bool | None = None
     binary_available: bool | None = None
+    enabled: bool | None = None
+    available: bool | None = None
+    error: str | None = None
 
 
 class SystemProviderStatusRead(BaseModel):

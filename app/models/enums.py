@@ -45,6 +45,43 @@ class DocumentTaskStatus(StrEnum):
     FAILED = "failed"
 
 
+class DocumentIndexType(StrEnum):
+    VECTOR = "vector"
+    GRAPH = "graph"
+    LEXICAL = "lexical"
+
+
+class DocumentIndexStatus(StrEnum):
+    PENDING = "pending"
+    INDEXING = "indexing"
+    INDEXED = "indexed"
+    STALE = "stale"
+    FAILED = "failed"
+
+
+class RetrievalFilteredReason(StrEnum):
+    NOT_FILTERED = "not_filtered"
+    NOT_SELECTED_AFTER_RERANK = "not_selected_after_rerank"
+    LOW_SCORE = "low_score"
+    INCOMPATIBLE_INDEX = "incompatible_index"
+    STALE_INDEX = "stale_index"
+    LEGACY_UNKNOWN_ALLOWED = "legacy_unknown_allowed"
+    MISSING_INDEX = "missing_index"
+    DOCUMENT_NOT_READY = "document_not_ready"
+    PERMISSION_FILTERED = "permission_filtered"
+    UNKNOWN = "unknown"
+
+
+class DocumentBlockType(StrEnum):
+    TEXT = "text"
+    HEADING = "heading"
+    TABLE = "table"
+    CODE = "code"
+    IMAGE = "image"
+    FORMULA = "formula"
+    UNKNOWN = "unknown"
+
+
 class ProcessingJobType(StrEnum):
     DOCUMENT_PROCESS = "document_process"
     DOCUMENT_INDEX = "document_index"

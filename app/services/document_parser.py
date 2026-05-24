@@ -7,11 +7,15 @@ from pathlib import Path
 
 from app.models.document import Document
 from app.models.enums import KnowledgeBaseScope
+from app.services.document_parsing import get_parser
+from app.services.document_parsing.block_normalizer import blocks_to_text
 
 
 SUPPORTED_PARSE_SUFFIXES = {
     ".txt": "plain_text",
     ".md": "markdown",
+    ".docx": "minimal_docx_text",
+    ".pdf": "pdf_text",
 }
 
 logger = logging.getLogger("purelink.documents")
@@ -68,29 +72,34 @@ def parse_document_to_local_result(
     )
 
     suffix = Path(document.original_filename).suffix.lower()
-    parser = SUPPORTED_PARSE_SUFFIXES.get(suffix)
-    if parser is None:
+    try:
+        parser = get_parser(filename=document.original_filename, mime_type=document.file_type)
+    except ValueError as exc:
         logger.error(
             "parse unsupported suffix document_id=%s original_filename=%s",
             document.id,
             document.original_filename,
         )
-        raise DocumentParseError("Only .txt and .md documents are supported for parsing.")
+        raise DocumentParseError("Only .txt, .md, .docx, and .pdf documents are supported for parsing.") from exc
 
     try:
-        extracted_text = source_path.read_text(encoding="utf-8")
-    except UnicodeDecodeError as exc:
-        logger.exception(
-            "parse decode failed document_id=%s source_path=%s",
-            document.id,
+        parsed_document = parser.parse(
             source_path,
+            filename=document.original_filename,
+            mime_type=document.file_type,
         )
-        raise DocumentParseError("Document could not be decoded as UTF-8 text.") from exc
+    except ValueError as exc:
+        raise DocumentParseError(str(exc)) from exc
+    extracted_text = blocks_to_text(parsed_document.blocks) if parsed_document.blocks else parsed_document.text
+    parser_name = SUPPORTED_PARSE_SUFFIXES.get(
+        suffix,
+        str(parsed_document.metadata.get("parser") or parser.parser_name),
+    )
 
     logger.info(
         "parse extracted text document_id=%s parser=%s extracted_char_count=%s",
         document.id,
-        parser,
+        parser_name,
         len(extracted_text),
     )
 
@@ -109,9 +118,13 @@ def parse_document_to_local_result(
         "team_id": team_id,
         "original_filename": document.original_filename,
         "source_storage_path": document.storage_path,
-        "parser": parser,
+        "parser": parser_name,
         "extracted_char_count": len(extracted_text),
         "content": extracted_text,
+        "blocks": [
+            block.model_dump(mode="json")
+            for block in parsed_document.blocks
+        ],
     }
     destination.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2),
@@ -124,7 +137,7 @@ def parse_document_to_local_result(
     )
     return ParsedDocumentResult(
         parsed_path=relative_path.as_posix(),
-        parser=parser,
+        parser=parser_name,
         extracted_char_count=len(extracted_text),
     )
 

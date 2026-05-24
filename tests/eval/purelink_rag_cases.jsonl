@@ -1,0 +1,1 @@
+{"id":"template_personal_kb_001","question":"PureLink 如何保证回答可以追踪来源？","knowledge_base_id":1,"user_id":1,"mode":"chunk_only","top_k":8,"expected_doc_names":["替换为你的本地文档名.md"],"expected_keywords":["citation","source","trace"],"expected_citation_required":true,"notes":"Template case. Update knowledge_base_id, user_id, and expected_doc_names before running local eval."}

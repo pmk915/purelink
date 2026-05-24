@@ -20,11 +20,15 @@ class Base(DeclarativeBase):
 def load_all_models() -> None:
     from app.models.conversation import Conversation  # noqa: F401
     from app.models.document import Document  # noqa: F401
+    from app.models.document_block import DocumentBlock  # noqa: F401
     from app.models.document_citation_unit import DocumentCitationUnit  # noqa: F401
     from app.models.document_chunk import DocumentChunk  # noqa: F401
+    from app.models.document_index import DocumentIndex  # noqa: F401
     from app.models.document_task import DocumentTask  # noqa: F401
+    from app.models.knowledge_graph import EntityMention, KnowledgeEntity, KnowledgeRelation  # noqa: F401
     from app.models.knowledge_base import KnowledgeBase  # noqa: F401
     from app.models.message import Message  # noqa: F401
     from app.models.processing_job import ProcessingJob  # noqa: F401
+    from app.models.retrieval_trace import RetrievalTrace, RetrievalTraceItem  # noqa: F401
     from app.models.team import Team, TeamInvite, TeamMember  # noqa: F401
     from app.models.user import User  # noqa: F401

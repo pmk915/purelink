@@ -20,6 +20,12 @@ from app.services.embedding_provider import (
 )
 from app.services.ocr_provider import TESSERACT_OCR_PROVIDER
 from app.services.reranking import LOCAL_RULE_RERANKER
+from app.providers.reranker.noop_reranker import NOOP_RERANKER_PROVIDER
+from app.providers.reranker.flagembedding_reranker import (
+    DEFAULT_FLAGEMBEDDING_RERANKER_MODEL,
+    FLAGEMBEDDING_RERANKER_PROVIDER,
+    probe_flagembedding_error,
+)
 
 
 LOCAL_DEMO_MODE = "local_demo"
@@ -266,6 +272,19 @@ def build_asr_status(settings: Settings) -> ProviderStatusRead:
 
 def build_reranker_status(settings: Settings) -> ProviderStatusRead:
     provider = settings.reranker_provider
+    if not settings.reranker_enabled or provider in {"", "disabled", NOOP_RERANKER_PROVIDER}:
+        return ProviderStatusRead(
+            provider=provider or NOOP_RERANKER_PROVIDER,
+            configured=True,
+            requires_api_key=False,
+            mode=DISABLED_MODE,
+            message="Reranker 默认关闭。启用后可使用 local_rule_reranker，或安装可选依赖后使用 flagembedding。",
+            model=settings.reranker_model or None,
+            model_name=settings.reranker_model or None,
+            enabled=False,
+            available=True,
+        )
+
     if provider == LOCAL_RULE_RERANKER:
         return ProviderStatusRead(
             provider=provider,
@@ -273,12 +292,43 @@ def build_reranker_status(settings: Settings) -> ProviderStatusRead:
             requires_api_key=False,
             mode=LOCAL_DEMO_MODE,
             message="本地轻量规则 rerank 已启用。",
+            model=settings.reranker_model or LOCAL_RULE_RERANKER,
+            model_name=settings.reranker_model or LOCAL_RULE_RERANKER,
+            enabled=True,
+            available=True,
         )
 
-    return _unsupported_status(
+    if provider == FLAGEMBEDDING_RERANKER_PROVIDER:
+        model = settings.reranker_model or DEFAULT_FLAGEMBEDDING_RERANKER_MODEL
+        error = probe_flagembedding_error()
+        return ProviderStatusRead(
+            provider=provider,
+            configured=error is None,
+            requires_api_key=False,
+            mode=LOCAL_MODEL_MODE,
+            message=(
+                "FlagEmbedding reranker 已配置。"
+                if error is None
+                else error
+            ),
+            model=model,
+            model_name=model,
+            enabled=settings.reranker_enabled,
+            available=error is None,
+            error=error,
+        )
+
+    status = _unsupported_status(
         provider=provider,
-        message=f"不支持的 RERANKER_PROVIDER。当前支持：{LOCAL_RULE_RERANKER}。",
+        message=(
+            "不支持的 RERANKER_PROVIDER。当前支持："
+            f"{NOOP_RERANKER_PROVIDER}, {LOCAL_RULE_RERANKER}, {FLAGEMBEDDING_RERANKER_PROVIDER}。"
+        ),
     )
+    status.enabled = settings.reranker_enabled
+    status.available = False
+    status.error = status.message
+    return status
 
 
 def _unsupported_status(*, provider: str, message: str) -> ProviderStatusRead:

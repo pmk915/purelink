@@ -76,7 +76,12 @@ from app.services.conversation import (
     persist_question_answer_exchange,
 )
 from app.services.qa import AnswerGenerationError, answer_question
-from app.services.retrieval import retrieve_chunks_for_documents
+from app.services.qa_intent import QAIntent, classify_qa_intent
+from app.services.retrieval import (
+    RetrievalMode,
+    RetrievalRequest,
+    retrieve as retrieve_knowledge,
+)
 from app.services.source_locator import (
     build_preview_target_for_chunk,
     build_source_locator_for_chunk,
@@ -1263,22 +1268,28 @@ async def retrieve_team_knowledge_base_chunks_endpoint(
     settings = get_settings()
     vector_root = resolve_vector_store_root(settings.vector_store_dir, base_dir=BASE_DIR)
     try:
-        results = retrieve_chunks_for_documents(
-            db=db,
-            documents=documents,
-            vector_root=vector_root,
-            scope=KnowledgeBaseScope.TEAM,
-            knowledge_base_id=knowledge_base.id,
-            team_id=team_id,
-            query=payload.query,
-            top_k=payload.top_k,
-            required_review_status=DocumentReviewStatus.APPROVED,
+        retrieval_result = await retrieve_knowledge(
+            RetrievalRequest(
+                db=db,
+                documents=documents,
+                vector_root=vector_root,
+                scope=KnowledgeBaseScope.TEAM,
+                knowledge_base_id=knowledge_base.id,
+                user_id=current_user.id,
+                team_id=team_id,
+                query=payload.query,
+                top_k=payload.top_k,
+                mode=RetrievalMode.CHUNK_ONLY,
+                include_citations=False,
+                required_review_status=DocumentReviewStatus.APPROVED,
+            )
         )
     except DocumentEmbeddingError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
+    results = retrieval_result.metadata.get("retrieved_chunks", [])
 
     return RetrievalResponse(
         query=payload.query,
@@ -1338,17 +1349,27 @@ async def ask_team_knowledge_base_endpoint(
 
     settings = get_settings()
     vector_root = resolve_vector_store_root(settings.vector_store_dir, base_dir=BASE_DIR)
+    retrieval_mode = (
+        RetrievalMode.OVERVIEW
+        if classify_qa_intent(payload.question) == QAIntent.KB_OVERVIEW
+        else RetrievalMode.CHUNK_ONLY
+    )
     try:
-        retrieved_chunks = retrieve_chunks_for_documents(
-            db=db,
-            documents=documents,
-            vector_root=vector_root,
-            scope=KnowledgeBaseScope.TEAM,
-            knowledge_base_id=knowledge_base.id,
-            team_id=team_id,
-            query=payload.question,
-            top_k=payload.top_k,
-            required_review_status=DocumentReviewStatus.APPROVED,
+        retrieval_result = await retrieve_knowledge(
+            RetrievalRequest(
+                db=db,
+                documents=documents,
+                vector_root=vector_root,
+                scope=KnowledgeBaseScope.TEAM,
+                knowledge_base_id=knowledge_base.id,
+                user_id=current_user.id,
+                team_id=team_id,
+                query=payload.question,
+                evidence_query=payload.question,
+                top_k=payload.top_k,
+                mode=retrieval_mode,
+                required_review_status=DocumentReviewStatus.APPROVED,
+            )
         )
     except DocumentEmbeddingError as exc:
         raise HTTPException(
@@ -1360,12 +1381,13 @@ async def ask_team_knowledge_base_endpoint(
         qa_result = answer_question(
             db=db,
             question=payload.question,
-            retrieved_chunks=retrieved_chunks,
+            retrieved_chunks=retrieval_result.metadata.get("retrieved_chunks", []),
             documents=documents,
             knowledge_base_id=knowledge_base.id,
             scope=KnowledgeBaseScope.TEAM,
-            required_review_status=DocumentReviewStatus.APPROVED,
             team_id=team_id,
+            required_review_status=DocumentReviewStatus.APPROVED,
+            retrieval_result=retrieval_result,
         )
     except AnswerGenerationError as exc:
         raise HTTPException(

@@ -29,6 +29,7 @@ from app.services.document_embedding import RetrievedChunk, tokenize_text
 from app.services.llm import LLMProviderError, generate_openai_compatible_chat_completion
 from app.services.overview_retrieval import collect_overview_chunks
 from app.services.qa_intent import QAIntent, classify_qa_intent
+from app.services.retrieval.types import RetrievalMode, RetrievalResult
 from app.services.source_locator import (
     build_preview_target_for_chunk,
     build_source_locator_for_chunk,
@@ -192,6 +193,7 @@ def answer_question(
     team_id: int | None = None,
     conversation_context: list[MessageContext] | None = None,
     retrieval_query: str | None = None,
+    retrieval_result: RetrievalResult | None = None,
     generator: AnswerGenerator | None = None,
     settings: Settings | None = None,
 ) -> QuestionAnswerResult:
@@ -204,6 +206,26 @@ def answer_question(
         intent.value,
         len(retrieved_chunks),
     )
+    if retrieval_result is not None:
+        context_chunks = retrieval_result.metadata.get("context_chunks") or []
+        evidence_units = retrieval_result.metadata.get("evidence_units") or None
+        retrieval_intent = (
+            QAIntent.KB_OVERVIEW
+            if retrieval_result.mode == RetrievalMode.OVERVIEW
+            else QAIntent.KB_FACT_QA
+        )
+        return _answer_with_context_chunks(
+            db=db,
+            question=question,
+            context_chunks=context_chunks,
+            intent=retrieval_intent,
+            conversation_context=conversation_context,
+            retrieval_query=retrieval_query,
+            generator=generator,
+            settings=active_settings,
+            preselected_evidence_units=evidence_units,
+        )
+
     if intent == QAIntent.KB_OVERVIEW:
         return _answer_kb_overview_question(
             db=db,
@@ -251,6 +273,7 @@ def _answer_kb_fact_question(
         retrieval_query=retrieval_query,
         generator=generator,
         settings=settings,
+        preselected_evidence_units=None,
     )
 
 
@@ -323,6 +346,7 @@ def _answer_kb_overview_question(
         retrieval_query=retrieval_query,
         generator=generator,
         settings=settings,
+        preselected_evidence_units=None,
     )
 
 
@@ -336,14 +360,18 @@ def _answer_with_context_chunks(
     retrieval_query: str | None,
     generator: AnswerGenerator | None,
     settings: Settings,
+    preselected_evidence_units: list[CitationUnitCandidate] | None,
 ) -> QuestionAnswerResult:
-    chunk_units = load_citation_units_for_chunks(db=db, chunks=context_chunks) if db is not None else {}
-    evidence_units = select_evidence_units(
-        question=question,
-        retrieved_chunks=context_chunks,
-        chunk_units=chunk_units,
-        max_evidence_units=max(MAX_ASK_EVIDENCE_UNITS, settings.max_citations),
-    )
+    if preselected_evidence_units is None:
+        chunk_units = load_citation_units_for_chunks(db=db, chunks=context_chunks) if db is not None else {}
+        evidence_units = select_evidence_units(
+            question=question,
+            retrieved_chunks=context_chunks,
+            chunk_units=chunk_units,
+            max_evidence_units=max(MAX_ASK_EVIDENCE_UNITS, settings.max_citations),
+        )
+    else:
+        evidence_units = preselected_evidence_units
     logger.info(
         "qa evidence selected question=%s qa_intent=%s selected_chunk_ids=%s candidate_evidence_unit_count=%s fallback_chunk_citation_count=%s evidence_content_lengths=%s",
         question,

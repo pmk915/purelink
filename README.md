@@ -129,6 +129,7 @@ MAX_CITATIONS=6
 - 模型权重不会提交到 Git，也不会被打进默认 Docker 镜像
 - `LLM_PROVIDER=heuristic` 适合本地 demo；如需更强回答能力，可改为 `openai_compatible` 或 `deepseek`
 - `OCR_PROVIDER`、`ASR_PROVIDER`、`MULTIMODAL_PROVIDER` 在 Core 中默认关闭
+- `RERANKER_ENABLED=false` 是默认值；可选 reranker 已接入 retrieval pipeline，但默认不启用
 - `RETRIEVAL_MIN_SCORE` 用于控制“是否有足够可靠来源可以回答”
 - citation 会先从 retrieval chunk 中挑选更短的 `citation unit` 片段，再返回给前端展示
 
@@ -140,6 +141,76 @@ EMBEDDING_MODEL=
 ```
 
 但检索质量会明显弱于真实语义 embedding。
+
+## RAG Model Providers
+
+PureLink M2 增加了 `app/providers/`，把 embedding、reranker 和 LLM 的接入层抽成 provider 接口。当前默认仍然是轻量本地配置，方便 Docker 本地部署和 smoke test。
+
+当前默认：
+
+- Embedding: `fastembed` + `BAAI/bge-small-zh-v1.5`
+- Reranker: disabled / `noop`
+- LLM: 沿用现有 `LLM_PROVIDER` 配置
+
+Reranker 说明：
+
+- 默认关闭，保持本地部署轻量。
+- 开发/测试可启用 `local_rule_reranker`，这是确定性的词面重排，不下载模型。
+- 增强本地重排可配置 `flagembedding` + `BAAI/bge-reranker-v2-m3`，但需要额外安装可选依赖并承担更高内存和启动成本。
+
+典型 reranking 流程：
+
+1. 初始召回 top 50 candidates。
+2. 对 query-candidate pairs 做 rerank。
+3. 保留最终 top 8 evidences 给回答生成。
+
+推荐预设：
+
+- Lightweight local：`BAAI/bge-small-zh-v1.5` embedding，reranker disabled
+- Enhanced local（可选）：`BAAI/bge-small-zh-v1.5` embedding，`BAAI/bge-reranker-v2-m3` reranker
+- Cloud/API（未来选项）：OpenAI-compatible embeddings，外部 rerank API
+
+注意：切换 embedding provider 或 model 后，已有向量索引需要重建，否则检索结果可能不可靠。
+不要在低资源机器上启用大型 reranker，除非你已经评估过内存和模型加载成本。
+
+## Index Metadata and Rebuild Safety
+
+PureLink records which embedding provider and model were used to create vector indexes. Each indexed document has vector index metadata with provider, model name, vector dimension when known, status, and indexed time.
+
+Changing `EMBEDDING_PROVIDER` or `EMBEDDING_MODEL` does not automatically make existing vectors compatible. Run a reindex workflow when switching embedding models.
+
+Legacy documents created before M4 may not have `document_indexes` rows. They remain retrievable for backward compatibility, but newly indexed documents record explicit index metadata for stale-index detection and future rebuild workflows.
+
+## Retrieval Trace
+
+PureLink records retrieval traces for debugging RAG quality. A trace can show the query, retrieval mode, initial candidate count, selected evidence count, provider metadata, reranker usage, candidate ranks, rerank scores, selected evidences, and filtered reasons.
+
+This helps diagnose whether a poor answer came from retrieval, reranking, stale or incompatible indexes, citation selection, or context construction. M5 keeps this backend-only; it does not add frontend trace visualization.
+
+## Lightweight RAG Evaluation
+
+PureLink includes a manual RAG evaluation harness for local retrieval quality checks. It loads JSONL cases and reports retrieval hit, citation hit, keyword coverage, reranker usage, and trace availability.
+
+```bash
+.venv/bin/python scripts/eval/run_rag_eval.py \
+  --cases tests/eval/purelink_rag_cases.jsonl \
+  --output tests/eval/reports/latest.json
+```
+
+The default JSONL file is a template. Update `knowledge_base_id`, `user_id`, and expected document names for your local test KB before running `make eval-rag`.
+
+## Lightweight GraphRAG
+
+PureLink includes a lightweight GraphRAG prototype inspired by LightRAG. It extracts simple entities and relations from indexed documents, stores them in PostgreSQL, and supports `graph_vector_mix` retrieval to merge graph candidates with vector candidates.
+
+This is intentionally not a full LightRAG implementation:
+
+- no external graph database
+- no complex multi-hop reasoning
+- no graph community detection
+- no graph visualization UI
+
+Graph relations remain grounded to source document, chunk, and citation-unit records when possible. Normal vector RAG remains the default path.
 
 ## 接入大模型回答
 
@@ -190,6 +261,16 @@ LLM_THINKING_ENABLED=true
   - `answer_question()`：问答主入口
   - `resolve_answer_generator()`：根据 `LLM_PROVIDER` 选择回答实现
   - `OpenAICompatibleAnswerGenerator`：当前默认的外部大模型回答器
+- [app/services/retrieval/](app/services/retrieval/)
+  - `retrieval_service.retrieve()`：知识检索统一入口
+  - `types.py`：`RetrievalMode` / `RetrievalRequest` / `RetrievalResult`
+  - `chunk_retriever.py`：复用当前 chunk-level hybrid 检索
+  - `overview_retriever_adapter.py`：适配现有知识库概览检索
+  - `context_builder.py` / `citation_builder.py`：生成 LLM context 和 citation-ready evidence
+- [app/providers/](app/providers/)
+  - `embedding/`：embedding provider 接口、factory 和现有实现 adapter
+  - `reranker/`：reranker provider 接口和 no-op 默认实现
+  - `llm/`：LLM provider 接口和 legacy adapter
 - [app/services/llm.py](app/services/llm.py)
   - `generate_openai_compatible_chat_completion()`：真正发起 HTTP 请求的地方
 - [app/schemas/llm.py](app/schemas/llm.py)
@@ -279,9 +360,9 @@ flowchart TD
   D -->|No| F[Save file and create Document]
   F --> G[Create ProcessingJob]
   G --> H[Worker claims queued job]
-  H --> I[Extract text]
+  H --> I[Parse into document blocks]
   I --> J[Text quality check]
-  J --> K[Chunk persist]
+  J --> K[Chunk and citation persist]
   K --> L[Embedding and index]
   L --> M[Document indexed]
   M --> N[Ask with citations]
@@ -291,6 +372,19 @@ flowchart TD
 
 - 上传接口只做轻量入口工作，不同步解析文件
 - 文本质量不达标时，chunk 不会入库，避免脏数据污染索引
+
+## Document Parsing and Block Schema
+
+PureLink 会把解析结果标准化为 `document_blocks`，当前支持 heading、text、table、code 等结构化 block，并保留 image、formula、unknown 类型给后续扩展。
+
+当前 Core 仍然走轻量文本解析：
+
+- `.txt`：按文本内容生成 block
+- `.md`：识别 heading、段落、pipe table 和 fenced code
+- `.docx`：复用现有 DOCX 文本解析并转换为 blocks
+- `.pdf`：复用文本型 PDF 解析并按已有 segment/page 信息转换为 blocks
+
+下游 chunking、citation 和 embedding 行为保持兼容：处理链路会把 blocks 转回稳定的 plain text 形态，再继续生成 chunks、citation units 和 vector index。M6 不包含 OCR、VLM 或外部 parser 服务。
 
 ## 问答流程
 
