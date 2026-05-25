@@ -62,6 +62,12 @@ export interface KnowledgeBase {
   updated_at: string;
 }
 
+export interface KnowledgeBaseRagHealth {
+  document_count: number;
+  document_status_counts: Record<string, number>;
+  index_status_counts: Record<string, Record<string, number>>;
+}
+
 export interface Team {
   id: number;
   name: string;

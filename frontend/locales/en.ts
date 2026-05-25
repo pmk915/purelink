@@ -182,6 +182,24 @@ export const en = {
     qaReadyState:
       "This knowledge base already has Q&A-ready documents. You can start asking now.",
     noDocuments: "No documents yet.",
+    deleteDialogTitle: "Delete knowledge base?",
+    deleteDialogDescription: (name: string) =>
+      `This will delete “${name}” with its documents, indexes, and answer source data. This cannot be undone.`,
+    deleteTeamDialogDescription: (name: string) =>
+      `Deleting team knowledge base “${name}” affects team member access to its documents and answers. This cannot be undone.`,
+    deleteSucceeded: (name: string) => `Knowledge base “${name}” was deleted.`,
+    deleteFailed: "Knowledge base delete failed. Please try again.",
+    deleteAdminOnly: "Only team admins can delete team knowledge bases.",
+    ragHealthTitle: "Knowledge base health",
+    ragHealthDescription:
+      "Document processing, vector index, and graph index summary.",
+    healthDocuments: "Documents",
+    healthVectorIndex: "Vector index",
+    healthGraphIndex: "Graph index",
+    healthIndexed: "Indexed",
+    healthFailed: "Failed",
+    healthMissing: "Missing",
+    healthStale: "Stale",
     workspaceScopePersonal: "personal knowledge base",
     workspaceScopeTeam: (teamId: number) =>
       `team knowledge base · team #${teamId}`,
@@ -330,6 +348,11 @@ export const en = {
     citationTimeRange: (start: string, end: string) => `${start} - ${end}`,
     citationScore: (score: number) => `Score ${score.toFixed(3)}`,
     citationViewSource: "View source",
+    evidenceSnippet: "Evidence snippet",
+    retrievalDetails: "Retrieval details",
+    retrievalDetailsDescription:
+      "This shows citation/evidence data currently available to the frontend. Fields such as trace_id will appear when the backend response exposes them.",
+    evidenceCount: (count: number) => `Evidence count: ${count}`,
     openConversation: (id: number) => `Open conversation #${id}`
   },
   teams: {

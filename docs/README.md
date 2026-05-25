@@ -29,6 +29,11 @@
 
 - [Lightweight GraphRAG](rag/lightweight-graphrag.md)
 
+## Product Experience
+
+- [Knowledge Base Management](product/knowledge-base-management.md)
+- [RAG Answer Experience](product/rag-answer-experience.md)
+
 ## Development
 
 - [Frontend-Backend Integration Test](development/frontend-backend-integration-test.md)

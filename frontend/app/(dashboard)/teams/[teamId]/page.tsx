@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ShieldCheck, UserRoundPlus } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { KnowledgeBaseCard } from "@/components/knowledge-bases/knowledge-base-card";
@@ -10,18 +11,21 @@ import { CreateKnowledgeBaseForm } from "@/components/knowledge-bases/create-kno
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 import { useI18n } from "@/hooks/use-i18n";
 import {
   useCreateTeamKnowledgeBase,
+  useDeleteTeamKnowledgeBase,
   useTeamsKnowledgeBases
 } from "@/hooks/use-knowledge-bases";
 import { useTeamReviewTasks } from "@/hooks/use-documents";
 import { useCreateTeamInvite, useTeam, useTeamInvites, useTeamMembers } from "@/hooks/use-teams";
 import { createInviteSchema, type CreateInviteValues } from "@/schemas/teams";
 import { formatDate } from "@/lib/utils";
+import type { KnowledgeBase } from "@/types";
 
 export default function TeamDetailPage({
   params
@@ -31,12 +35,16 @@ export default function TeamDetailPage({
   const teamId = Number(params.teamId);
   const { accessToken } = useAuth();
   const { messages } = useI18n();
+  const [pendingDeleteKnowledgeBase, setPendingDeleteKnowledgeBase] =
+    useState<KnowledgeBase | null>(null);
+  const [deleteFeedback, setDeleteFeedback] = useState<string | null>(null);
   const teamQuery = useTeam(accessToken, teamId);
   const membersQuery = useTeamMembers(accessToken, teamId);
   const invitesQuery = useTeamInvites(accessToken, teamId);
   const teamKnowledgeBasesQuery = useTeamsKnowledgeBases(accessToken, teamId);
   const createInviteMutation = useCreateTeamInvite(accessToken, teamId);
   const createTeamKbMutation = useCreateTeamKnowledgeBase(accessToken, teamId);
+  const deleteTeamKbMutation = useDeleteTeamKnowledgeBase(accessToken, teamId);
 
   const inviteForm = useForm<CreateInviteValues>({
     resolver: zodResolver(createInviteSchema),
@@ -55,6 +63,43 @@ export default function TeamDetailPage({
 
   return (
     <div className="space-y-6">
+      <ConfirmDialog
+        open={pendingDeleteKnowledgeBase !== null}
+        title={messages.knowledgeBases.deleteDialogTitle}
+        description={
+          pendingDeleteKnowledgeBase
+            ? messages.knowledgeBases.deleteTeamDialogDescription(pendingDeleteKnowledgeBase.name)
+            : undefined
+        }
+        cancelLabel={messages.common.cancel}
+        confirmLabel={
+          deleteTeamKbMutation.isPending ? messages.common.deleting : messages.common.delete
+        }
+        destructive
+        loading={deleteTeamKbMutation.isPending}
+        onCancel={() => setPendingDeleteKnowledgeBase(null)}
+        onConfirm={async () => {
+          if (!pendingDeleteKnowledgeBase) {
+            return;
+          }
+          try {
+            await deleteTeamKbMutation.mutateAsync(pendingDeleteKnowledgeBase.id);
+            setDeleteFeedback(messages.knowledgeBases.deleteSucceeded(pendingDeleteKnowledgeBase.name));
+            setPendingDeleteKnowledgeBase(null);
+          } catch (error) {
+            console.error("team knowledge base delete failed", {
+              error,
+              teamId,
+              knowledgeBaseId: pendingDeleteKnowledgeBase.id
+            });
+            setDeleteFeedback(
+              error instanceof Error && error.message.includes("403")
+                ? messages.knowledgeBases.deleteAdminOnly
+                : messages.knowledgeBases.deleteFailed
+            );
+          }
+        }}
+      />
       <Card className="bg-gradient-to-br from-white via-indigo-50 to-sky-50">
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -105,12 +150,22 @@ export default function TeamDetailPage({
             <CardDescription>{messages.teams.teamKnowledgeBasesDescription}</CardDescription>
           </CardHeader>
           <CardContent>
+            {deleteFeedback ? (
+              <div className="mb-4 rounded-2xl bg-secondary/70 px-4 py-3 text-sm text-muted-foreground">
+                {deleteFeedback}
+              </div>
+            ) : null}
             <div className="grid gap-4 lg:grid-cols-2">
               {(teamKnowledgeBasesQuery.data ?? []).map((knowledgeBase) => (
                 <KnowledgeBaseCard
                   key={knowledgeBase.id}
                   knowledgeBase={knowledgeBase}
                   href={`/teams/${teamId}/knowledge-bases/${knowledgeBase.id}`}
+                  canDelete={Boolean(isAdmin)}
+                  deleteDisabledReason={
+                    !isAdmin ? messages.knowledgeBases.deleteAdminOnly : null
+                  }
+                  onDelete={isAdmin ? () => setPendingDeleteKnowledgeBase(knowledgeBase) : undefined}
                 />
               ))}
             </div>

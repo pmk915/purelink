@@ -173,6 +173,23 @@ export const zh: Messages = {
     qaUnavailableState: "当前还没有可问答文档，请检查失败文档或继续上传内容。",
     qaReadyState: "当前知识库已有可问答文档，可以直接开始提问。",
     noDocuments: "还没有文档。",
+    deleteDialogTitle: "删除知识库？",
+    deleteDialogDescription: (name: string) =>
+      `这会删除“${name}”以及其中的文档、索引和问答来源数据。此操作不可撤销。`,
+    deleteTeamDialogDescription: (name: string) =>
+      `删除团队知识库“${name}”会影响团队成员访问其中的文档和问答结果。此操作不可撤销。`,
+    deleteSucceeded: (name: string) => `知识库“${name}”已删除。`,
+    deleteFailed: "删除知识库失败，请稍后重试。",
+    deleteAdminOnly: "只有团队管理员可以删除团队知识库。",
+    ragHealthTitle: "知识库健康状态",
+    ragHealthDescription: "文档处理、向量索引和图谱索引状态汇总。",
+    healthDocuments: "文档",
+    healthVectorIndex: "向量索引",
+    healthGraphIndex: "图谱索引",
+    healthIndexed: "已完成",
+    healthFailed: "失败",
+    healthMissing: "未构建",
+    healthStale: "过期",
     workspaceScopePersonal: "个人知识库",
     workspaceScopeTeam: (teamId: number) => `团队知识库 · team #${teamId}`,
     activeTaskTitle: "后台活动",
@@ -306,6 +323,11 @@ export const zh: Messages = {
     citationTimeRange: (start: string, end: string) => `${start} - ${end}`,
     citationScore: (score: number) => `分数 ${score.toFixed(3)}`,
     citationViewSource: "查看来源",
+    evidenceSnippet: "证据片段",
+    retrievalDetails: "检索详情",
+    retrievalDetailsDescription:
+      "这里会显示当前前端可见的 citation/evidence 信息；trace_id 等字段会在后端响应提供后自动展示。",
+    evidenceCount: (count: number) => `证据数量：${count}`,
     openConversation: (id: number) => `打开会话 #${id}`
   },
   teams: {

@@ -81,3 +81,9 @@ class KnowledgeBaseReindexRead(BaseModel):
     queued_jobs: list[ProcessingJobSubmissionRead]
     queued_document_ids: list[int]
     skipped_document_ids: list[int]
+
+
+class KnowledgeBaseRagHealthRead(BaseModel):
+    document_count: int
+    document_status_counts: dict[str, int]
+    index_status_counts: dict[str, dict[str, int]]

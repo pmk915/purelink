@@ -1,5 +1,5 @@
 import { apiClient } from "@/lib/api-client";
-import type { KnowledgeBase } from "@/types";
+import type { KnowledgeBase, KnowledgeBaseRagHealth } from "@/types";
 
 export function listPersonalKnowledgeBases(token: string) {
   return apiClient.get<KnowledgeBase[]>("/knowledge-bases", token);
@@ -26,4 +26,8 @@ export function updatePersonalKnowledgeBase(
 
 export function deletePersonalKnowledgeBase(token: string, kbId: number) {
   return apiClient.delete<void>(`/knowledge-bases/${kbId}`, token);
+}
+
+export function getPersonalKnowledgeBaseRagHealth(token: string, kbId: number) {
+  return apiClient.get<KnowledgeBaseRagHealth>(`/knowledge-bases/${kbId}/rag-health`, token);
 }

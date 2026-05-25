@@ -272,6 +272,15 @@ export default function ConversationDetailPage({
 
                       {sourcesExpanded ? (
                         <div className="mt-3 grid max-h-80 gap-2.5 overflow-y-auto pr-1">
+                          <details className="rounded-2xl border border-border/60 bg-secondary/40 px-3.5 py-3 text-xs text-muted-foreground">
+                            <summary className="cursor-pointer font-medium text-foreground">
+                              {messages.qa.retrievalDetails}
+                            </summary>
+                            <div className="mt-2 space-y-1">
+                              <p>{messages.qa.evidenceCount(message.citations.length)}</p>
+                              <p>{messages.qa.retrievalDetailsDescription}</p>
+                            </div>
+                          </details>
                           {message.citations.map((citation, index) => (
                             <CitationCard
                               key={`${message.id}-${citation.citation_unit_id ?? citation.chunk_db_id ?? citation.chunk_id}-${index}`}

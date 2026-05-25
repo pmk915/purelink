@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Database, Users } from "lucide-react";
+import { ArrowRight, Database, Trash2, Users } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useI18n } from "@/hooks/use-i18n";
 import type { KnowledgeBase } from "@/types";
@@ -12,10 +12,16 @@ import { formatDate } from "@/lib/utils";
 
 export function KnowledgeBaseCard({
   knowledgeBase,
-  href
+  href,
+  onDelete,
+  canDelete = false,
+  deleteDisabledReason
 }: {
   knowledgeBase: KnowledgeBase;
   href: string;
+  onDelete?: () => void;
+  canDelete?: boolean;
+  deleteDisabledReason?: string | null;
 }) {
   const { messages } = useI18n();
   return (
@@ -50,17 +56,33 @@ export function KnowledgeBaseCard({
           </p>
           <p>{messages.common.knowledgeBaseId(knowledgeBase.id)}</p>
         </div>
-        <Link
-          href={href}
-          className={buttonVariants({
-            variant: "outline",
-            size: "sm",
-            className: "w-fit rounded-xl"
-          })}
-        >
-          {messages.knowledgeBases.openWorkspace}
-          <ArrowRight className="h-4 w-4" />
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={href}
+            className={buttonVariants({
+              variant: "outline",
+              size: "sm",
+              className: "w-fit rounded-xl"
+            })}
+          >
+            {messages.knowledgeBases.openWorkspace}
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+          {onDelete || deleteDisabledReason ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="rounded-xl text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+              disabled={!canDelete}
+              title={!canDelete ? deleteDisabledReason ?? undefined : undefined}
+              onClick={canDelete ? onDelete : undefined}
+            >
+              <Trash2 className="h-4 w-4" />
+              {messages.common.delete}
+            </Button>
+          ) : null}
+        </div>
       </CardContent>
     </Card>
   );

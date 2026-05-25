@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -24,8 +26,12 @@ import {
   useUploadTeamDocument
 } from "@/hooks/use-documents";
 import {
+  useDeletePersonalKnowledgeBase,
+  useDeleteTeamKnowledgeBase,
   usePersonalKnowledgeBase,
-  useTeamKnowledgeBase
+  usePersonalKnowledgeBaseRagHealth,
+  useTeamKnowledgeBase,
+  useTeamKnowledgeBaseRagHealth
 } from "@/hooks/use-knowledge-bases";
 import { useTeam } from "@/hooks/use-teams";
 import { useAskPersonal, useAskTeam } from "@/hooks/use-qa";
@@ -118,17 +124,42 @@ export function KnowledgeBaseWorkspace({
 }) {
   const { accessToken, currentUser } = useAuth();
   const { messages } = useI18n();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("qa");
   const [processingDocumentIds, setProcessingDocumentIds] = useState<number[]>([]);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const [pendingDeleteDocument, setPendingDeleteDocument] = useState<Document | null>(null);
+  const [deleteKnowledgeBaseDialogOpen, setDeleteKnowledgeBaseDialogOpen] = useState(false);
 
-  const personalKbQuery = usePersonalKnowledgeBase(accessToken, knowledgeBaseId);
-  const teamKbQuery = useTeamKnowledgeBase(accessToken, teamId ?? Number.NaN, knowledgeBaseId);
+  const personalKbQuery = usePersonalKnowledgeBase(
+    scope === "personal" ? accessToken : null,
+    knowledgeBaseId
+  );
+  const teamKbQuery = useTeamKnowledgeBase(
+    scope === "team" ? accessToken : null,
+    teamId ?? Number.NaN,
+    knowledgeBaseId
+  );
+  const personalHealthQuery = usePersonalKnowledgeBaseRagHealth(
+    scope === "personal" ? accessToken : null,
+    knowledgeBaseId
+  );
+  const teamHealthQuery = useTeamKnowledgeBaseRagHealth(
+    scope === "team" ? accessToken : null,
+    teamId ?? Number.NaN,
+    knowledgeBaseId
+  );
   const teamQuery = useTeam(scope === "team" ? accessToken : null, teamId ?? Number.NaN);
-  const personalDocumentsQuery = usePersonalDocuments(accessToken, knowledgeBaseId);
-  const teamDocumentsQuery = useTeamDocuments(accessToken, teamId ?? Number.NaN, knowledgeBaseId);
+  const personalDocumentsQuery = usePersonalDocuments(
+    scope === "personal" ? accessToken : null,
+    knowledgeBaseId
+  );
+  const teamDocumentsQuery = useTeamDocuments(
+    scope === "team" ? accessToken : null,
+    teamId ?? Number.NaN,
+    knowledgeBaseId
+  );
   const conversationsQuery = useConversations(accessToken);
   const uploadPersonal = useUploadPersonalDocument(accessToken, knowledgeBaseId);
   const uploadTeam = useUploadTeamDocument(accessToken, teamId ?? Number.NaN, knowledgeBaseId);
@@ -138,10 +169,13 @@ export function KnowledgeBaseWorkspace({
     teamId ?? Number.NaN,
     knowledgeBaseId
   );
+  const deletePersonalKnowledgeBase = useDeletePersonalKnowledgeBase(accessToken);
+  const deleteTeamKnowledgeBase = useDeleteTeamKnowledgeBase(accessToken, teamId ?? Number.NaN);
   const askPersonal = useAskPersonal(accessToken, knowledgeBaseId);
   const askTeam = useAskTeam(accessToken, teamId ?? Number.NaN, knowledgeBaseId);
 
   const knowledgeBase = scope === "personal" ? personalKbQuery.data : teamKbQuery.data;
+  const ragHealth = scope === "personal" ? personalHealthQuery.data : teamHealthQuery.data;
   const documents =
     scope === "personal" ? personalDocumentsQuery.data ?? [] : teamDocumentsQuery.data ?? [];
   const isTeamAdmin = scope === "team" && teamQuery.data?.my_role === "admin";
@@ -167,6 +201,8 @@ export function KnowledgeBaseWorkspace({
   const askableDocuments = documents.filter(isDocumentQueryable).length;
   const failedDocuments = documents.filter((document) => document.processing_status === "failed").length;
   const preparingDocuments = documents.filter(isDocumentPreparing).length;
+  const vectorIndexCounts = ragHealth?.index_status_counts.vector ?? {};
+  const graphIndexCounts = ragHealth?.index_status_counts.graph ?? {};
   const recentConversations = useMemo(
     () =>
       (conversationsQuery.data ?? [])
@@ -182,15 +218,25 @@ export function KnowledgeBaseWorkspace({
 
   const invalidateDocuments = async () => {
     if (scope === "personal") {
-      await queryClient.invalidateQueries({
-        queryKey: ["documents", "personal", knowledgeBaseId]
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["documents", "personal", knowledgeBaseId]
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["knowledge-base-health", "personal", knowledgeBaseId]
+        })
+      ]);
       return;
     }
 
-    await queryClient.invalidateQueries({
-      queryKey: ["documents", "team", teamId, knowledgeBaseId]
-    });
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["documents", "team", teamId, knowledgeBaseId]
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["knowledge-base-health", "team", teamId, knowledgeBaseId]
+      })
+    ]);
   };
 
   const deleteDisabledReason =
@@ -293,6 +339,52 @@ export function KnowledgeBaseWorkspace({
   return (
     <div className="space-y-6">
       <ConfirmDialog
+        open={deleteKnowledgeBaseDialogOpen}
+        title={messages.knowledgeBases.deleteDialogTitle}
+        description={
+          scope === "team"
+            ? messages.knowledgeBases.deleteTeamDialogDescription(knowledgeBase.name)
+            : messages.knowledgeBases.deleteDialogDescription(knowledgeBase.name)
+        }
+        cancelLabel={messages.common.cancel}
+        confirmLabel={
+          deletePersonalKnowledgeBase.isPending || deleteTeamKnowledgeBase.isPending
+            ? messages.common.deleting
+            : messages.common.delete
+        }
+        destructive
+        loading={deletePersonalKnowledgeBase.isPending || deleteTeamKnowledgeBase.isPending}
+        onCancel={() => setDeleteKnowledgeBaseDialogOpen(false)}
+        onConfirm={async () => {
+          try {
+            if (scope === "personal") {
+              await deletePersonalKnowledgeBase.mutateAsync(knowledgeBaseId);
+              router.push("/knowledge-bases");
+              return;
+            }
+
+            if (!teamId) {
+              throw new Error(messages.knowledgeBases.deleteFailed);
+            }
+            await deleteTeamKnowledgeBase.mutateAsync(knowledgeBaseId);
+            router.push(`/teams/${teamId}`);
+          } catch (error) {
+            console.error("knowledge base delete failed", {
+              error,
+              knowledgeBaseId,
+              scope,
+              teamId: teamId ?? null
+            });
+            setFeedback({
+              tone: "error",
+              message:
+                scope === "team" ? messages.knowledgeBases.deleteAdminOnly : messages.knowledgeBases.deleteFailed
+            });
+          }
+        }}
+      />
+
+      <ConfirmDialog
         open={pendingDeleteDocument !== null}
         title={messages.documents.deleteDialogTitle}
         description={
@@ -321,6 +413,7 @@ export function KnowledgeBaseWorkspace({
               await deleteTeamDocument.mutateAsync(pendingDeleteDocument.id);
             }
 
+            await invalidateDocuments();
             setFeedback({
               tone: "success",
               message: messages.documents.deleteSucceeded(pendingDeleteDocument.original_filename)
@@ -391,6 +484,17 @@ export function KnowledgeBaseWorkspace({
             </span>
           </div>
           <div className="flex flex-wrap gap-2">
+            {scope === "personal" || isTeamAdmin ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                onClick={() => setDeleteKnowledgeBaseDialogOpen(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+                {messages.common.delete}
+              </Button>
+            ) : null}
             <Button
               variant={tabButtonClassName("qa")}
               size="sm"
@@ -479,6 +583,39 @@ export function KnowledgeBaseWorkspace({
                 </Button>
               </CardContent>
             </Card>
+
+            <Card className="border-border/70 shadow-card">
+              <CardHeader>
+                <CardTitle>{messages.knowledgeBases.ragHealthTitle}</CardTitle>
+                <CardDescription>{messages.knowledgeBases.ragHealthDescription}</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3 text-sm text-muted-foreground">
+                <div className="rounded-2xl bg-secondary/60 px-4 py-3">
+                  <p className="font-medium text-foreground">{messages.knowledgeBases.healthDocuments}</p>
+                  <p className="mt-1">
+                    {ragHealth?.document_count ?? totalDocuments} total · {askableDocuments} ready · {failedDocuments} failed
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                  <div className="rounded-2xl bg-secondary/60 px-4 py-3">
+                    <p className="font-medium text-foreground">{messages.knowledgeBases.healthVectorIndex}</p>
+                    <p className="mt-1">
+                      {messages.knowledgeBases.healthIndexed}: {vectorIndexCounts.indexed ?? 0} ·{" "}
+                      {messages.knowledgeBases.healthFailed}: {vectorIndexCounts.failed ?? 0} ·{" "}
+                      {messages.knowledgeBases.healthMissing}: {vectorIndexCounts.missing ?? 0}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-secondary/60 px-4 py-3">
+                    <p className="font-medium text-foreground">{messages.knowledgeBases.healthGraphIndex}</p>
+                    <p className="mt-1">
+                      {messages.knowledgeBases.healthIndexed}: {graphIndexCounts.indexed ?? 0} ·{" "}
+                      {messages.knowledgeBases.healthFailed}: {graphIndexCounts.failed ?? 0} ·{" "}
+                      {messages.knowledgeBases.healthMissing}: {graphIndexCounts.missing ?? 0}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       ) : (
@@ -494,6 +631,7 @@ export function KnowledgeBaseWorkspace({
               onUpload={async (file) => {
                 if (scope === "personal") {
                   const uploadedDocument = await uploadPersonal.mutateAsync(file);
+                  await invalidateDocuments();
                   setFeedback({
                     tone: "success",
                     message: messages.documents.uploadProcessingStarted(
@@ -504,6 +642,7 @@ export function KnowledgeBaseWorkspace({
                 }
 
                 const uploadedDocument = await uploadTeam.mutateAsync(file);
+                await invalidateDocuments();
                 if (isTeamAdmin) {
                   setFeedback({
                     tone: "success",

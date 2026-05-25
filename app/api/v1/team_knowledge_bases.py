@@ -31,6 +31,7 @@ from app.schemas.qa import QuestionAnswerRequest, QuestionAnswerResponse
 from app.schemas.document_task import DocumentTaskRead
 from app.schemas.processing_job import ProcessingJobRead, ProcessingJobSubmissionRead
 from app.schemas.knowledge_base import (
+    KnowledgeBaseRagHealthRead,
     KnowledgeBaseRead,
     KnowledgeBaseReindexRead,
     TeamKnowledgeBaseCreateRequest,
@@ -115,6 +116,7 @@ from app.services.knowledge_base import (
     list_team_knowledge_bases,
     update_knowledge_base,
 )
+from app.services.knowledge_base_health import build_knowledge_base_rag_health
 from app.services.team import get_team_membership
 
 
@@ -325,6 +327,28 @@ async def delete_team_knowledge_base_endpoint(
     )
     delete_knowledge_base(db, knowledge_base=knowledge_base)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/{knowledge_base_id}/rag-health", response_model=KnowledgeBaseRagHealthRead)
+async def get_team_knowledge_base_rag_health_endpoint(
+    team_id: int,
+    knowledge_base_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+) -> KnowledgeBaseRagHealthRead:
+    _get_active_membership_or_404(
+        db,
+        team_id=team_id,
+        user_id=current_user.id,
+    )
+    knowledge_base = _get_team_knowledge_base_or_404(
+        db,
+        team_id=team_id,
+        knowledge_base_id=knowledge_base_id,
+    )
+    return KnowledgeBaseRagHealthRead.model_validate(
+        build_knowledge_base_rag_health(db, knowledge_base_id=knowledge_base.id)
+    )
 
 
 @router.post(

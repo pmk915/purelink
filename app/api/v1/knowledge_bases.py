@@ -30,6 +30,7 @@ from app.schemas.document_task import DocumentTaskRead
 from app.schemas.processing_job import ProcessingJobRead, ProcessingJobSubmissionRead
 from app.schemas.knowledge_base import (
     KnowledgeBaseCreateRequest,
+    KnowledgeBaseRagHealthRead,
     KnowledgeBaseRead,
     KnowledgeBaseReindexRead,
     KnowledgeBaseUpdateRequest,
@@ -113,6 +114,7 @@ from app.services.knowledge_base import (
     list_knowledge_bases_for_user,
     update_knowledge_base,
 )
+from app.services.knowledge_base_health import build_knowledge_base_rag_health
 
 
 router = APIRouter(prefix="/knowledge-bases", tags=["knowledge-bases"])
@@ -254,6 +256,22 @@ async def delete_knowledge_base_endpoint(
     )
     delete_knowledge_base(db, knowledge_base=knowledge_base)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/{knowledge_base_id}/rag-health", response_model=KnowledgeBaseRagHealthRead)
+async def get_knowledge_base_rag_health_endpoint(
+    knowledge_base_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+) -> KnowledgeBaseRagHealthRead:
+    knowledge_base = _get_owned_knowledge_base_or_404(
+        db,
+        knowledge_base_id=knowledge_base_id,
+        user_id=current_user.id,
+    )
+    return KnowledgeBaseRagHealthRead.model_validate(
+        build_knowledge_base_rag_health(db, knowledge_base_id=knowledge_base.id)
+    )
 
 
 @router.post(

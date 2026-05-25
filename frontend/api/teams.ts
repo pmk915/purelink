@@ -1,5 +1,5 @@
 import { apiClient } from "@/lib/api-client";
-import type { KnowledgeBase, Team, TeamInvite, TeamMember } from "@/types";
+import type { KnowledgeBase, KnowledgeBaseRagHealth, Team, TeamInvite, TeamMember } from "@/types";
 
 export function listTeams(token: string) {
   return apiClient.get<Team[]>("/teams", token);
@@ -50,4 +50,15 @@ export function createTeamKnowledgeBase(
 
 export function getTeamKnowledgeBase(token: string, teamId: number, kbId: number) {
   return apiClient.get<KnowledgeBase>(`/teams/${teamId}/knowledge-bases/${kbId}`, token);
+}
+
+export function deleteTeamKnowledgeBase(token: string, teamId: number, kbId: number) {
+  return apiClient.delete<void>(`/teams/${teamId}/knowledge-bases/${kbId}`, token);
+}
+
+export function getTeamKnowledgeBaseRagHealth(token: string, teamId: number, kbId: number) {
+  return apiClient.get<KnowledgeBaseRagHealth>(
+    `/teams/${teamId}/knowledge-bases/${kbId}/rag-health`,
+    token
+  );
 }

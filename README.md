@@ -157,6 +157,10 @@ PureLink includes an engineering-oriented RAG v2 core:
 
 PureLink does not aim to fully replicate LightRAG or provide full multimodal RAG yet. The current GraphRAG implementation is lightweight and evidence-grounded.
 
+## Product UX
+
+PureLink includes user-facing RAG evidence display and knowledge base management. Personal knowledge bases can be deleted by their owners with confirmation, while team knowledge base deletion is restricted to team admins. The knowledge base workspace also shows a compact RAG health summary for document, vector index, and graph index status.
+
 ## RAG Model Providers
 
 PureLink M2 增加了 `app/providers/`，把 embedding、reranker 和 LLM 的接入层抽成 provider 接口。当前默认仍然是轻量本地配置，方便 Docker 本地部署和 smoke test。

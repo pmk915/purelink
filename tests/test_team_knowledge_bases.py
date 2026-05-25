@@ -9,6 +9,14 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base, load_all_models
 from app.db.session import get_db
 from app.main import app
+from app.models.document import Document
+from app.models.document_index import DocumentIndex
+from app.models.enums import (
+    DocumentIndexStatus,
+    DocumentIndexType,
+    DocumentProcessingStatus,
+    DocumentReviewStatus,
+)
 
 
 load_all_models()
@@ -148,6 +156,7 @@ async def test_team_knowledge_base_endpoints_require_authentication(
 @pytest.mark.anyio
 async def test_team_knowledge_base_permissions_for_admin_member_and_non_member(
     team_knowledge_base_client: AsyncClient,
+    test_session_factory: sessionmaker,
 ) -> None:
     admin = await _register_and_login(
         team_knowledge_base_client,
@@ -200,6 +209,38 @@ async def test_team_knowledge_base_permissions_for_admin_member_and_non_member(
     assert created["team_id"] == team_id
     assert created["owner_id"] is None
 
+    db = test_session_factory()
+    try:
+        document = Document(
+            knowledge_base_id=knowledge_base_id,
+            owner_id=int(member["user_id"]),
+            submitted_by=int(member["user_id"]),
+            filename="team-health.txt",
+            original_filename="team-health.txt",
+            file_type="txt",
+            file_size=24,
+            sha256="team-health-doc",
+            storage_path="uploads/team-health.txt",
+            review_status=DocumentReviewStatus.APPROVED,
+            processing_status=DocumentProcessingStatus.FAILED,
+        )
+        db.add(document)
+        db.flush()
+        db.add(
+            DocumentIndex(
+                document_id=document.id,
+                knowledge_base_id=knowledge_base_id,
+                index_type=DocumentIndexType.GRAPH,
+                provider="local_rule",
+                model_name="local_rule_graph_extractor",
+                model_dim=None,
+                status=DocumentIndexStatus.FAILED,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
     admin_list = await team_knowledge_base_client.get(
         f"/api/v1/teams/{team_id}/knowledge-bases",
         headers=admin_headers,
@@ -228,8 +269,26 @@ async def test_team_knowledge_base_permissions_for_admin_member_and_non_member(
         f"/api/v1/teams/{team_id}/knowledge-bases/{knowledge_base_id}",
         headers=outsider_headers,
     )
+    member_health = await team_knowledge_base_client.get(
+        f"/api/v1/teams/{team_id}/knowledge-bases/{knowledge_base_id}/rag-health",
+        headers=member_headers,
+    )
+    outsider_health = await team_knowledge_base_client.get(
+        f"/api/v1/teams/{team_id}/knowledge-bases/{knowledge_base_id}/rag-health",
+        headers=outsider_headers,
+    )
     assert member_detail.status_code == 200
     assert outsider_detail.status_code == 404
+    assert member_health.status_code == 200
+    assert member_health.json() == {
+        "document_count": 1,
+        "document_status_counts": {"failed": 1},
+        "index_status_counts": {
+            "vector": {"missing": 1},
+            "graph": {"failed": 1, "missing": 0},
+        },
+    }
+    assert outsider_health.status_code == 404
 
     member_create = await team_knowledge_base_client.post(
         f"/api/v1/teams/{team_id}/knowledge-bases",

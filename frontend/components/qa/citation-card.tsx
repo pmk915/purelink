@@ -122,6 +122,9 @@ export function CitationCard({
             : "mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-foreground [overflow-wrap:anywhere]"
         }
       >
+        <span className="mb-1 block text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+          {messages.qa.evidenceSnippet}
+        </span>
         {snippet}
       </p>
       {previewUrl ? (

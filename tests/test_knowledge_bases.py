@@ -9,6 +9,9 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base, load_all_models
 from app.db.session import get_db
 from app.main import app
+from app.models.document import Document
+from app.models.document_index import DocumentIndex
+from app.models.enums import DocumentIndexStatus, DocumentIndexType, DocumentProcessingStatus, DocumentReviewStatus
 
 
 load_all_models()
@@ -172,6 +175,7 @@ async def test_create_and_list_only_current_users_knowledge_bases(
 @pytest.mark.anyio
 async def test_knowledge_base_detail_update_delete_enforce_ownership(
     knowledge_base_client: AsyncClient,
+    test_session_factory: sessionmaker,
 ) -> None:
     alice = await _register_and_login(
         knowledge_base_client,
@@ -197,8 +201,44 @@ async def test_knowledge_base_detail_update_delete_enforce_ownership(
     )
     knowledge_base_id = create_response.json()["id"]
 
+    db = test_session_factory()
+    try:
+        document = Document(
+            knowledge_base_id=knowledge_base_id,
+            owner_id=int(alice["user_id"]),
+            submitted_by=int(alice["user_id"]),
+            filename="health.txt",
+            original_filename="health.txt",
+            file_type="txt",
+            file_size=12,
+            sha256="health-doc",
+            storage_path="uploads/health.txt",
+            review_status=DocumentReviewStatus.NOT_REQUIRED,
+            processing_status=DocumentProcessingStatus.INDEXED,
+        )
+        db.add(document)
+        db.flush()
+        db.add(
+            DocumentIndex(
+                document_id=document.id,
+                knowledge_base_id=knowledge_base_id,
+                index_type=DocumentIndexType.VECTOR,
+                provider="local",
+                model_name="test",
+                model_dim=3,
+                status=DocumentIndexStatus.INDEXED,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
     get_other = await knowledge_base_client.get(
         f"/api/v1/knowledge-bases/{knowledge_base_id}",
+        headers=bob_headers,
+    )
+    health_other = await knowledge_base_client.get(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/rag-health",
         headers=bob_headers,
     )
     update_other = await knowledge_base_client.patch(
@@ -212,6 +252,7 @@ async def test_knowledge_base_detail_update_delete_enforce_ownership(
     )
 
     assert get_other.status_code == 404
+    assert health_other.status_code == 404
     assert update_other.status_code == 404
     assert delete_other.status_code == 404
 
@@ -237,6 +278,20 @@ async def test_knowledge_base_detail_update_delete_enforce_ownership(
     assert update_owner.json()["description"] == "Updated description"
     assert update_owner.json()["scope"] == "personal"
     assert update_owner.json()["team_id"] is None
+
+    health_owner = await knowledge_base_client.get(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/rag-health",
+        headers=alice_headers,
+    )
+    assert health_owner.status_code == 200
+    assert health_owner.json() == {
+        "document_count": 1,
+        "document_status_counts": {"indexed": 1},
+        "index_status_counts": {
+            "vector": {"indexed": 1, "missing": 0},
+            "graph": {"missing": 1},
+        },
+    }
 
     delete_owner = await knowledge_base_client.delete(
         f"/api/v1/knowledge-bases/{knowledge_base_id}",
