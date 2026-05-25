@@ -131,3 +131,14 @@ PureLink does not yet claim:
 PostgreSQL through Docker Compose is the supported migration validation path.
 
 A full SQLite Alembic upgrade may hit an existing old migration that uses `DROP CONSTRAINT`, which SQLite does not support in the same way as PostgreSQL. That issue is unrelated to the newer RAG v2 migrations.
+
+## Interview and Baseline Packaging
+
+M10 packages the RAG v2 work for interview and portfolio demos:
+
+- `docs/interview/purelink-rag-project-story.md`
+- `docs/interview/purelink-rag-resume-description.md`
+- `docs/interview/rag-v2-demo-guide.md`
+- `tests/eval/purelink_rag_interview_cases.template.jsonl`
+
+The interview eval template is not a default test fixture. Copy it to a local JSONL file, replace local KB IDs and document names, then run `make eval-rag`.

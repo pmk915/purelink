@@ -3,6 +3,8 @@ SHELL := /usr/bin/env bash
 COMPOSE ?= docker compose
 GO ?= go
 KEEP_STACK_UP ?= 0
+EVAL_CASES ?= tests/eval/purelink_rag_cases.jsonl
+EVAL_OUTPUT ?= tests/eval/reports/latest.json
 
 ifneq ("$(wildcard .venv/bin/python)","")
 PYTHON ?= .venv/bin/python
@@ -51,7 +53,7 @@ smoke-docx-rag:
 	$(PYTHON) scripts/smoke_docx_rag.py
 
 eval-rag:
-	$(PYTHON) scripts/eval/run_rag_eval.py --cases tests/eval/purelink_rag_cases.jsonl --output tests/eval/reports/latest.json
+	$(PYTHON) scripts/eval/run_rag_eval.py --cases $(EVAL_CASES) --output $(EVAL_OUTPUT)
 
 e2e:
 	@set -euo pipefail; \

@@ -142,6 +142,21 @@ EMBEDDING_MODEL=
 
 但检索质量会明显弱于真实语义 embedding。
 
+## RAG v2 Highlights
+
+PureLink includes an engineering-oriented RAG v2 core:
+
+- Unified Retrieval Layer: separates evidence retrieval from answer generation.
+- Provider Layer: abstracts embedding, reranker, and LLM providers.
+- Optional Reranker: supports initial recall -> rerank -> final evidence selection.
+- Index Metadata: records embedding provider/model/dimension for vector index compatibility.
+- Retrieval Trace: records candidate evidence, scores, rerank effects, selected evidence, and filter reasons.
+- Document Blocks: normalizes parsed documents into structured blocks before chunking/indexing.
+- Lightweight GraphRAG: extracts simple entities/relations and supports graph-vector mixed retrieval.
+- RAG Evaluation: JSONL-based evaluation harness for retrieval hit, citation hit, keyword coverage, and top-k document hit.
+
+PureLink does not aim to fully replicate LightRAG or provide full multimodal RAG yet. The current GraphRAG implementation is lightweight and evidence-grounded.
+
 ## RAG Model Providers
 
 PureLink M2 增加了 `app/providers/`，把 embedding、reranker 和 LLM 的接入层抽成 provider 接口。当前默认仍然是轻量本地配置，方便 Docker 本地部署和 smoke test。
@@ -418,6 +433,9 @@ flowchart TD
 ## 相关文档
 
 - [架构说明](docs/architecture.md)
+- [RAG v2 Architecture](docs/architecture/rag-v2-architecture.md)
+- [RAG Project Story](docs/interview/purelink-rag-project-story.md)
+- [RAG Demo Guide](docs/interview/rag-v2-demo-guide.md)
 - [处理流水线](docs/processing-pipeline.md)
 - [任务状态机](docs/job-state-machine.md)
 - [检索与 citations](docs/retrieval-and-citations.md)

@@ -17,6 +17,9 @@ data/vector_store/
 data/
 logs/
 models/
+tests/eval/reports/*.json
+tests/eval/reports/*.md
+!tests/eval/reports/.gitkeep
 
 # Editor and OS files
 .DS_Store

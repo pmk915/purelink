@@ -36,6 +36,7 @@ Optional overrides:
 ```bash
 .venv/bin/python scripts/eval/run_rag_eval.py --mode chunk_only --top-k 8
 .venv/bin/python scripts/eval/run_rag_eval.py --disable-trace
+make eval-rag EVAL_CASES=tests/eval/purelink_rag_cases.jsonl
 ```
 
 ## RAG v2 Baseline Evaluation
@@ -65,6 +66,49 @@ To compare retrieval modes, run the same cases with:
 .venv/bin/python scripts/eval/run_rag_eval.py --mode chunk_only
 .venv/bin/python scripts/eval/run_rag_eval.py --mode graph_vector_mix
 ```
+
+## Interview Baseline Eval
+
+For an interview-ready local baseline:
+
+1. Create a local PureLink KB.
+2. Upload these docs:
+   - `README.md`
+   - `docs/retrieval-and-citations.md`
+   - `docs/architecture/rag-v2-architecture.md`
+   - `docs/roadmap/M2-model-provider-standardization.md`
+   - `docs/roadmap/M3-optional-reranker-integration.md`
+   - `docs/roadmap/M4-index-version-and-rebuild-readiness.md`
+   - `docs/roadmap/M5-retrieval-trace.md`
+   - `docs/roadmap/M6-document-block-schema-parser-routing.md`
+   - `docs/roadmap/M7-lightweight-graphrag-and-rag-v2-closure.md`
+   - `docs/roadmap/M8-lightweight-rag-evaluation.md`
+3. Wait until documents are indexed.
+4. Copy the template:
+
+```bash
+cp tests/eval/purelink_rag_interview_cases.template.jsonl tests/eval/purelink_rag_interview_cases.local.jsonl
+```
+
+5. Edit the local file and replace:
+   - `knowledge_base_id`
+   - `user_id`
+   - `expected_doc_names`
+6. Run:
+
+```bash
+make eval-rag EVAL_CASES=tests/eval/purelink_rag_interview_cases.local.jsonl
+```
+
+7. Save a named baseline report:
+
+```bash
+make eval-rag \
+  EVAL_CASES=tests/eval/purelink_rag_interview_cases.local.jsonl \
+  EVAL_OUTPUT=tests/eval/reports/rag-v2-baseline.json
+```
+
+Local cases and generated reports depend on local KB IDs and should not be committed unless intentionally curated.
 
 ## Interpret Results
 
