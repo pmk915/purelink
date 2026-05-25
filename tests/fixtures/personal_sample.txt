@@ -1,3 +1,5 @@
-PureLink is an AI-powered knowledge platform.
-It supports personal and team knowledge bases.
-This file is used for E2E testing of the personal flow.
+PureLink personal flow smoke document.
+
+PureLink is an AI-powered knowledge platform for personal knowledge bases and team knowledge bases.
+PureLink supports document upload, document retrieval, citation-grounded question answering, and E2E smoke testing.
+This file is used for the personal knowledge base smoke test.

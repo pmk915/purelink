@@ -432,8 +432,13 @@ flowchart TD
 
 ## 相关文档
 
+- [文档索引](docs/README.md)
 - [架构说明](docs/architecture.md)
 - [RAG v2 Architecture](docs/architecture/rag-v2-architecture.md)
+- [RAG Pipeline](docs/rag/rag-pipeline.md)
+- [Lightweight GraphRAG](docs/rag/lightweight-graphrag.md)
+- [RAG Evaluation](docs/rag/rag-evaluation.md)
+- [Docker Deployment](docs/deployment/docker-deployment.md)
 - [RAG Project Story](docs/interview/purelink-rag-project-story.md)
 - [RAG Demo Guide](docs/interview/rag-v2-demo-guide.md)
 - [处理流水线](docs/processing-pipeline.md)

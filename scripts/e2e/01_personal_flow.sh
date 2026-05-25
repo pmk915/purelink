@@ -44,11 +44,19 @@ wait_personal_document_searchable "$TOKEN" "$KB_ID" "$DOC_ID"
 
 log "retrieve"
 # Keep this query lexically aligned with tests/fixtures/personal_sample.txt.
-# CI uses local_hashed_bow by default, so smoke should not depend on semantic embedding behavior.
-http_json POST "/api/v1/knowledge-bases/$KB_ID/retrieve" '{"query":"PureLink personal team knowledge bases AI-powered knowledge platform","top_k":3}' "$TOKEN"
+# Smoke should validate the pipeline deterministically, not rely on subtle semantic retrieval behavior.
+http_json POST "/api/v1/knowledge-bases/$KB_ID/retrieve" '{"query":"PureLink personal knowledge bases team knowledge bases document retrieval citation smoke test","top_k":3}' "$TOKEN"
 assert_code 200
 RET_COUNT="$(echo "$HTTP_BODY" | json_get results | json_len)"
-[[ "$RET_COUNT" -ge 1 ]] || fail "retrieval returned empty results"
+if [[ "$RET_COUNT" -lt 1 ]]; then
+  echo "Retrieve response body:"
+  echo "$HTTP_BODY"
+  echo "kb_id=$KB_ID doc_id=$DOC_ID"
+  echo "Document list:"
+  http_json GET "/api/v1/knowledge-bases/$KB_ID/documents" "" "$TOKEN"
+  echo "$HTTP_BODY"
+  fail "retrieval returned empty results"
+fi
 
 log "ask"
 http_json POST "/api/v1/knowledge-bases/$KB_ID/ask" '{"question":"What does this document say about PureLink personal and team knowledge bases?","top_k":3,"conversation_id":null}' "$TOKEN"

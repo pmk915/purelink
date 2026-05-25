@@ -10,12 +10,9 @@ __pycache__/
 *.tsbuildinfo
 
 # Runtime artifacts
-data/uploads/
-data/parsed/
-data/chunks/
-data/vector_store/
-data/
-logs/
+/data/*
+!/data/.gitkeep
+/logs/
 /models/
 tests/eval/reports/*.json
 tests/eval/reports/*.md
