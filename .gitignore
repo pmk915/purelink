@@ -16,7 +16,7 @@ data/chunks/
 data/vector_store/
 data/
 logs/
-models/
+/models/
 tests/eval/reports/*.json
 tests/eval/reports/*.md
 !tests/eval/reports/.gitkeep
