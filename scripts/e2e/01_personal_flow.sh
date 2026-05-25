@@ -43,13 +43,15 @@ wait_processing_job_terminal "$TOKEN" "$PROCESS_JOB_ID"
 wait_personal_document_searchable "$TOKEN" "$KB_ID" "$DOC_ID"
 
 log "retrieve"
-http_json POST "/api/v1/knowledge-bases/$KB_ID/retrieve" '{"query":"What does this document say about PureLink?","top_k":3}' "$TOKEN"
+# Keep this query lexically aligned with tests/fixtures/personal_sample.txt.
+# CI uses local_hashed_bow by default, so smoke should not depend on semantic embedding behavior.
+http_json POST "/api/v1/knowledge-bases/$KB_ID/retrieve" '{"query":"PureLink personal team knowledge bases AI-powered knowledge platform","top_k":3}' "$TOKEN"
 assert_code 200
 RET_COUNT="$(echo "$HTTP_BODY" | json_get results | json_len)"
 [[ "$RET_COUNT" -ge 1 ]] || fail "retrieval returned empty results"
 
 log "ask"
-http_json POST "/api/v1/knowledge-bases/$KB_ID/ask" '{"question":"What is PureLink?","top_k":3,"conversation_id":null}' "$TOKEN"
+http_json POST "/api/v1/knowledge-bases/$KB_ID/ask" '{"question":"What does this document say about PureLink personal and team knowledge bases?","top_k":3,"conversation_id":null}' "$TOKEN"
 assert_code 200
 ANSWER="$(echo "$HTTP_BODY" | json_get answer)"
 CONV_ID="$(echo "$HTTP_BODY" | json_get conversation_id)"
