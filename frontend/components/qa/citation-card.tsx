@@ -15,6 +15,14 @@ function hasScore(citation: CitationLike | RetrievalResult): citation is Retriev
   return typeof (citation as RetrievalResult).score === "number";
 }
 
+function scoreParts(citation: RetrievalResult) {
+  return [
+    typeof citation.vector_score === "number" ? `vector ${citation.vector_score.toFixed(3)}` : null,
+    typeof citation.keyword_score === "number" ? `keyword ${citation.keyword_score.toFixed(3)}` : null,
+    typeof citation.graph_score === "number" ? `graph ${citation.graph_score.toFixed(3)}` : null
+  ].filter(Boolean);
+}
+
 
 function formatSourceLabel(sourceType: string | null) {
   switch (sourceType) {
@@ -110,9 +118,14 @@ export function CitationCard({
           </div>
         </div>
         {hasScore(citation) ? (
-          <span className="text-xs text-muted-foreground">
-            {messages.qa.citationScore(citation.score)}
-          </span>
+          <div className="text-right text-xs text-muted-foreground">
+            <div>{messages.qa.citationScore(citation.score)}</div>
+            {scoreParts(citation).length > 0 ? (
+              <div className="mt-1 max-w-[220px] break-words">
+                {scoreParts(citation).join(" · ")}
+              </div>
+            ) : null}
+          </div>
         ) : null}
       </div>
       <p

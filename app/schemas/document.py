@@ -5,6 +5,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.enums import (
+    DocumentIndexStatus,
     DocumentProcessingStatus,
     DocumentReviewStatus,
     ProcessingJobType,
@@ -80,6 +81,38 @@ class DocumentChunkRead(BaseModel):
     chunk_size: int
 
 
+class DocumentIndexDebugRead(BaseModel):
+    status: DocumentIndexStatus | None = None
+    provider: str | None = None
+    model_name: str | None = None
+    model_dim: int | None = None
+    model_version: str | None = None
+    compatible: bool | None = None
+    stale_reason: str | None = None
+    error_message: str | None = None
+
+
+class LatestProcessingJobDebugRead(BaseModel):
+    id: int
+    status: ProcessingJobStatus
+    job_type: ProcessingJobType
+    step: str | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+
+
+class DocumentRagDebugRead(BaseModel):
+    document_id: int
+    knowledge_base_id: int
+    processing_status: DocumentProcessingStatus
+    chunk_count: int
+    citation_unit_count: int
+    block_count: int
+    vector_index: DocumentIndexDebugRead | None = None
+    graph_index: DocumentIndexDebugRead | None = None
+    latest_processing_job: LatestProcessingJobDebugRead | None = None
+
+
 class DocumentEmbedRead(BaseModel):
     document_id: int
     knowledge_base_id: int
@@ -106,7 +139,7 @@ class RetrievalQueryRequest(BaseModel):
     @classmethod
     def normalize_mode(cls, value: str) -> str:
         normalized = value.strip().lower()
-        supported = {"chunk_only", "overview", "graph_vector_mix"}
+        supported = {"chunk_only", "overview", "graph_vector_mix", "hybrid_text"}
         if normalized not in supported:
             raise ValueError("Unsupported retrieval mode.")
         return normalized
@@ -133,6 +166,11 @@ class RetrievedChunkRead(BaseModel):
     preview_target: PreviewTargetRead | None = None
     heading_path: list[str] | None = None
     score: float
+    vector_score: float | None = None
+    keyword_score: float | None = None
+    graph_score: float | None = None
+    matched_terms: list[str] | None = None
+    candidate_sources: list[str] | None = None
 
     @model_validator(mode="before")
     @classmethod

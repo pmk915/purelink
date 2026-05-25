@@ -134,6 +134,12 @@ class Settings:
     parsed_dir: str
     chunks_dir: str
     vector_store_dir: str
+    chunk_strategy: str
+    block_chunk_target_chars: int
+    block_chunk_max_chars: int
+    block_chunk_min_chars: int
+    block_chunk_table_max_chars: int
+    block_chunk_overlap_chars: int
     embedding_provider: str
     embedding_api_base: str
     embedding_api_key: str
@@ -160,6 +166,8 @@ class Settings:
     reranker_top_n: int
     final_context_top_k: int
     retrieval_min_score: float
+    keyword_retrieval_top_n: int
+    keyword_retrieval_min_score: float
     overview_max_chunks: int
     overview_max_chunks_per_document: int
     conversation_recent_messages_limit: int
@@ -229,6 +237,12 @@ def get_settings() -> Settings:
         parsed_dir=os.getenv("PARSED_DIR", "data/parsed"),
         chunks_dir=_get_str_alias(("CHUNKS_DIR", "CHUNK_DIR"), "data/chunks"),
         vector_store_dir=os.getenv("VECTOR_STORE_DIR", "data/vector_store"),
+        chunk_strategy=os.getenv("CHUNK_STRATEGY", "fixed").strip().lower(),
+        block_chunk_target_chars=_get_int("BLOCK_CHUNK_TARGET_CHARS", 900),
+        block_chunk_max_chars=_get_int("BLOCK_CHUNK_MAX_CHARS", 1400),
+        block_chunk_min_chars=_get_int("BLOCK_CHUNK_MIN_CHARS", 120),
+        block_chunk_table_max_chars=_get_int("BLOCK_CHUNK_TABLE_MAX_CHARS", 1800),
+        block_chunk_overlap_chars=_get_int("BLOCK_CHUNK_OVERLAP_CHARS", 120),
         embedding_provider=os.getenv("EMBEDDING_PROVIDER", "fastembed").strip().lower(),
         embedding_api_base=_get_str_alias(
             ("EMBEDDING_API_BASE_URL", "EMBEDDING_API_BASE"),
@@ -263,6 +277,8 @@ def get_settings() -> Settings:
         reranker_top_n=_get_int("RERANKER_TOP_N", 50),
         final_context_top_k=_get_int("FINAL_CONTEXT_TOP_K", 8),
         retrieval_min_score=_get_float("RETRIEVAL_MIN_SCORE", 0.15),
+        keyword_retrieval_top_n=_get_int("KEYWORD_RETRIEVAL_TOP_N", 50),
+        keyword_retrieval_min_score=_get_float("KEYWORD_RETRIEVAL_MIN_SCORE", 0.05),
         overview_max_chunks=_get_int("OVERVIEW_MAX_CHUNKS", 10),
         overview_max_chunks_per_document=_get_int("OVERVIEW_MAX_CHUNKS_PER_DOCUMENT", 2),
         conversation_recent_messages_limit=_get_int(

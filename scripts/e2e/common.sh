@@ -363,6 +363,75 @@ wait_personal_document_searchable() {
   return 1
 }
 
+document_rag_ready_from_body() {
+  local doc_id="$1"
+  python3 -c '
+import json
+import sys
+
+doc_id = int(sys.argv[1])
+data = json.load(sys.stdin)
+if int(data.get("document_id") or 0) != doc_id:
+    print("no")
+    raise SystemExit(0)
+
+status = data.get("processing_status") or ""
+chunk_count = int(data.get("chunk_count") or 0)
+citation_unit_count = int(data.get("citation_unit_count") or 0)
+vector_index = data.get("vector_index") or {}
+vector_status = vector_index.get("status") or ""
+compatible = vector_index.get("compatible")
+if (
+    status in {"ready", "indexed"}
+    and chunk_count > 0
+    and citation_unit_count > 0
+    and vector_status == "indexed"
+    and compatible is not False
+):
+    print("yes")
+else:
+    print("no")
+' "$doc_id"
+}
+
+wait_personal_document_rag_ready() {
+  local token="$1"
+  local kb_id="$2"
+  local doc_id="$3"
+  local retries="${4:-90}"
+  local sleep_sec="${5:-1}"
+  local last_body=""
+
+  for _ in $(seq 1 "$retries"); do
+    http_json GET "/api/v1/knowledge-bases/$kb_id/documents/$doc_id/rag-debug" "" "$token"
+    if [[ "$HTTP_CODE" != "200" ]]; then
+      last_body="$HTTP_BODY"
+      sleep "$sleep_sec"
+      continue
+    fi
+    last_body="$HTTP_BODY"
+    local ready
+    ready="$(echo "$HTTP_BODY" | document_rag_ready_from_body "$doc_id")"
+    if [[ "$ready" == "yes" ]]; then
+      return 0
+    fi
+
+    local status
+    status="$(echo "$HTTP_BODY" | json_get processing_status)"
+    if [[ "$status" == "failed" ]]; then
+      echo "Document processing failed:"
+      echo "$HTTP_BODY"
+      return 1
+    fi
+    sleep "$sleep_sec"
+  done
+
+  echo "Document did not become RAG-ready in time: $doc_id"
+  echo "Last document RAG debug body:"
+  echo "$last_body"
+  return 1
+}
+
 wait_team_document_searchable() {
   local token="$1"
   local team_id="$2"

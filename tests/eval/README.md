@@ -119,3 +119,17 @@ Local cases and generated reports depend on local KB IDs and should not be commi
 - `trace_available`: whether `RetrievalResult.trace_id` was populated.
 
 This harness is intended for local/manual RAG quality checks and regression comparison. Metric unit tests live in `tests/eval/test_rag_eval_metrics.py` and are safe for the default test suite.
+
+## Compare Chunk Strategies
+
+To compare `fixed` and `block_aware` chunking:
+
+1. Set `CHUNK_STRATEGY=fixed`.
+2. Reindex the evaluation documents.
+3. Run eval and save the report.
+4. Set `CHUNK_STRATEGY=block_aware`.
+5. Reindex the same documents.
+6. Run eval and save the second report.
+7. Compare retrieval hit, citation hit, keyword coverage, and top-1/top-3 document hit.
+
+Do not assume block-aware chunking improves every query. Use the reports to compare behavior for your local corpus.

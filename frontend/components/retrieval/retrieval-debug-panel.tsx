@@ -74,6 +74,7 @@ export function RetrievalDebugPanel({
                   <option value="chunk_only">chunk_only</option>
                   <option value="overview">overview</option>
                   <option value="graph_vector_mix">graph_vector_mix</option>
+                  <option value="hybrid_text">{messages.retrievalDebug.hybridTextMode}</option>
                 </select>
               </div>
               <div className="space-y-2">

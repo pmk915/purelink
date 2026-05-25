@@ -178,6 +178,19 @@ def test_parse_case_accepts_graph_vector_mix_mode() -> None:
     assert case.mode == RetrievalMode.GRAPH_VECTOR_MIX.value
 
 
+def test_parse_case_accepts_hybrid_text_mode() -> None:
+    case = parse_case(
+        {
+            "id": "hybrid-case",
+            "question": "/api/v1/knowledge-bases/{id}/rag-health 返回什么？",
+            "knowledge_base_id": 1,
+            "mode": "hybrid_text",
+        }
+    )
+
+    assert case.mode == RetrievalMode.HYBRID_TEXT.value
+
+
 def _evidence(
     *,
     document_id: int,

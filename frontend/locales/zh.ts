@@ -366,6 +366,7 @@ export const zh: Messages = {
     query: "检索问题",
     queryPlaceholder: "输入一个检索 query...",
     mode: "模式",
+    hybridTextMode: "关键词 + 向量混合检索",
     run: "运行检索",
     running: "检索中...",
     failed: "检索失败，请检查 query、模式或权限。"

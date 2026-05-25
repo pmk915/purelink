@@ -286,6 +286,13 @@ def merge_hybrid_candidates(
             replace(
                 candidate.chunk,
                 score=combined_score,
+                vector_score=candidate.vector_score or candidate.chunk.vector_score,
+                keyword_score=candidate.lexical_score or candidate.chunk.keyword_score,
+                candidate_sources=_merge_candidate_sources(
+                    candidate.chunk.candidate_sources,
+                    vector_score=candidate.vector_score,
+                    keyword_score=candidate.lexical_score,
+                ),
                 snippet=build_query_aware_chunk_snippet(
                     candidate.chunk.text,
                     processed_query=processed_query,
@@ -503,6 +510,8 @@ def _build_retrieved_chunk_from_document_chunk(
         source_locator=chunk_metadata.source_locator,
         heading_path=chunk_metadata.heading_path,
         score=score,
+        keyword_score=score,
+        candidate_sources=("keyword",),
         ocr_provider=chunk_metadata.ocr_provider,
         ocr_provider_version=chunk_metadata.ocr_provider_version,
         asr_provider=chunk_metadata.asr_provider,
@@ -518,3 +527,17 @@ def _normalize_score(value: float, max_value: float) -> float:
     if value <= 0 or max_value <= 0:
         return 0.0
     return min(1.0, value / max_value)
+
+
+def _merge_candidate_sources(
+    existing: tuple[str, ...] | None,
+    *,
+    vector_score: float,
+    keyword_score: float,
+) -> tuple[str, ...]:
+    sources = list(existing or ())
+    if vector_score > 0 and "vector" not in sources:
+        sources.append("vector")
+    if keyword_score > 0 and "keyword" not in sources:
+        sources.append("keyword")
+    return tuple(sources)

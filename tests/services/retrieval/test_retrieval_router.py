@@ -25,3 +25,8 @@ def test_future_graph_modes_fallback_to_chunk_only() -> None:
 def test_graph_vector_mix_routes_to_graph_retriever() -> None:
     assert resolve_mode(RetrievalMode.GRAPH_VECTOR_MIX) == RetrievalMode.GRAPH_VECTOR_MIX
     assert resolve_retriever_name(RetrievalMode.GRAPH_VECTOR_MIX) == "graph_vector_mix"
+
+
+def test_hybrid_text_routes_to_hybrid_retriever() -> None:
+    assert resolve_mode(RetrievalMode.HYBRID_TEXT) == RetrievalMode.HYBRID_TEXT
+    assert resolve_retriever_name(RetrievalMode.HYBRID_TEXT) == "hybrid_text"

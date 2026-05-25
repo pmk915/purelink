@@ -22,6 +22,7 @@ from app.schemas.document import (
     DocumentChunkRead,
     DocumentParseRead,
     DocumentPreviewRead,
+    DocumentRagDebugRead,
     DocumentRead,
     RetrievalQueryRequest,
     RetrievalResponse,
@@ -69,6 +70,7 @@ from app.services.document_preview import (
     build_document_preview,
     resolve_document_file_path,
 )
+from app.services.document_rag_debug import build_document_rag_debug
 from app.services.document_parser import (
     DocumentParseError,
     parse_document_to_local_result,
@@ -664,6 +666,42 @@ async def list_team_knowledge_base_documents_endpoint(
         knowledge_base_id=knowledge_base.id,
     )
     return [DocumentRead.model_validate(item) for item in documents]
+
+
+@router.get(
+    "/{knowledge_base_id}/documents/{document_id}/rag-debug",
+    response_model=DocumentRagDebugRead,
+)
+async def get_team_document_rag_debug_endpoint(
+    team_id: int,
+    knowledge_base_id: int,
+    document_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+) -> DocumentRagDebugRead:
+    _get_active_membership_or_404(
+        db,
+        team_id=team_id,
+        user_id=current_user.id,
+    )
+    knowledge_base = _get_team_knowledge_base_or_404(
+        db,
+        team_id=team_id,
+        knowledge_base_id=knowledge_base_id,
+    )
+    document = get_document_for_knowledge_base(
+        db,
+        knowledge_base_id=knowledge_base.id,
+        document_id=document_id,
+    )
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found.",
+        )
+    return DocumentRagDebugRead.model_validate(
+        build_document_rag_debug(db, document=document)
+    )
 
 
 @router.get(
@@ -1405,6 +1443,11 @@ async def retrieve_team_knowledge_base_chunks_endpoint(
                 preview_target=build_preview_target_for_chunk(item),
                 heading_path=list(item.heading_path) if item.heading_path else None,
                 score=item.score,
+                vector_score=item.vector_score,
+                keyword_score=item.keyword_score,
+                graph_score=item.graph_score,
+                matched_terms=list(item.matched_terms) if item.matched_terms else None,
+                candidate_sources=list(item.candidate_sources) if item.candidate_sources else None,
             )
             for item in results
         ],

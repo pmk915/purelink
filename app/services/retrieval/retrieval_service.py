@@ -22,6 +22,7 @@ from app.services.knowledge_graph.graph_retriever import (
 from app.services.retrieval import chunk_retriever
 from app.services.retrieval.citation_builder import build_evidences
 from app.services.retrieval.context_builder import build_context
+from app.services.retrieval.hybrid_text_retriever import retrieve_hybrid_text_chunks
 from app.services.retrieval.overview_retriever_adapter import retrieve_overview_chunks
 from app.services.retrieval.rerank_service import (
     align_chunks_to_evidences,
@@ -44,7 +45,8 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
     expand_for_reranker = should_expand_initial_recall(active_settings)
     initial_top_k = (
         max(final_top_k, active_settings.reranker_top_n)
-        if expand_for_reranker and resolved_mode in {RetrievalMode.CHUNK_ONLY, RetrievalMode.GRAPH_VECTOR_MIX}
+        if expand_for_reranker
+        and resolved_mode in {RetrievalMode.CHUNK_ONLY, RetrievalMode.GRAPH_VECTOR_MIX, RetrievalMode.HYBRID_TEXT}
         else final_top_k
     )
 
@@ -74,17 +76,32 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
             )
             context_chunks = raw_chunks
         else:
-            raw_chunks = chunk_retriever.retrieve_chunks_for_documents(
-                db=request.db,
-                documents=documents,
-                vector_root=request.vector_root,
-                scope=scope,
-                knowledge_base_id=request.knowledge_base_id,
-                query=request.query,
-                top_k=initial_top_k,
-                required_review_status=required_review_status,
-                team_id=request.team_id,
-            )
+            hybrid_metadata = None
+            if resolved_mode == RetrievalMode.HYBRID_TEXT:
+                raw_chunks, hybrid_metadata = retrieve_hybrid_text_chunks(
+                    db=request.db,
+                    documents=documents,
+                    keyword_documents=request.documents,
+                    vector_root=request.vector_root,
+                    scope=scope,
+                    knowledge_base_id=request.knowledge_base_id,
+                    query=request.query,
+                    top_k=initial_top_k,
+                    required_review_status=required_review_status,
+                    team_id=request.team_id,
+                )
+            else:
+                raw_chunks = chunk_retriever.retrieve_chunks_for_documents(
+                    db=request.db,
+                    documents=documents,
+                    vector_root=request.vector_root,
+                    scope=scope,
+                    knowledge_base_id=request.knowledge_base_id,
+                    query=request.query,
+                    top_k=initial_top_k,
+                    required_review_status=required_review_status,
+                    team_id=request.team_id,
+                )
             graph_chunks = []
             if resolved_mode == RetrievalMode.GRAPH_VECTOR_MIX:
                 graph_chunks = retrieve_graph_chunks(
@@ -120,9 +137,13 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
                 ),
             )
 
-        candidate_evidences = _annotate_graph_evidences(
-            build_evidences(evidence_units or context_chunks),
-            graph_chunk_keys=locals().get("graph_chunk_keys", set()),
+        candidate_evidences = _annotate_chunk_score_evidences(
+            _annotate_graph_evidences(
+                build_evidences(evidence_units or context_chunks),
+                graph_chunk_keys=locals().get("graph_chunk_keys", set()),
+            ),
+            chunks=raw_chunks,
+            retrieval_mode=resolved_mode,
         )
         evidences, used_reranker = await rerank_evidences(
             query=request.evidence_query or request.query,
@@ -162,6 +183,8 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
                 "evidence_unit_count": len(evidence_units),
                 "graph_candidate_count": len(locals().get("graph_chunks", [])),
                 "graph_used": bool(locals().get("graph_chunks", [])),
+                "keyword_candidate_count": getattr(locals().get("hybrid_metadata"), "keyword_candidate_count", 0),
+                "hybrid_fallback_reason": getattr(locals().get("hybrid_metadata"), "fallback_reason", None),
             },
         )
 
@@ -194,6 +217,8 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
                 "context_chunks": context_chunks,
                 "evidence_units": evidence_units,
                 "graph_chunks": locals().get("graph_chunks", []),
+                "keyword_candidate_count": getattr(locals().get("hybrid_metadata"), "keyword_candidate_count", 0),
+                "hybrid_fallback_reason": getattr(locals().get("hybrid_metadata"), "fallback_reason", None),
             },
         )
     except Exception as exc:
@@ -215,7 +240,7 @@ def _validate_internal_context(request: RetrievalRequest) -> None:
         raise ValueError("RetrievalRequest.scope is required for M1 retrieval.")
     if request.required_review_status is None:
         raise ValueError("RetrievalRequest.required_review_status is required for M1 retrieval.")
-    if resolve_mode(request.mode) in {RetrievalMode.CHUNK_ONLY, RetrievalMode.GRAPH_VECTOR_MIX} and request.vector_root is None:
+    if resolve_mode(request.mode) in {RetrievalMode.CHUNK_ONLY, RetrievalMode.GRAPH_VECTOR_MIX, RetrievalMode.HYBRID_TEXT} and request.vector_root is None:
         raise ValueError("RetrievalRequest.vector_root is required for chunk retrieval.")
 
 
@@ -397,6 +422,9 @@ def _build_trace_candidates(
                 metadata={
                     "chunk_key": str(evidence.chunk_id),
                     "marker": evidence.metadata.get("marker"),
+                    "candidate_sources": evidence.metadata.get("candidate_sources"),
+                    "matched_terms": evidence.metadata.get("matched_terms"),
+                    "retrieval_mode": evidence.metadata.get("retrieval_mode"),
                 },
             )
         )
@@ -530,6 +558,47 @@ def _annotate_graph_evidences(evidences, *, graph_chunk_keys):
                         **evidence.metadata,
                         "source": "graph_vector_mix",
                     },
+                }
+            )
+        )
+    return annotated
+
+
+def _annotate_chunk_score_evidences(evidences, *, chunks, retrieval_mode: RetrievalMode):
+    if not chunks:
+        return evidences
+
+    chunk_by_key = {}
+    for chunk in chunks:
+        if getattr(chunk, "chunk_db_id", None) is not None:
+            chunk_by_key[("chunk_db", chunk.chunk_db_id)] = chunk
+        chunk_by_key[("chunk", chunk.document_id, str(chunk.chunk_id))] = chunk
+
+    annotated = []
+    for evidence in evidences:
+        chunk = None
+        if evidence.chunk_db_id is not None:
+            chunk = chunk_by_key.get(("chunk_db", evidence.chunk_db_id))
+        if chunk is None:
+            chunk = chunk_by_key.get(("chunk", evidence.document_id, str(evidence.chunk_id)))
+        if chunk is None:
+            annotated.append(evidence)
+            continue
+
+        metadata = {
+            **evidence.metadata,
+            "candidate_sources": list(chunk.candidate_sources or ()),
+            "matched_terms": list(chunk.matched_terms or ()),
+            "retrieval_mode": retrieval_mode.value,
+        }
+        annotated.append(
+            evidence.model_copy(
+                update={
+                    "vector_score": chunk.vector_score,
+                    "keyword_score": chunk.keyword_score,
+                    "graph_score": chunk.graph_score or evidence.graph_score,
+                    "final_score": chunk.score,
+                    "metadata": metadata,
                 }
             )
         )

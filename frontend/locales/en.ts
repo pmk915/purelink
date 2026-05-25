@@ -394,6 +394,7 @@ export const en = {
     query: "Query",
     queryPlaceholder: "Test a retrieval query...",
     mode: "Mode",
+    hybridTextMode: "Keyword + vector hybrid",
     run: "Run retrieval",
     running: "Retrieving...",
     failed: "Retrieval failed. Check query, mode, or permissions."

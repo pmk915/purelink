@@ -153,6 +153,7 @@ PureLink includes an engineering-oriented RAG v2 core:
 - Retrieval Trace: records candidate evidence, scores, rerank effects, selected evidence, and filter reasons.
 - Document Blocks: normalizes parsed documents into structured blocks before chunking/indexing.
 - Lightweight GraphRAG: extracts simple entities/relations and supports graph-vector mixed retrieval.
+- Hybrid Text Retrieval: combines vector candidates with deterministic keyword candidates for API paths, config keys, file names, commands, error codes, and migration ids.
 - RAG Evaluation: JSONL-based evaluation harness for retrieval hit, citation hit, keyword coverage, and top-k document hit.
 
 PureLink does not aim to fully replicate LightRAG or provide full multimodal RAG yet. The current GraphRAG implementation is lightweight and evidence-grounded.
@@ -405,7 +406,7 @@ PureLink 会把解析结果标准化为 `document_blocks`，当前支持 heading
 - `.docx`：复用现有 DOCX 文本解析并转换为 blocks
 - `.pdf`：复用文本型 PDF 解析并按已有 segment/page 信息转换为 blocks
 
-下游 chunking、citation 和 embedding 行为保持兼容：处理链路会把 blocks 转回稳定的 plain text 形态，再继续生成 chunks、citation units 和 vector index。M6 不包含 OCR、VLM 或外部 parser 服务。
+下游 chunking、citation 和 embedding 行为保持兼容：默认 `CHUNK_STRATEGY=fixed` 继续使用稳定的文本切分路径；可选 `CHUNK_STRATEGY=block_aware` 会利用 `document_blocks` 保留 heading、table、code 等结构来生成更贴近原文结构的 chunks。M6/M14 不包含 OCR、VLM 或外部 parser 服务。
 
 ## 问答流程
 

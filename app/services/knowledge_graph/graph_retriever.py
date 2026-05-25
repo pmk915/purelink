@@ -162,6 +162,8 @@ def _build_retrieved_chunk(
         source_locator=metadata.source_locator,
         heading_path=metadata.heading_path,
         score=score,
+        graph_score=score,
+        candidate_sources=("graph",),
     )
 
 

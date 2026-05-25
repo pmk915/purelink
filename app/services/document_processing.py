@@ -32,6 +32,7 @@ from app.services.chunk_metadata import (
     normalize_source_type,
 )
 from app.services.document import update_document_processing_status
+from app.services.document_chunking import ChunkingStrategy, build_block_aware_chunks
 from app.services.document_parsing import get_parser
 from app.services.document_parsing.block_persistence import replace_document_blocks
 from app.services.document_parsing.types import ParsedDocument
@@ -255,15 +256,16 @@ def process_document(
             extracted.extracted_char_count,
         )
         report("persist_blocks")
-        replace_document_blocks(
+        saved_blocks = replace_document_blocks(
             db,
             document_id=document.id,
             blocks=parsed_document.blocks,
         )
         report("chunk_content")
-        generated_chunks = chunk_extracted_text_result(
-            extracted=extracted,
+        generated_chunks = chunk_document_for_processing(
             document_id=document.id,
+            extracted=extracted,
+            blocks=saved_blocks,
         )
         generated_citation_units = build_citation_unit_payloads(
             chunks=generated_chunks,
@@ -1326,6 +1328,63 @@ def chunk_text_content(
         chunk_overlap=chunk_overlap,
         direct_chunk_threshold=direct_chunk_threshold,
     )
+
+
+def chunk_document_for_processing(
+    *,
+    document_id: int,
+    extracted: ExtractedTextResult,
+    blocks: list[object],
+) -> list[GeneratedChunkPayload]:
+    settings = get_settings()
+    if settings.chunk_strategy != ChunkingStrategy.BLOCK_AWARE.value:
+        return chunk_extracted_text_result(extracted=extracted, document_id=document_id)
+
+    try:
+        drafts = build_block_aware_chunks(
+            blocks,
+            source_type=extracted.source_type,
+            target_chars=max(1, settings.block_chunk_target_chars),
+            max_chars=max(1, settings.block_chunk_max_chars),
+            min_chars=max(0, settings.block_chunk_min_chars),
+            table_max_chars=max(1, settings.block_chunk_table_max_chars),
+            overlap_chars=max(0, settings.block_chunk_overlap_chars),
+        )
+        if not drafts:
+            logger.warning(
+                "block-aware chunking produced no chunks; falling back to fixed chunking document_id=%s",
+                document_id,
+            )
+            return chunk_extracted_text_result(extracted=extracted, document_id=document_id)
+
+        chunks: list[GeneratedChunkPayload] = []
+        char_cursor = 0
+        for index, draft in enumerate(drafts):
+            text = draft.text.strip()
+            if not text:
+                continue
+            metadata = dict(draft.metadata)
+            metadata.setdefault("source_type", extracted.source_type)
+            metadata.setdefault("chunk_strategy", ChunkingStrategy.BLOCK_AWARE.value)
+            metadata["char_start"] = char_cursor
+            metadata["char_end"] = char_cursor + len(text)
+            chunks.append(
+                build_generated_chunk(
+                    document_id=document_id,
+                    chunk_index=index,
+                    chunk_text=text,
+                    metadata=metadata,
+                )
+            )
+            char_cursor += len(text) + 2
+        if chunks:
+            return chunks
+    except Exception:
+        logger.exception(
+            "block-aware chunking failed; falling back to fixed chunking document_id=%s",
+            document_id,
+        )
+    return chunk_extracted_text_result(extracted=extracted, document_id=document_id)
 
 
 def build_prepared_segments(

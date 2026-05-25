@@ -302,6 +302,7 @@ def _build_retrieved_chunk_from_candidate(
         source_locator=metadata.source_locator,
         heading_path=metadata.heading_path,
         score=max(0.0, candidate.score),
+        candidate_sources=("overview",),
         ocr_provider=metadata.ocr_provider,
         ocr_provider_version=metadata.ocr_provider_version,
         asr_provider=metadata.asr_provider,

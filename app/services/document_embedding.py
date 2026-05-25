@@ -79,6 +79,11 @@ class RetrievedChunk:
     heading_path: tuple[str, ...] | None
     score: float
     chunk_db_id: int | None = None
+    vector_score: float | None = None
+    keyword_score: float | None = None
+    graph_score: float | None = None
+    matched_terms: tuple[str, ...] | None = None
+    candidate_sources: tuple[str, ...] | None = None
     ocr_provider: str | None = None
     ocr_provider_version: str | None = None
     asr_provider: str | None = None
@@ -421,6 +426,8 @@ def search_index(
                     source_locator=chunk_metadata.source_locator,
                     heading_path=chunk_metadata.heading_path,
                     score=score,
+                    vector_score=score,
+                    candidate_sources=("vector",),
                     ocr_provider=chunk_metadata.ocr_provider,
                     ocr_provider_version=chunk_metadata.ocr_provider_version,
                     asr_provider=chunk_metadata.asr_provider,

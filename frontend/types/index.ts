@@ -1,5 +1,5 @@
 export type KnowledgeBaseScope = "personal" | "team";
-export type RetrievalMode = "chunk_only" | "overview" | "graph_vector_mix";
+export type RetrievalMode = "chunk_only" | "overview" | "graph_vector_mix" | "hybrid_text";
 export type TeamMemberRole = "admin" | "member";
 export type TeamMemberStatus = "active" | "invited" | "removed";
 export type TeamInviteStatus = "active" | "used" | "expired" | "revoked";
@@ -251,6 +251,11 @@ export interface PreviewTarget {
 
 export interface RetrievalResult extends CitationLike {
   score: number;
+  vector_score?: number | null;
+  keyword_score?: number | null;
+  graph_score?: number | null;
+  matched_terms?: string[] | null;
+  candidate_sources?: string[] | null;
 }
 
 export interface RetrievalResponse {

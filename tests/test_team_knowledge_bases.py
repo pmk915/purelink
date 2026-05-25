@@ -239,6 +239,7 @@ async def test_team_knowledge_base_permissions_for_admin_member_and_non_member(
             )
         )
         db.commit()
+        document_id = document.id
     finally:
         db.close()
 
@@ -278,6 +279,14 @@ async def test_team_knowledge_base_permissions_for_admin_member_and_non_member(
         f"/api/v1/teams/{team_id}/knowledge-bases/{knowledge_base_id}/rag-health",
         headers=outsider_headers,
     )
+    member_debug = await team_knowledge_base_client.get(
+        f"/api/v1/teams/{team_id}/knowledge-bases/{knowledge_base_id}/documents/{document_id}/rag-debug",
+        headers=member_headers,
+    )
+    outsider_debug = await team_knowledge_base_client.get(
+        f"/api/v1/teams/{team_id}/knowledge-bases/{knowledge_base_id}/documents/{document_id}/rag-debug",
+        headers=outsider_headers,
+    )
     assert member_detail.status_code == 200
     assert outsider_detail.status_code == 404
     assert member_health.status_code == 200
@@ -290,6 +299,10 @@ async def test_team_knowledge_base_permissions_for_admin_member_and_non_member(
         },
     }
     assert outsider_health.status_code == 404
+    assert member_debug.status_code == 200
+    assert member_debug.json()["document_id"] == document_id
+    assert member_debug.json()["graph_index"]["status"] == "failed"
+    assert outsider_debug.status_code == 404
 
     member_create = await team_knowledge_base_client.post(
         f"/api/v1/teams/{team_id}/knowledge-bases",

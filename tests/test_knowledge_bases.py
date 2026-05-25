@@ -6,16 +6,40 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.config import get_settings
 from app.db.base import Base, load_all_models
 from app.db.session import get_db
 from app.main import app
 from app.models.document import Document
+from app.models.document_block import DocumentBlock
+from app.models.document_citation_unit import DocumentCitationUnit
+from app.models.document_chunk import DocumentChunk
 from app.models.document_index import DocumentIndex
-from app.models.enums import DocumentIndexStatus, DocumentIndexType, DocumentProcessingStatus, DocumentReviewStatus
+from app.models.enums import (
+    DocumentIndexStatus,
+    DocumentIndexType,
+    DocumentProcessingStatus,
+    DocumentReviewStatus,
+    ProcessingJobStatus,
+    ProcessingJobTrigger,
+    ProcessingJobType,
+)
 from app.models.knowledge_graph import EntityMention, KnowledgeEntity
+from app.models.processing_job import ProcessingJob
+from app.schemas.document import RetrievalQueryRequest
 
 
 load_all_models()
+
+
+def test_retrieval_query_request_accepts_hybrid_text_mode() -> None:
+    payload = RetrievalQueryRequest(
+        query="/api/v1/knowledge-bases/{id}/rag-health",
+        top_k=3,
+        mode="hybrid_text",
+    )
+
+    assert payload.mode == "hybrid_text"
 
 
 @pytest.fixture
@@ -305,6 +329,123 @@ async def test_knowledge_base_detail_update_delete_enforce_ownership(
         headers=alice_headers,
     )
     assert get_after_delete.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_personal_document_rag_debug_reports_retrieval_prerequisites(
+    knowledge_base_client: AsyncClient,
+    test_session_factory: sessionmaker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "local_hashed_bow")
+    monkeypatch.setenv("EMBEDDING_MODEL", "")
+    get_settings.cache_clear()
+    alice = await _register_and_login(
+        knowledge_base_client,
+        email="rag-debug-owner@example.com",
+        username="rag-debug-owner",
+    )
+    bob = await _register_and_login(
+        knowledge_base_client,
+        email="rag-debug-other@example.com",
+        username="rag-debug-other",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+    bob_headers = {"Authorization": f"Bearer {bob['access_token']}"}
+    create_response = await knowledge_base_client.post(
+        "/api/v1/knowledge-bases",
+        headers=alice_headers,
+        json={"name": "RAG Debug KB"},
+    )
+    knowledge_base_id = create_response.json()["id"]
+
+    db = test_session_factory()
+    try:
+        document = Document(
+            knowledge_base_id=knowledge_base_id,
+            owner_id=int(alice["user_id"]),
+            submitted_by=int(alice["user_id"]),
+            filename="debug.txt",
+            original_filename="debug.txt",
+            file_type="txt",
+            file_size=64,
+            sha256="debug-doc",
+            storage_path="uploads/debug.txt",
+            review_status=DocumentReviewStatus.NOT_REQUIRED,
+            processing_status=DocumentProcessingStatus.INDEXED,
+        )
+        db.add(document)
+        db.flush()
+        chunk = DocumentChunk(
+            document_id=document.id,
+            chunk_key=f"{document.id}:0",
+            chunk_index=0,
+            chunk_text="PureLink personal knowledge bases document retrieval citation smoke test.",
+        )
+        db.add(chunk)
+        db.flush()
+        db.add_all(
+            [
+                DocumentBlock(
+                    document_id=document.id,
+                    block_type="text",
+                    text="PureLink personal knowledge bases.",
+                    order_index=0,
+                ),
+                DocumentCitationUnit(
+                    document_id=document.id,
+                    knowledge_base_id=knowledge_base_id,
+                    chunk_id=chunk.id,
+                    chunk_key=chunk.chunk_key,
+                    unit_index=0,
+                    unit_text=chunk.chunk_text,
+                    start_char=0,
+                    end_char=len(chunk.chunk_text),
+                ),
+                DocumentIndex(
+                    document_id=document.id,
+                    knowledge_base_id=knowledge_base_id,
+                    index_type=DocumentIndexType.VECTOR,
+                    provider="local_hashed_bow",
+                    model_name="hashed_bow_v1",
+                    model_dim=128,
+                    status=DocumentIndexStatus.INDEXED,
+                ),
+                ProcessingJob(
+                    document_id=document.id,
+                    triggered_by_id=int(alice["user_id"]),
+                    job_type=ProcessingJobType.DOCUMENT_INDEX,
+                    trigger_type=ProcessingJobTrigger.INDEX,
+                    status=ProcessingJobStatus.SUCCEEDED,
+                    current_step="finalize_index",
+                ),
+            ]
+        )
+        db.commit()
+        document_id = document.id
+    finally:
+        db.close()
+
+    forbidden = await knowledge_base_client.get(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}/rag-debug",
+        headers=bob_headers,
+    )
+    assert forbidden.status_code == 404
+
+    response = await knowledge_base_client.get(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents/{document_id}/rag-debug",
+        headers=alice_headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["document_id"] == document_id
+    assert body["chunk_count"] == 1
+    assert body["citation_unit_count"] == 1
+    assert body["block_count"] == 1
+    assert body["vector_index"]["status"] == "indexed"
+    assert body["vector_index"]["compatible"] is True
+    assert body["latest_processing_job"]["status"] == "succeeded"
+    get_settings.cache_clear()
 
 
 @pytest.mark.anyio

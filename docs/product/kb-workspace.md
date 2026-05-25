@@ -21,3 +21,14 @@ M13 organizes each knowledge base as a RAG workspace rather than a single ask pa
 ## LightRAG-inspired Boundary
 
 The workspace borrows LightRAG-style information architecture around document indexing, graph exploration, and RAG query/debug surfaces. It does not implement full LightRAG graph reasoning, external graph storage, or a complex graph visualization canvas.
+
+## Retrieval Debug Modes
+
+Retrieval Debug can compare:
+
+- `chunk_only`: normal chunk/vector retrieval.
+- `overview`: broad knowledge-base overview retrieval.
+- `graph_vector_mix`: lightweight graph candidates plus vector candidates.
+- `hybrid_text`: keyword candidates plus vector candidates.
+
+Use `hybrid_text` for exact technical terms such as API paths, config keys, file names, commands, error codes, and migration identifiers.

@@ -10,6 +10,7 @@ logger = logging.getLogger("purelink.retrieval")
 SUPPORTED_MODES = {
     RetrievalMode.CHUNK_ONLY,
     RetrievalMode.OVERVIEW,
+    RetrievalMode.HYBRID_TEXT,
     RetrievalMode.GRAPH_VECTOR_MIX,
 }
 
@@ -32,4 +33,6 @@ def resolve_retriever_name(requested_mode: RetrievalMode) -> str:
         return "overview"
     if resolved_mode == RetrievalMode.GRAPH_VECTOR_MIX:
         return "graph_vector_mix"
+    if resolved_mode == RetrievalMode.HYBRID_TEXT:
+        return "hybrid_text"
     return "chunk"
