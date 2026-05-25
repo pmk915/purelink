@@ -19,6 +19,10 @@ export const zh: Messages = {
     cancel: "取消",
     delete: "删除",
     deleting: "删除中...",
+    copy: "复制",
+    copied: "已复制",
+    yes: "是",
+    no: "否",
     anonymous: "访客",
     openNavigation: "打开导航",
     review: "审核",
@@ -159,6 +163,13 @@ export const zh: Messages = {
       "当前 Core 版本支持 .txt、.md、.docx 和普通文本型 .pdf。管理员上传后自动准备，成员上传后先进入审核。",
     askTab: "问答",
     documentsTab: "文档",
+    graphTab: "图谱",
+    retrievalDebugTab: "检索调试",
+    healthTab: "健康状态",
+    settingsTab: "设置",
+    settingsDescription: "查看知识库元数据和安全管理操作。",
+    embeddingChangeWarning:
+      "切换 embedding provider 或模型后，需要重建受影响的文档索引。",
     documentsTitle: "文档",
     documentsDescription: "查看每个文档的状态，PureLink 会自动推进上传、审核和准备。",
     documentsSummaryTitle: "文档状态",
@@ -328,7 +339,36 @@ export const zh: Messages = {
     retrievalDetailsDescription:
       "这里会显示当前前端可见的 citation/evidence 信息；trace_id 等字段会在后端响应提供后自动展示。",
     evidenceCount: (count: number) => `证据数量：${count}`,
+    retrievalMode: "检索模式",
+    usedReranker: "是否使用重排",
     openConversation: (id: number) => `打开会话 #${id}`
+  },
+  graph: {
+    title: "知识图谱",
+    description: "查看从该知识库中抽取的轻量实体、提及和有来源关系。",
+    searchPlaceholder: "搜索实体...",
+    empty:
+      "当前知识库暂无图谱数据。上传并索引文档后，PureLink 会尝试构建轻量图谱。",
+    detailTitle: "实体详情",
+    detailDescription: "选择一个实体查看提及和关联关系。",
+    mentions: "提及",
+    relations: "关系",
+    noMentions: "该实体暂无提及。",
+    noRelations: "该实体暂无关系。",
+    noSourceLocator: "暂无来源定位",
+    noSourceDocument: "暂无来源文档",
+    entityStats: (mentions: number, relations: number) =>
+      `${mentions} 个提及 · ${relations} 个关系`
+  },
+  retrievalDebug: {
+    title: "检索调试",
+    description: "直接运行检索，查看进入回答生成前的候选来源。",
+    query: "检索问题",
+    queryPlaceholder: "输入一个检索 query...",
+    mode: "模式",
+    run: "运行检索",
+    running: "检索中...",
+    failed: "检索失败，请检查 query、模式或权限。"
   },
   teams: {
     pageTitle: "我的团队",

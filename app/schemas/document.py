@@ -92,6 +92,7 @@ class DocumentEmbedRead(BaseModel):
 class RetrievalQueryRequest(BaseModel):
     query: str = Field(min_length=1, max_length=2000)
     top_k: int = Field(default=5, ge=1, le=20)
+    mode: str = "chunk_only"
 
     @field_validator("query")
     @classmethod
@@ -99,6 +100,15 @@ class RetrievalQueryRequest(BaseModel):
         normalized = value.strip()
         if not normalized:
             raise ValueError("Query cannot be empty.")
+        return normalized
+
+    @field_validator("mode")
+    @classmethod
+    def normalize_mode(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        supported = {"chunk_only", "overview", "graph_vector_mix"}
+        if normalized not in supported:
+            raise ValueError("Unsupported retrieval mode.")
         return normalized
 
 
@@ -133,6 +143,9 @@ class RetrievedChunkRead(BaseModel):
 class RetrievalResponse(BaseModel):
     query: str
     top_k: int
+    mode: str | None = None
+    used_reranker: bool | None = None
+    trace_id: int | str | None = None
     results: list[RetrievedChunkRead]
 
 

@@ -161,6 +161,8 @@ PureLink does not aim to fully replicate LightRAG or provide full multimodal RAG
 
 PureLink includes user-facing RAG evidence display and knowledge base management. Personal knowledge bases can be deleted by their owners with confirmation, while team knowledge base deletion is restricted to team admins. The knowledge base workspace also shows a compact RAG health summary for document, vector index, and graph index status.
 
+The M13 workspace organizes each knowledge base into Ask, Documents, Graph, Retrieval Debug, Health, and Settings tabs. This is LightRAG-inspired information architecture, not a full LightRAG clone or a full graph visualization system.
+
 ## RAG Model Providers
 
 PureLink M2 增加了 `app/providers/`，把 embedding、reranker 和 LLM 的接入层抽成 provider 接口。当前默认仍然是轻量本地配置，方便 Docker 本地部署和 smoke test。

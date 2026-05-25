@@ -12,6 +12,7 @@ from app.main import app
 from app.models.document import Document
 from app.models.document_index import DocumentIndex
 from app.models.enums import DocumentIndexStatus, DocumentIndexType, DocumentProcessingStatus, DocumentReviewStatus
+from app.models.knowledge_graph import EntityMention, KnowledgeEntity
 
 
 load_all_models()
@@ -304,3 +305,87 @@ async def test_knowledge_base_detail_update_delete_enforce_ownership(
         headers=alice_headers,
     )
     assert get_after_delete.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_personal_graph_entities_are_owner_visible(
+    knowledge_base_client: AsyncClient,
+    test_session_factory: sessionmaker,
+) -> None:
+    alice = await _register_and_login(
+        knowledge_base_client,
+        email="graph-owner@example.com",
+        username="graph-owner",
+    )
+    bob = await _register_and_login(
+        knowledge_base_client,
+        email="graph-other@example.com",
+        username="graph-other",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+    bob_headers = {"Authorization": f"Bearer {bob['access_token']}"}
+    create_response = await knowledge_base_client.post(
+        "/api/v1/knowledge-bases",
+        headers=alice_headers,
+        json={"name": "Graph KB"},
+    )
+    assert create_response.status_code == 201
+    knowledge_base_id = create_response.json()["id"]
+
+    db = test_session_factory()
+    try:
+        document = Document(
+            knowledge_base_id=knowledge_base_id,
+            owner_id=int(alice["user_id"]),
+            submitted_by=int(alice["user_id"]),
+            filename="graph.txt",
+            original_filename="graph.txt",
+            file_type="txt",
+            file_size=12,
+            sha256="graph-doc",
+            storage_path="uploads/graph.txt",
+            review_status=DocumentReviewStatus.NOT_REQUIRED,
+            processing_status=DocumentProcessingStatus.INDEXED,
+        )
+        entity = KnowledgeEntity(
+            knowledge_base_id=knowledge_base_id,
+            name="Retrieval Layer",
+            normalized_name="retrieval layer",
+            entity_type="concept",
+        )
+        db.add_all([document, entity])
+        db.flush()
+        db.add(
+            EntityMention(
+                entity_id=entity.id,
+                knowledge_base_id=knowledge_base_id,
+                document_id=document.id,
+                text_span="Retrieval Layer",
+                source_locator="section: M1",
+            )
+        )
+        db.commit()
+        entity_id = entity.id
+    finally:
+        db.close()
+
+    list_response = await knowledge_base_client.get(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/graph/entities?q=retrieval",
+        headers=alice_headers,
+    )
+    assert list_response.status_code == 200
+    assert list_response.json()["items"][0]["name"] == "Retrieval Layer"
+    assert list_response.json()["items"][0]["mention_count"] == 1
+
+    detail_response = await knowledge_base_client.get(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/graph/entities/{entity_id}",
+        headers=alice_headers,
+    )
+    assert detail_response.status_code == 200
+    assert detail_response.json()["mentions"][0]["source_locator"] == "section: M1"
+
+    other_response = await knowledge_base_client.get(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/graph/entities",
+        headers=bob_headers,
+    )
+    assert other_response.status_code == 404

@@ -17,6 +17,7 @@ from app.models.enums import (
     DocumentProcessingStatus,
     DocumentReviewStatus,
 )
+from app.models.knowledge_graph import EntityMention, KnowledgeEntity
 
 
 load_all_models()
@@ -400,3 +401,99 @@ async def test_personal_and_team_knowledge_base_interfaces_remain_separated(
 
     assert personal_detail_for_team_kb.status_code == 404
     assert team_detail_for_personal_kb.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_team_graph_entities_follow_team_membership(
+    team_knowledge_base_client: AsyncClient,
+    test_session_factory: sessionmaker,
+) -> None:
+    admin = await _register_and_login(
+        team_knowledge_base_client,
+        email="team-graph-admin@example.com",
+        username="team-graph-admin",
+    )
+    member = await _register_and_login(
+        team_knowledge_base_client,
+        email="team-graph-member@example.com",
+        username="team-graph-member",
+    )
+    outsider = await _register_and_login(
+        team_knowledge_base_client,
+        email="team-graph-outsider@example.com",
+        username="team-graph-outsider",
+    )
+    admin_headers = {"Authorization": f"Bearer {admin['access_token']}"}
+    member_headers = {"Authorization": f"Bearer {member['access_token']}"}
+    outsider_headers = {"Authorization": f"Bearer {outsider['access_token']}"}
+    team_id = await _create_team(
+        team_knowledge_base_client,
+        access_token=str(admin["access_token"]),
+        name="Graph Team",
+    )
+    invite_code = await _create_team_invite(
+        team_knowledge_base_client,
+        access_token=str(admin["access_token"]),
+        team_id=team_id,
+    )
+    await _join_team(
+        team_knowledge_base_client,
+        access_token=str(member["access_token"]),
+        code=invite_code,
+    )
+    create_response = await team_knowledge_base_client.post(
+        f"/api/v1/teams/{team_id}/knowledge-bases",
+        headers=admin_headers,
+        json={"name": "Team Graph KB"},
+    )
+    assert create_response.status_code == 201
+    knowledge_base_id = create_response.json()["id"]
+
+    db = test_session_factory()
+    try:
+        document = Document(
+            knowledge_base_id=knowledge_base_id,
+            owner_id=int(member["user_id"]),
+            submitted_by=int(member["user_id"]),
+            filename="team-graph.txt",
+            original_filename="team-graph.txt",
+            file_type="txt",
+            file_size=18,
+            sha256="team-graph-doc",
+            storage_path="uploads/team-graph.txt",
+            review_status=DocumentReviewStatus.APPROVED,
+            processing_status=DocumentProcessingStatus.INDEXED,
+        )
+        entity = KnowledgeEntity(
+            knowledge_base_id=knowledge_base_id,
+            name="Reranker",
+            normalized_name="reranker",
+            entity_type="concept",
+        )
+        db.add_all([document, entity])
+        db.flush()
+        db.add(
+            EntityMention(
+                entity_id=entity.id,
+                knowledge_base_id=knowledge_base_id,
+                document_id=document.id,
+                text_span="Reranker",
+                source_locator="section: M3",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    member_response = await team_knowledge_base_client.get(
+        f"/api/v1/teams/{team_id}/knowledge-bases/{knowledge_base_id}/graph/entities",
+        headers=member_headers,
+    )
+    outsider_response = await team_knowledge_base_client.get(
+        f"/api/v1/teams/{team_id}/knowledge-bases/{knowledge_base_id}/graph/entities",
+        headers=outsider_headers,
+    )
+
+    assert member_response.status_code == 200
+    assert member_response.json()["items"][0]["name"] == "Reranker"
+    assert outsider_response.status_code == 404

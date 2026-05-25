@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 import logging
 import time
 
-from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, File, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import CurrentUser, DBSession
@@ -36,6 +36,10 @@ from app.schemas.knowledge_base import (
     KnowledgeBaseReindexRead,
     TeamKnowledgeBaseCreateRequest,
     TeamKnowledgeBaseUpdateRequest,
+)
+from app.schemas.knowledge_graph import (
+    KnowledgeGraphEntityDetailRead,
+    KnowledgeGraphEntityListRead,
 )
 from app.services.document import (
     compute_document_sha256,
@@ -117,6 +121,10 @@ from app.services.knowledge_base import (
     update_knowledge_base,
 )
 from app.services.knowledge_base_health import build_knowledge_base_rag_health
+from app.services.knowledge_graph.graph_browser import (
+    get_graph_entity_detail,
+    list_graph_entities,
+)
 from app.services.team import get_team_membership
 
 
@@ -349,6 +357,61 @@ async def get_team_knowledge_base_rag_health_endpoint(
     return KnowledgeBaseRagHealthRead.model_validate(
         build_knowledge_base_rag_health(db, knowledge_base_id=knowledge_base.id)
     )
+
+
+@router.get("/{knowledge_base_id}/graph/entities", response_model=KnowledgeGraphEntityListRead)
+async def list_team_knowledge_base_graph_entities_endpoint(
+    team_id: int,
+    knowledge_base_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+    q: str | None = Query(default=None, max_length=120),
+) -> KnowledgeGraphEntityListRead:
+    _get_active_membership_or_404(
+        db,
+        team_id=team_id,
+        user_id=current_user.id,
+    )
+    knowledge_base = _get_team_knowledge_base_or_404(
+        db,
+        team_id=team_id,
+        knowledge_base_id=knowledge_base_id,
+    )
+    return list_graph_entities(db, knowledge_base_id=knowledge_base.id, query=q)
+
+
+@router.get(
+    "/{knowledge_base_id}/graph/entities/{entity_id}",
+    response_model=KnowledgeGraphEntityDetailRead,
+)
+async def get_team_knowledge_base_graph_entity_endpoint(
+    team_id: int,
+    knowledge_base_id: int,
+    entity_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+) -> KnowledgeGraphEntityDetailRead:
+    _get_active_membership_or_404(
+        db,
+        team_id=team_id,
+        user_id=current_user.id,
+    )
+    knowledge_base = _get_team_knowledge_base_or_404(
+        db,
+        team_id=team_id,
+        knowledge_base_id=knowledge_base_id,
+    )
+    detail = get_graph_entity_detail(
+        db,
+        knowledge_base_id=knowledge_base.id,
+        entity_id=entity_id,
+    )
+    if detail is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Graph entity not found.",
+        )
+    return detail
 
 
 @router.post(
@@ -1303,7 +1366,7 @@ async def retrieve_team_knowledge_base_chunks_endpoint(
                 team_id=team_id,
                 query=payload.query,
                 top_k=payload.top_k,
-                mode=RetrievalMode.CHUNK_ONLY,
+                mode=RetrievalMode(payload.mode),
                 include_citations=False,
                 required_review_status=DocumentReviewStatus.APPROVED,
             )
@@ -1318,6 +1381,9 @@ async def retrieve_team_knowledge_base_chunks_endpoint(
     return RetrievalResponse(
         query=payload.query,
         top_k=payload.top_k,
+        mode=retrieval_result.mode.value,
+        used_reranker=retrieval_result.used_reranker,
+        trace_id=retrieval_result.trace_id,
         results=[
             RetrievedChunkRead(
                 chunk_id=item.chunk_id,
@@ -1450,6 +1516,9 @@ async def ask_team_knowledge_base_endpoint(
         answer=qa_result.answer,
         citations=qa_result.citations,
         intent=qa_result.intent,
+        retrieval_mode=retrieval_result.mode.value,
+        used_reranker=retrieval_result.used_reranker,
+        trace_id=retrieval_result.trace_id,
     )
 
 

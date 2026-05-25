@@ -9,7 +9,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import * as documentApi from "@/api/documents";
 import { DocumentListItem } from "@/components/documents/document-list-item";
 import { DocumentUploadCard } from "@/components/documents/document-upload-card";
+import { GraphExplorer } from "@/components/graph/graph-explorer";
 import { AskWorkspace, type QaAvailability } from "@/components/qa/ask-workspace";
+import { RetrievalDebugPanel } from "@/components/retrieval/retrieval-debug-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,9 +36,9 @@ import {
   useTeamKnowledgeBaseRagHealth
 } from "@/hooks/use-knowledge-bases";
 import { useTeam } from "@/hooks/use-teams";
-import { useAskPersonal, useAskTeam } from "@/hooks/use-qa";
+import { useAskPersonal, useAskTeam, useRetrievePersonal, useRetrieveTeam } from "@/hooks/use-qa";
 import { formatDate } from "@/lib/utils";
-import type { Document, KnowledgeBaseScope } from "@/types";
+import type { Document, KnowledgeBaseScope, RetrievalResponse } from "@/types";
 
 function supportsDocumentPreparation(filename: string) {
   const normalized = filename.toLowerCase();
@@ -111,7 +113,7 @@ function getQaAvailability(documents: Document[]): QaAvailability {
   return "unavailable";
 }
 
-type WorkspaceTab = "qa" | "documents";
+type WorkspaceTab = "qa" | "documents" | "graph" | "retrieval" | "health" | "settings";
 
 export function KnowledgeBaseWorkspace({
   scope,
@@ -173,6 +175,9 @@ export function KnowledgeBaseWorkspace({
   const deleteTeamKnowledgeBase = useDeleteTeamKnowledgeBase(accessToken, teamId ?? Number.NaN);
   const askPersonal = useAskPersonal(accessToken, knowledgeBaseId);
   const askTeam = useAskTeam(accessToken, teamId ?? Number.NaN, knowledgeBaseId);
+  const retrievePersonal = useRetrievePersonal(accessToken, knowledgeBaseId);
+  const retrieveTeam = useRetrieveTeam(accessToken, teamId ?? Number.NaN, knowledgeBaseId);
+  const [retrievalDebugResult, setRetrievalDebugResult] = useState<RetrievalResponse | null>(null);
 
   const knowledgeBase = scope === "personal" ? personalKbQuery.data : teamKbQuery.data;
   const ragHealth = scope === "personal" ? personalHealthQuery.data : teamHealthQuery.data;
@@ -335,6 +340,18 @@ export function KnowledgeBaseWorkspace({
 
   const tabButtonClassName = (tab: WorkspaceTab) =>
     tab === activeTab ? "default" : "ghost";
+  const canManageKnowledgeBase = scope === "personal" || isTeamAdmin;
+  const workspaceTabs: Array<{ id: WorkspaceTab; label: string; adminOnly?: boolean }> = [
+    { id: "qa", label: messages.knowledgeBases.askTab },
+    { id: "documents", label: messages.knowledgeBases.documentsTab },
+    { id: "graph", label: messages.knowledgeBases.graphTab },
+    { id: "retrieval", label: messages.knowledgeBases.retrievalDebugTab, adminOnly: true },
+    { id: "health", label: messages.knowledgeBases.healthTab },
+    { id: "settings", label: messages.knowledgeBases.settingsTab, adminOnly: true }
+  ];
+  const visibleWorkspaceTabs = workspaceTabs.filter(
+    (tab) => !tab.adminOnly || canManageKnowledgeBase
+  );
 
   return (
     <div className="space-y-6">
@@ -484,7 +501,7 @@ export function KnowledgeBaseWorkspace({
             </span>
           </div>
           <div className="flex flex-wrap gap-2">
-            {scope === "personal" || isTeamAdmin ? (
+            {canManageKnowledgeBase ? (
               <Button
                 variant="ghost"
                 size="sm"
@@ -495,20 +512,16 @@ export function KnowledgeBaseWorkspace({
                 {messages.common.delete}
               </Button>
             ) : null}
-            <Button
-              variant={tabButtonClassName("qa")}
-              size="sm"
-              onClick={() => setActiveTab("qa")}
-            >
-              {messages.knowledgeBases.askTab}
-            </Button>
-            <Button
-              variant={tabButtonClassName("documents")}
-              size="sm"
-              onClick={() => setActiveTab("documents")}
-            >
-              {messages.knowledgeBases.documentsTab}
-            </Button>
+            {visibleWorkspaceTabs.map((tab) => (
+              <Button
+                key={tab.id}
+                variant={tabButtonClassName(tab.id)}
+                size="sm"
+                onClick={() => setActiveTab(tab.id)}
+              >
+                {tab.label}
+              </Button>
+            ))}
           </div>
         </CardContent>
       </Card>
@@ -618,7 +631,7 @@ export function KnowledgeBaseWorkspace({
             </Card>
           </div>
         </div>
-      ) : (
+      ) : activeTab === "documents" ? (
         <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
           <div className="space-y-6">
             <DocumentUploadCard
@@ -715,7 +728,88 @@ export function KnowledgeBaseWorkspace({
             </CardContent>
           </Card>
         </div>
-      )}
+      ) : activeTab === "graph" ? (
+        <GraphExplorer
+          scope={scope}
+          knowledgeBaseId={knowledgeBaseId}
+          teamId={teamId}
+        />
+      ) : activeTab === "retrieval" && canManageKnowledgeBase ? (
+        <RetrievalDebugPanel
+          result={retrievalDebugResult}
+          isRunning={retrievePersonal.isPending || retrieveTeam.isPending}
+          onRetrieve={async (values) => {
+            const result =
+              scope === "personal"
+                ? await retrievePersonal.mutateAsync(values)
+                : await retrieveTeam.mutateAsync(values);
+            setRetrievalDebugResult(result);
+            return result;
+          }}
+        />
+      ) : activeTab === "health" ? (
+        <Card className="border-border/70 shadow-card">
+          <CardHeader>
+            <CardTitle>{messages.knowledgeBases.ragHealthTitle}</CardTitle>
+            <CardDescription>{messages.knowledgeBases.ragHealthDescription}</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-2xl bg-secondary/60 px-4 py-3">
+              <p className="font-medium text-foreground">{messages.knowledgeBases.healthDocuments}</p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {ragHealth?.document_count ?? totalDocuments} total · {askableDocuments} ready · {preparingDocuments} preparing · {failedDocuments} failed
+              </p>
+            </div>
+            <div className="rounded-2xl bg-secondary/60 px-4 py-3">
+              <p className="font-medium text-foreground">{messages.knowledgeBases.healthVectorIndex}</p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {messages.knowledgeBases.healthIndexed}: {vectorIndexCounts.indexed ?? 0}<br />
+                {messages.knowledgeBases.healthFailed}: {vectorIndexCounts.failed ?? 0}<br />
+                {messages.knowledgeBases.healthStale}: {vectorIndexCounts.stale ?? 0}<br />
+                {messages.knowledgeBases.healthMissing}: {vectorIndexCounts.missing ?? 0}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-secondary/60 px-4 py-3">
+              <p className="font-medium text-foreground">{messages.knowledgeBases.healthGraphIndex}</p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {messages.knowledgeBases.healthIndexed}: {graphIndexCounts.indexed ?? 0}<br />
+                {messages.knowledgeBases.healthFailed}: {graphIndexCounts.failed ?? 0}<br />
+                {messages.knowledgeBases.healthStale}: {graphIndexCounts.stale ?? 0}<br />
+                {messages.knowledgeBases.healthMissing}: {graphIndexCounts.missing ?? 0}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : activeTab === "settings" && canManageKnowledgeBase ? (
+        <Card className="border-border/70 shadow-card">
+          <CardHeader>
+            <CardTitle>{messages.knowledgeBases.settingsTab}</CardTitle>
+            <CardDescription>{messages.knowledgeBases.settingsDescription}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm text-muted-foreground">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl bg-secondary/60 px-4 py-3">
+                <p className="font-medium text-foreground">{knowledgeBase.name}</p>
+                <p className="mt-1">{messages.common.knowledgeBaseId(knowledgeBase.id)}</p>
+              </div>
+              <div className="rounded-2xl bg-secondary/60 px-4 py-3">
+                <p>{messages.common.updatedAt} {formatDate(knowledgeBase.updated_at)}</p>
+                <p className="mt-1">{scope === "team" ? messages.common.team : messages.common.personal}</p>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">
+              {messages.knowledgeBases.embeddingChangeWarning}
+            </div>
+            <Button
+              variant="destructive"
+              onClick={() => setDeleteKnowledgeBaseDialogOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+              {messages.common.delete}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

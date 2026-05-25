@@ -32,6 +32,7 @@
 ## Product Experience
 
 - [Knowledge Base Management](product/knowledge-base-management.md)
+- [Knowledge Base Workspace](product/kb-workspace.md)
 - [RAG Answer Experience](product/rag-answer-experience.md)
 
 ## Development

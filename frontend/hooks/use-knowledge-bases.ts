@@ -108,3 +108,66 @@ export function useTeamKnowledgeBaseRagHealth(
     enabled: Boolean(token) && Number.isFinite(teamId) && Number.isFinite(kbId)
   });
 }
+
+export function usePersonalKnowledgeGraphEntities(
+  token: string | null,
+  kbId: number,
+  query: string
+) {
+  return useQuery({
+    queryKey: ["knowledge-graph", "personal", kbId, query],
+    queryFn: () =>
+      knowledgeBaseApi.listPersonalKnowledgeGraphEntities(token as string, kbId, query),
+    enabled: Boolean(token) && Number.isFinite(kbId)
+  });
+}
+
+export function usePersonalKnowledgeGraphEntity(
+  token: string | null,
+  kbId: number,
+  entityId: number | null
+) {
+  return useQuery({
+    queryKey: ["knowledge-graph", "personal", kbId, "entity", entityId],
+    queryFn: () =>
+      knowledgeBaseApi.getPersonalKnowledgeGraphEntity(token as string, kbId, entityId as number),
+    enabled: Boolean(token) && Number.isFinite(kbId) && entityId !== null
+  });
+}
+
+export function useTeamKnowledgeGraphEntities(
+  token: string | null,
+  teamId: number,
+  kbId: number,
+  query: string
+) {
+  return useQuery({
+    queryKey: ["knowledge-graph", "team", teamId, kbId, query],
+    queryFn: () =>
+      teamsApi.listTeamKnowledgeGraphEntities(token as string, teamId, kbId, query),
+    enabled: Boolean(token) && Number.isFinite(teamId) && Number.isFinite(kbId)
+  });
+}
+
+export function useTeamKnowledgeGraphEntity(
+  token: string | null,
+  teamId: number,
+  kbId: number,
+  entityId: number | null
+) {
+  return useQuery({
+    queryKey: ["knowledge-graph", "team", teamId, kbId, "entity", entityId],
+    queryFn: () =>
+      teamsApi.getTeamKnowledgeGraphEntity(
+        token as string,
+        teamId,
+        kbId,
+        entityId as number
+      ),
+    enabled:
+      Boolean(token) &&
+      Number.isFinite(teamId) &&
+      Number.isFinite(kbId) &&
+      entityId !== null
+  });
+}

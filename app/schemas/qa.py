@@ -58,3 +58,6 @@ class QuestionAnswerResponse(BaseModel):
     answer: str
     citations: list[CitationRead]
     intent: str | None = None
+    retrieval_mode: str | None = None
+    used_reranker: bool | None = None
+    trace_id: int | str | None = None

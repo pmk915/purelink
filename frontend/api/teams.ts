@@ -1,5 +1,13 @@
 import { apiClient } from "@/lib/api-client";
-import type { KnowledgeBase, KnowledgeBaseRagHealth, Team, TeamInvite, TeamMember } from "@/types";
+import type {
+  KnowledgeBase,
+  KnowledgeBaseRagHealth,
+  KnowledgeGraphEntityDetail,
+  KnowledgeGraphEntityList,
+  Team,
+  TeamInvite,
+  TeamMember
+} from "@/types";
 
 export function listTeams(token: string) {
   return apiClient.get<Team[]>("/teams", token);
@@ -59,6 +67,31 @@ export function deleteTeamKnowledgeBase(token: string, teamId: number, kbId: num
 export function getTeamKnowledgeBaseRagHealth(token: string, teamId: number, kbId: number) {
   return apiClient.get<KnowledgeBaseRagHealth>(
     `/teams/${teamId}/knowledge-bases/${kbId}/rag-health`,
+    token
+  );
+}
+
+export function listTeamKnowledgeGraphEntities(
+  token: string,
+  teamId: number,
+  kbId: number,
+  query?: string
+) {
+  const search = query ? `?q=${encodeURIComponent(query)}` : "";
+  return apiClient.get<KnowledgeGraphEntityList>(
+    `/teams/${teamId}/knowledge-bases/${kbId}/graph/entities${search}`,
+    token
+  );
+}
+
+export function getTeamKnowledgeGraphEntity(
+  token: string,
+  teamId: number,
+  kbId: number,
+  entityId: number
+) {
+  return apiClient.get<KnowledgeGraphEntityDetail>(
+    `/teams/${teamId}/knowledge-bases/${kbId}/graph/entities/${entityId}`,
     token
   );
 }

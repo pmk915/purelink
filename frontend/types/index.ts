@@ -1,4 +1,5 @@
 export type KnowledgeBaseScope = "personal" | "team";
+export type RetrievalMode = "chunk_only" | "overview" | "graph_vector_mix";
 export type TeamMemberRole = "admin" | "member";
 export type TeamMemberStatus = "active" | "invited" | "removed";
 export type TeamInviteStatus = "active" | "used" | "expired" | "revoked";
@@ -255,6 +256,9 @@ export interface RetrievalResult extends CitationLike {
 export interface RetrievalResponse {
   query: string;
   top_k: number;
+  mode?: RetrievalMode | null;
+  used_reranker?: boolean | null;
+  trace_id?: number | string | null;
   results: RetrievalResult[];
 }
 
@@ -265,6 +269,52 @@ export interface AskResponse {
   answer: string;
   citations: Citation[];
   intent?: string | null;
+  retrieval_mode?: RetrievalMode | null;
+  used_reranker?: boolean | null;
+  trace_id?: number | string | null;
+}
+
+export interface KnowledgeGraphEntitySummary {
+  id: number;
+  name: string;
+  entity_type: string | null;
+  description: string | null;
+  mention_count: number;
+  relation_count: number;
+}
+
+export interface KnowledgeGraphEntityList {
+  items: KnowledgeGraphEntitySummary[];
+}
+
+export interface KnowledgeGraphMention {
+  document_id: number;
+  document_name: string | null;
+  chunk_id: number | null;
+  citation_unit_id: number | null;
+  source_locator: string | null;
+  text_span: string | null;
+}
+
+export interface KnowledgeGraphRelation {
+  id: number;
+  source_entity_id: number;
+  source_entity_name: string;
+  target_entity_id: number;
+  target_entity_name: string;
+  relation_type: string;
+  description: string | null;
+  source_document_id: number | null;
+  source_document_name: string | null;
+  source_chunk_id: number | null;
+  source_citation_unit_id: number | null;
+  source_locator: string | null;
+  confidence: number | null;
+}
+
+export interface KnowledgeGraphEntityDetail extends KnowledgeGraphEntitySummary {
+  mentions: KnowledgeGraphMention[];
+  relations: KnowledgeGraphRelation[];
 }
 
 export interface ConversationSummary {

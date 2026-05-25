@@ -2,7 +2,8 @@ import { z } from "zod";
 
 export const retrievalSchema = z.object({
   query: z.string().min(1, "Query is required."),
-  top_k: z.coerce.number().min(1).max(20).default(5)
+  top_k: z.coerce.number().min(1).max(20).default(5),
+  mode: z.enum(["chunk_only", "overview", "graph_vector_mix"]).default("chunk_only")
 });
 
 export const askSchema = z.object({

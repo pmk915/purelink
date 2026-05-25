@@ -1,5 +1,10 @@
 import { apiClient } from "@/lib/api-client";
-import type { KnowledgeBase, KnowledgeBaseRagHealth } from "@/types";
+import type {
+  KnowledgeBase,
+  KnowledgeBaseRagHealth,
+  KnowledgeGraphEntityDetail,
+  KnowledgeGraphEntityList
+} from "@/types";
 
 export function listPersonalKnowledgeBases(token: string) {
   return apiClient.get<KnowledgeBase[]>("/knowledge-bases", token);
@@ -30,4 +35,23 @@ export function deletePersonalKnowledgeBase(token: string, kbId: number) {
 
 export function getPersonalKnowledgeBaseRagHealth(token: string, kbId: number) {
   return apiClient.get<KnowledgeBaseRagHealth>(`/knowledge-bases/${kbId}/rag-health`, token);
+}
+
+export function listPersonalKnowledgeGraphEntities(
+  token: string,
+  kbId: number,
+  query?: string
+) {
+  const search = query ? `?q=${encodeURIComponent(query)}` : "";
+  return apiClient.get<KnowledgeGraphEntityList>(
+    `/knowledge-bases/${kbId}/graph/entities${search}`,
+    token
+  );
+}
+
+export function getPersonalKnowledgeGraphEntity(token: string, kbId: number, entityId: number) {
+  return apiClient.get<KnowledgeGraphEntityDetail>(
+    `/knowledge-bases/${kbId}/graph/entities/${entityId}`,
+    token
+  );
 }

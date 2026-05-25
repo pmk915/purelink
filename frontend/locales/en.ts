@@ -17,6 +17,10 @@ export const en = {
     cancel: "Cancel",
     delete: "Delete",
     deleting: "Deleting...",
+    copy: "Copy",
+    copied: "Copied",
+    yes: "Yes",
+    no: "No",
     anonymous: "Anonymous",
     openNavigation: "Open navigation",
     review: "review",
@@ -159,6 +163,14 @@ export const en = {
       "The Core build supports .txt, .md, .docx, and text-based .pdf files. Admin uploads are prepared automatically; member uploads wait for review.",
     askTab: "Q&A",
     documentsTab: "Documents",
+    graphTab: "Graph",
+    retrievalDebugTab: "Retrieval Debug",
+    healthTab: "Health",
+    settingsTab: "Settings",
+    settingsDescription:
+      "Review knowledge base metadata and safe management actions.",
+    embeddingChangeWarning:
+      "Changing embedding providers or models requires rebuilding affected document indexes.",
     documentsTitle: "Documents",
     documentsDescription:
       "Track document status while PureLink advances upload, review, and preparation automatically.",
@@ -353,7 +365,38 @@ export const en = {
     retrievalDetailsDescription:
       "This shows citation/evidence data currently available to the frontend. Fields such as trace_id will appear when the backend response exposes them.",
     evidenceCount: (count: number) => `Evidence count: ${count}`,
+    retrievalMode: "Retrieval mode",
+    usedReranker: "Used reranker",
     openConversation: (id: number) => `Open conversation #${id}`
+  },
+  graph: {
+    title: "Knowledge graph",
+    description:
+      "Explore lightweight entities, mentions, and grounded relations extracted from this knowledge base.",
+    searchPlaceholder: "Search entities...",
+    empty:
+      "No graph data yet. Upload and index documents first; PureLink will attempt lightweight graph extraction after indexing.",
+    detailTitle: "Entity detail",
+    detailDescription: "Select an entity to inspect mentions and connected relations.",
+    mentions: "Mentions",
+    relations: "Relations",
+    noMentions: "No mentions for this entity.",
+    noRelations: "No relations for this entity.",
+    noSourceLocator: "No source locator",
+    noSourceDocument: "No source document",
+    entityStats: (mentions: number, relations: number) =>
+      `${mentions} mentions · ${relations} relations`
+  },
+  retrievalDebug: {
+    title: "Retrieval Debug",
+    description:
+      "Run retrieval directly to inspect candidates before answer generation.",
+    query: "Query",
+    queryPlaceholder: "Test a retrieval query...",
+    mode: "Mode",
+    run: "Run retrieval",
+    running: "Retrieving...",
+    failed: "Retrieval failed. Check query, mode, or permissions."
   },
   teams: {
     pageTitle: "My teams",

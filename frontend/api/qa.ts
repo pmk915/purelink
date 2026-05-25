@@ -1,10 +1,12 @@
 import { apiClient } from "@/lib/api-client";
-import type { AskResponse, RetrievalResponse } from "@/types";
+import type { AskResponse, RetrievalMode, RetrievalResponse } from "@/types";
+
+export type RetrievalPayload = { query: string; top_k: number; mode?: RetrievalMode };
 
 export function retrievePersonal(
   token: string,
   kbId: number,
-  payload: { query: string; top_k: number }
+  payload: RetrievalPayload
 ) {
   return apiClient.post<RetrievalResponse>(`/knowledge-bases/${kbId}/retrieve`, payload, token);
 }
@@ -21,7 +23,7 @@ export function retrieveTeam(
   token: string,
   teamId: number,
   kbId: number,
-  payload: { query: string; top_k: number }
+  payload: RetrievalPayload
 ) {
   return apiClient.post<RetrievalResponse>(
     `/teams/${teamId}/knowledge-bases/${kbId}/retrieve`,

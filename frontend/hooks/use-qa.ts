@@ -3,10 +3,13 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import * as qaApi from "@/api/qa";
+import type { RetrievalMode } from "@/types";
+
+type RetrievalMutationPayload = { query: string; top_k: number; mode?: RetrievalMode };
 
 export function useRetrievePersonal(token: string | null, kbId: number) {
   return useMutation({
-    mutationFn: (payload: { query: string; top_k: number }) =>
+    mutationFn: (payload: RetrievalMutationPayload) =>
       qaApi.retrievePersonal(token as string, kbId, payload)
   });
 }
@@ -27,7 +30,7 @@ export function useAskPersonal(token: string | null, kbId: number) {
 
 export function useRetrieveTeam(token: string | null, teamId: number, kbId: number) {
   return useMutation({
-    mutationFn: (payload: { query: string; top_k: number }) =>
+    mutationFn: (payload: RetrievalMutationPayload) =>
       qaApi.retrieveTeam(token as string, teamId, kbId, payload)
   });
 }

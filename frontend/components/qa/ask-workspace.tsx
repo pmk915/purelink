@@ -3,8 +3,11 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { MessageSquarePlus, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 
+import { EvidencePanel } from "@/components/qa/evidence-panel";
+import { RetrievalDetails } from "@/components/qa/retrieval-details";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -31,6 +34,7 @@ export function AskWorkspace({
 }) {
   const router = useRouter();
   const { messages } = useI18n();
+  const [latestAnswer, setLatestAnswer] = useState<AskResponse | null>(null);
 
   const askForm = useForm<AskValues>({
     resolver: zodResolver(askSchema),
@@ -79,7 +83,12 @@ export function AskWorkspace({
 
             try {
               const result = await onAsk(values);
-              router.push(`/conversations/${result.conversation_id}`);
+              setLatestAnswer(result);
+              askForm.reset({
+                question: "",
+                top_k: values.top_k,
+                conversation_id: result.conversation_id
+              });
             } catch (error) {
               console.error("ask failed", { error });
               askForm.setError("root", {
@@ -135,6 +144,34 @@ export function AskWorkspace({
             {askForm.formState.isSubmitting ? messages.qa.asking : messages.qa.askSubmit}
           </Button>
         </form>
+
+        {latestAnswer ? (
+          <div className="space-y-4 border-t border-border/60 pt-5">
+            <div className="rounded-2xl bg-secondary/60 px-4 py-3">
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                {messages.qa.answerTitle}
+              </p>
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-foreground">
+                {latestAnswer.answer}
+              </p>
+            </div>
+            <RetrievalDetails
+              retrievalMode={latestAnswer.retrieval_mode}
+              usedReranker={latestAnswer.used_reranker}
+              traceId={latestAnswer.trace_id}
+              evidenceCount={latestAnswer.citations.length}
+            />
+            <EvidencePanel evidences={latestAnswer.citations} compact />
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl"
+              onClick={() => router.push(`/conversations/${latestAnswer.conversation_id}`)}
+            >
+              {messages.qa.openConversation(latestAnswer.conversation_id)}
+            </Button>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );
