@@ -1,6 +1,9 @@
 # Local environment and secrets
 .env
+.env.*
 .env.local
+!.env.example
+!.env.production.example
 
 # Python runtime
 .venv/

@@ -101,6 +101,8 @@ docker compose down -v
 
 `docker compose down -v` deletes the database volume. Use it only when you intentionally want to reset local data.
 
+For production-like Compose, backup/restore commands, and troubleshooting, see [Docker Deployment](docs/development/docker-deployment.md).
+
 ## Smoke Test
 
 ```bash

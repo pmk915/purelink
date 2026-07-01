@@ -15,7 +15,7 @@ else
 PYTHON ?= python3
 endif
 
-.PHONY: up down logs ps build restart test test-python test-go check smoke smoke-docx-rag e2e eval-rag eval-rag-baseline
+.PHONY: up down logs ps build restart docker-up docker-down docker-logs docker-ps docker-smoke docker-prod-up docker-prod-down test test-python test-go check smoke smoke-docx-rag e2e eval-rag eval-rag-baseline
 
 up:
 	$(COMPOSE) up --build -d
@@ -33,6 +33,27 @@ build:
 	$(COMPOSE) build
 
 restart: down up
+
+docker-up:
+	$(COMPOSE) up --build -d db redis api worker frontend
+
+docker-down:
+	$(COMPOSE) down
+
+docker-logs:
+	$(COMPOSE) logs -f db redis api worker frontend
+
+docker-ps:
+	$(COMPOSE) ps
+
+docker-smoke:
+	$(MAKE) smoke
+
+docker-prod-up:
+	$(COMPOSE) --env-file .env.production -f docker-compose.yml -f docker-compose.prod.yml up --build -d db redis api worker frontend
+
+docker-prod-down:
+	$(COMPOSE) --env-file .env.production -f docker-compose.yml -f docker-compose.prod.yml down
 
 test-python:
 	$(PYTHON) -m pytest

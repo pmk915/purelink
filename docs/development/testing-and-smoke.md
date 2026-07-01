@@ -45,6 +45,9 @@ user can access `/var/run/docker.sock`, then open a new shell and rerun.
 change slightly after documentation changes, so update
 `docs/interview/rag-eval-baseline-summary.md` only from actual runner output.
 
+For Docker-specific startup, production-like Compose, backup/restore, and
+security checklist details, see [Docker Deployment](docker-deployment.md).
+
 ## Smoke
 
 Personal flow:
