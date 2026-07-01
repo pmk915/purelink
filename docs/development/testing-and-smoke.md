@@ -57,6 +57,19 @@ Graph lifecycle coverage should include:
 - single-document graph rebuild uses existing chunks/citation units and does not rebuild the vector index
 - personal owners and team admins can run maintenance
 - team members can export/view graph data but cannot run maintenance
+- graph export supports entity search, relation-type filtering, one-hop neighborhoods, available relation types, and result limits
+
+## Graph Explorer Checks
+
+Frontend validation for M20 is lint/build based. The project still avoids adding
+a dedicated browser component test framework. Manual checks should cover:
+
+- personal and team KB Graph tabs load graph export data
+- entity search updates the result list
+- relation type filter narrows relations
+- selecting an entity shows a one-hop neighborhood
+- relation source dialog shows snippets and can open Document Processing Inspector
+- JSON, entities CSV, and relations CSV exports download the current graph view
 
 ## Document Processing Inspector Checks
 

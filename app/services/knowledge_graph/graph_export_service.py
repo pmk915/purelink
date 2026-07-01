@@ -44,6 +44,11 @@ class GraphExportRelation:
 @dataclass(frozen=True, slots=True)
 class GraphExportResult:
     kb_id: int
+    total_entities: int
+    total_relations: int
+    filtered_entities: int
+    filtered_relations: int
+    available_relation_types: list[str]
     entities: list[GraphExportEntity]
     relations: list[GraphExportRelation]
 
@@ -52,23 +57,34 @@ def export_graph(
     db: Session,
     *,
     kb_id: int,
-    entity_limit: int = 100,
-    relation_limit: int = 300,
-    sources_per_relation: int = 5,
+    q: str | None = None,
+    relation_type: str | None = None,
+    entity_id: int | None = None,
+    limit_entities: int = 100,
+    limit_relations: int = 300,
+    limit_sources_per_relation: int = 5,
+    entity_limit: int | None = None,
+    relation_limit: int | None = None,
+    sources_per_relation: int | None = None,
 ) -> GraphExportResult:
-    entity_limit = max(1, min(entity_limit, 500))
-    relation_limit = max(1, min(relation_limit, 1000))
-    sources_per_relation = max(1, min(sources_per_relation, 10))
+    if entity_limit is not None:
+        limit_entities = entity_limit
+    if relation_limit is not None:
+        limit_relations = relation_limit
+    if sources_per_relation is not None:
+        limit_sources_per_relation = sources_per_relation
 
-    entities = [
-        _build_export_entity(db, entity=entity)
-        for entity in db.scalars(
+    limit_entities = max(1, min(limit_entities, 500))
+    limit_relations = max(1, min(limit_relations, 1000))
+    limit_sources_per_relation = max(1, min(limit_sources_per_relation, 10))
+
+    all_entities = list(
+        db.scalars(
             select(KnowledgeEntity)
             .where(KnowledgeEntity.knowledge_base_id == kb_id)
             .order_by(KnowledgeEntity.name.asc(), KnowledgeEntity.id.asc())
-            .limit(entity_limit)
         )
-    ]
+    )
 
     relation_rows = list(
         db.scalars(
@@ -87,20 +103,118 @@ def export_graph(
         )
         grouped.setdefault(key, []).append(relation)
 
+    query = (q or "").strip().casefold()
+    relation_type_filter = _normalize_relation_text(relation_type)
+    matched_entity_ids = {
+        entity.id
+        for entity in all_entities
+        if query and _entity_matches_query(entity, query)
+    }
+
+    filtered_groups = list(grouped.values())
+    if relation_type_filter:
+        filtered_groups = [
+            items
+            for items in filtered_groups
+            if _normalize_relation_text(items[0].relation_type) == relation_type_filter
+        ]
+    if entity_id is not None:
+        filtered_groups = [
+            items
+            for items in filtered_groups
+            if items[0].source_entity_id == entity_id or items[0].target_entity_id == entity_id
+        ]
+    elif query:
+        filtered_groups = [
+            items
+            for items in filtered_groups
+            if items[0].source_entity_id in matched_entity_ids
+            or items[0].target_entity_id in matched_entity_ids
+        ]
+
+    entity_ids = _filtered_entity_ids(
+        all_entities=all_entities,
+        filtered_groups=filtered_groups,
+        query=query,
+        matched_entity_ids=matched_entity_ids,
+        relation_type_filter=relation_type_filter,
+        entity_id=entity_id,
+    )
+    filtered_entity_models = [
+        entity for entity in all_entities if entity.id in entity_ids
+    ]
+    entities = [
+        _build_export_entity(db, entity=entity)
+        for entity in filtered_entity_models[:limit_entities]
+    ]
+
     relations = [
         _build_export_relation(
             items,
-            sources_per_relation=sources_per_relation,
+            sources_per_relation=limit_sources_per_relation,
         )
-        for items in grouped.values()
+        for items in filtered_groups
     ]
     relations.sort(key=lambda item: (item.source_entity.casefold(), item.target_entity.casefold(), item.id))
 
     return GraphExportResult(
         kb_id=kb_id,
+        total_entities=len(all_entities),
+        total_relations=len(grouped),
+        filtered_entities=len(filtered_entity_models),
+        filtered_relations=len(filtered_groups),
+        available_relation_types=_available_relation_types(relation_rows),
         entities=entities,
-        relations=relations[:relation_limit],
+        relations=relations[:limit_relations],
     )
+
+
+def _entity_matches_query(entity: KnowledgeEntity, query: str) -> bool:
+    values = [
+        entity.name,
+        entity.normalized_name,
+        entity.entity_type,
+        entity.description,
+    ]
+    return any(query in value.casefold() for value in values if value)
+
+
+def _filtered_entity_ids(
+    *,
+    all_entities: list[KnowledgeEntity],
+    filtered_groups: list[list[KnowledgeRelation]],
+    query: str,
+    matched_entity_ids: set[int],
+    relation_type_filter: str,
+    entity_id: int | None,
+) -> set[int]:
+    if entity_id is not None:
+        entity_ids = {entity_id}
+        for items in filtered_groups:
+            entity_ids.add(items[0].source_entity_id)
+            entity_ids.add(items[0].target_entity_id)
+        return entity_ids
+
+    if query:
+        return matched_entity_ids
+
+    if relation_type_filter:
+        entity_ids: set[int] = set()
+        for items in filtered_groups:
+            entity_ids.add(items[0].source_entity_id)
+            entity_ids.add(items[0].target_entity_id)
+        return entity_ids
+
+    return {entity.id for entity in all_entities}
+
+
+def _available_relation_types(relation_rows: list[KnowledgeRelation]) -> list[str]:
+    values = {
+        relation.relation_type.strip()
+        for relation in relation_rows
+        if relation.relation_type and relation.relation_type.strip()
+    }
+    return sorted(values, key=lambda value: value.casefold())
 
 
 def _build_export_entity(db: Session, *, entity: KnowledgeEntity) -> GraphExportEntity:

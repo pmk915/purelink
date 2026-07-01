@@ -3,7 +3,9 @@ import type {
   KnowledgeBase,
   KnowledgeBaseRagHealth,
   KnowledgeGraphEntityDetail,
-  KnowledgeGraphEntityList
+  KnowledgeGraphEntityList,
+  KnowledgeGraphExport,
+  KnowledgeGraphExportParams
 } from "@/types";
 
 export function listPersonalKnowledgeBases(token: string) {
@@ -54,4 +56,40 @@ export function getPersonalKnowledgeGraphEntity(token: string, kbId: number, ent
     `/knowledge-bases/${kbId}/graph/entities/${entityId}`,
     token
   );
+}
+
+export function exportPersonalKnowledgeGraph(
+  token: string,
+  kbId: number,
+  params: KnowledgeGraphExportParams = {}
+) {
+  const search = buildGraphExportSearch(params);
+  return apiClient.get<KnowledgeGraphExport>(
+    `/knowledge-bases/${kbId}/graph/export${search}`,
+    token
+  );
+}
+
+function buildGraphExportSearch(params: KnowledgeGraphExportParams) {
+  const searchParams = new URLSearchParams();
+  if (params.q?.trim()) {
+    searchParams.set("q", params.q.trim());
+  }
+  if (params.relation_type?.trim()) {
+    searchParams.set("relation_type", params.relation_type.trim());
+  }
+  if (typeof params.entity_id === "number") {
+    searchParams.set("entity_id", String(params.entity_id));
+  }
+  if (typeof params.limit_entities === "number") {
+    searchParams.set("limit_entities", String(params.limit_entities));
+  }
+  if (typeof params.limit_relations === "number") {
+    searchParams.set("limit_relations", String(params.limit_relations));
+  }
+  if (typeof params.limit_sources_per_relation === "number") {
+    searchParams.set("limit_sources_per_relation", String(params.limit_sources_per_relation));
+  }
+  const search = searchParams.toString();
+  return search ? `?${search}` : "";
 }

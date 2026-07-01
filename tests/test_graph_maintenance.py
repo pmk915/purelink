@@ -107,6 +107,9 @@ async def test_personal_owner_can_run_graph_maintenance(
 
     assert export_response.status_code == 200
     assert export_response.json()["relations"][0]["sources"][0]["filename"] == "graph.md"
+    assert export_response.json()["total_entities"] == 2
+    assert export_response.json()["total_relations"] == 1
+    assert export_response.json()["available_relation_types"] == ["can_delete"]
     assert cleanup_response.status_code == 200
     assert "deleted_orphan_entities" in cleanup_response.json()
     assert dedupe_response.status_code == 200
@@ -196,12 +199,72 @@ async def test_team_graph_maintenance_requires_admin_but_export_allows_member(
 
     assert member_export.status_code == 200
     assert member_export.json()["entities"]
+    assert member_export.json()["total_relations"] == 1
+    assert member_export.json()["available_relation_types"] == ["can_delete"]
     assert member_cleanup.status_code == 403
     assert member_dedupe.status_code == 403
     assert member_rebuild.status_code == 403
     assert admin_cleanup.status_code == 200
     assert admin_dedupe.status_code == 200
     assert admin_rebuild.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_graph_export_filters_and_rejects_unauthorized_personal_access(
+    graph_client: AsyncClient,
+    test_session_factory: sessionmaker,
+) -> None:
+    owner = await _register_and_login(
+        graph_client,
+        email="graph-export-owner@example.com",
+        username="graph-export-owner",
+    )
+    other = await _register_and_login(
+        graph_client,
+        email="graph-export-other@example.com",
+        username="graph-export-other",
+    )
+    owner_headers = {"Authorization": f"Bearer {owner['access_token']}"}
+    other_headers = {"Authorization": f"Bearer {other['access_token']}"}
+    create_response = await graph_client.post(
+        "/api/v1/knowledge-bases",
+        headers=owner_headers,
+        json={"name": "Personal Graph Export"},
+    )
+    assert create_response.status_code == 201
+    kb_id = create_response.json()["id"]
+
+    with test_session_factory() as db:
+        _seed_graph_document(
+            db,
+            kb_id=kb_id,
+            user_id=int(owner["user_id"]),
+            review_status=DocumentReviewStatus.NOT_REQUIRED,
+        )
+
+    search_response = await graph_client.get(
+        f"/api/v1/knowledge-bases/{kb_id}/graph/export",
+        headers=owner_headers,
+        params={"q": "管理员", "limit_entities": 1, "limit_relations": 1},
+    )
+    relation_response = await graph_client.get(
+        f"/api/v1/knowledge-bases/{kb_id}/graph/export",
+        headers=owner_headers,
+        params={"relation_type": "can_delete"},
+    )
+    unauthorized_response = await graph_client.get(
+        f"/api/v1/knowledge-bases/{kb_id}/graph/export",
+        headers=other_headers,
+    )
+
+    assert search_response.status_code == 200
+    search_payload = search_response.json()
+    assert search_payload["filtered_entities"] == 1
+    assert search_payload["entities"][0]["name"] == "管理员"
+    assert search_payload["filtered_relations"] == 1
+    assert relation_response.status_code == 200
+    assert relation_response.json()["relations"][0]["type"] == "can_delete"
+    assert unauthorized_response.status_code == 404
 
 
 async def _register_and_login(

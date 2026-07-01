@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import * as knowledgeBaseApi from "@/api/knowledge-bases";
 import * as teamsApi from "@/api/teams";
+import type { KnowledgeBaseScope, KnowledgeGraphExportParams } from "@/types";
 
 export function usePersonalKnowledgeBases(token: string | null) {
   return useQuery({
@@ -169,5 +170,51 @@ export function useTeamKnowledgeGraphEntity(
       Number.isFinite(teamId) &&
       Number.isFinite(kbId) &&
       entityId !== null
+  });
+}
+
+export function useKnowledgeGraphExport({
+  token,
+  scope,
+  knowledgeBaseId,
+  teamId,
+  params
+}: {
+  token: string | null;
+  scope: KnowledgeBaseScope;
+  knowledgeBaseId: number;
+  teamId?: number;
+  params: KnowledgeGraphExportParams;
+}) {
+  return useQuery({
+    queryKey: [
+      "knowledge-graph-export",
+      scope,
+      teamId ?? null,
+      knowledgeBaseId,
+      params.q ?? "",
+      params.relation_type ?? "",
+      params.entity_id ?? null,
+      params.limit_entities ?? null,
+      params.limit_relations ?? null,
+      params.limit_sources_per_relation ?? null
+    ],
+    queryFn: () =>
+      scope === "personal"
+        ? knowledgeBaseApi.exportPersonalKnowledgeGraph(
+            token as string,
+            knowledgeBaseId,
+            params
+          )
+        : teamsApi.exportTeamKnowledgeGraph(
+            token as string,
+            teamId as number,
+            knowledgeBaseId,
+            params
+          ),
+    enabled:
+      Boolean(token) &&
+      Number.isFinite(knowledgeBaseId) &&
+      (scope === "personal" || Number.isFinite(teamId))
   });
 }

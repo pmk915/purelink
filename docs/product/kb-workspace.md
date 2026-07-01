@@ -6,7 +6,7 @@ M13 organizes each knowledge base as a RAG workspace rather than a single ask pa
 
 - Ask: ask questions, inspect the current answer, and review supporting evidence.
 - Documents: upload, process, retry, preview, and delete documents where permitted.
-- Graph: browse lightweight entities, mentions, and source-grounded relations.
+- Graph: browse lightweight entities and source-grounded relations.
 - Retrieval Debug: owner/admin tool for direct retrieval inspection.
 - Health: document, vector index, and graph index status summary.
 - Settings: metadata and safe destructive actions.
@@ -39,13 +39,29 @@ The backend now supports lightweight GraphRAG lifecycle operations:
 Deleting a document also cleans the graph mentions and relation evidence
 contributed by that document before the document row is removed.
 
+## Graph Explorer
+
+M20 enhances the Graph tab as a compact diagnostic explorer rather than a graph
+canvas. It supports:
+
+- entity search
+- relation type filtering
+- one-hop neighborhood inspection after selecting an entity
+- relation source inspection with filenames, chunk/citation-unit ids, and short snippets
+- opening the M19 Document Processing Inspector from a relation source document
+- exporting the current graph view as JSON, entities CSV, or relations CSV
+
+The UI intentionally uses the same cards, badges, muted borders, and compact
+actions as the rest of the KB workspace. It avoids canvas visualization and large
+new frontend dependencies.
+
 ## Permission Model
 
 - Personal KB owner can access all tabs.
 - Personal KB owner can view document status/debug.
 - Personal KB owner can run graph maintenance.
 - Team admin can access all tabs and run graph maintenance.
-- Team member can access Ask, Documents, Graph, and Health, export/view graph data, and view document status/debug.
+- Team member can access Ask, Documents, Graph, and Health, export/view graph data, inspect relation sources, and view document status/debug.
 - Team member cannot rebuild graph, cleanup orphan entities, or deduplicate relations.
 - Backend permission checks remain authoritative.
 

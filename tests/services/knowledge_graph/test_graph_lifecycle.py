@@ -218,6 +218,83 @@ def test_export_graph_returns_entities_relations_and_limited_sources(
     assert result.relations[0].sources
     assert result.relations[0].sources[0].filename == "doc-1.md"
     assert result.relations[0].sources[0].snippet
+    assert result.total_entities == 2
+    assert result.total_relations == 1
+    assert result.filtered_entities == 2
+    assert result.filtered_relations == 1
+    assert result.available_relation_types == ["can_delete"]
+
+
+def test_export_graph_supports_search_relation_type_one_hop_and_limits(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        fixture = _create_graph_fixture(db)
+        citation_entity = KnowledgeEntity(
+            knowledge_base_id=fixture["kb"].id,
+            name="Citation Unit",
+            normalized_name="citation unit",
+            entity_type="concept",
+        )
+        db.add(citation_entity)
+        db.flush()
+        db.add_all(
+            [
+                EntityMention(
+                    entity_id=citation_entity.id,
+                    knowledge_base_id=fixture["kb"].id,
+                    document_id=fixture["doc_2"].id,
+                    chunk_id=fixture["chunk_2"].id,
+                    citation_unit_id=fixture["unit_2"].id,
+                    text_span="citation",
+                ),
+                KnowledgeRelation(
+                    knowledge_base_id=fixture["kb"].id,
+                    source_entity_id=fixture["shared_entity"].id,
+                    target_entity_id=citation_entity.id,
+                    relation_type="references",
+                    description="links source evidence",
+                    source_document_id=fixture["doc_2"].id,
+                    source_chunk_id=fixture["chunk_2"].id,
+                    source_citation_unit_id=fixture["unit_2"].id,
+                ),
+            ]
+        )
+        db.commit()
+
+        search_result = export_graph(db, kb_id=fixture["kb"].id, q="Citation")
+        relation_result = export_graph(
+            db,
+            kb_id=fixture["kb"].id,
+            relation_type="references",
+        )
+        one_hop_result = export_graph(
+            db,
+            kb_id=fixture["kb"].id,
+            entity_id=fixture["shared_entity"].id,
+        )
+        limited_result = export_graph(
+            db,
+            kb_id=fixture["kb"].id,
+            limit_entities=1,
+            limit_relations=1,
+            limit_sources_per_relation=1,
+        )
+
+    assert [entity.name for entity in search_result.entities] == ["Citation Unit"]
+    assert {relation.type for relation in relation_result.relations} == {"references"}
+    assert relation_result.available_relation_types == ["can_delete", "references"]
+    assert {entity.name for entity in one_hop_result.entities} == {
+        "Citation Unit",
+        "文档",
+        "管理员",
+    }
+    assert {relation.type for relation in one_hop_result.relations} == {
+        "can_delete",
+        "references",
+    }
+    assert len(limited_result.entities) == 1
+    assert len(limited_result.relations) == 1
 
 
 def test_delete_document_and_artifacts_cleans_graph_data(

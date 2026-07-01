@@ -104,5 +104,10 @@ class KnowledgeGraphExportRelationRead(BaseModel):
 
 class KnowledgeGraphExportRead(BaseModel):
     kb_id: int
+    total_entities: int
+    total_relations: int
+    filtered_entities: int
+    filtered_relations: int
+    available_relation_types: list[str]
     entities: list[KnowledgeGraphExportEntityRead]
     relations: list[KnowledgeGraphExportRelationRead]

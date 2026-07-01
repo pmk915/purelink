@@ -370,6 +370,54 @@ export interface KnowledgeGraphEntityDetail extends KnowledgeGraphEntitySummary 
   relations: KnowledgeGraphRelation[];
 }
 
+export interface KnowledgeGraphExportEntity {
+  id: number;
+  name: string;
+  entity_type: string | null;
+  mention_count: number;
+  relation_count: number;
+}
+
+export interface KnowledgeGraphExportSource {
+  document_id: number | null;
+  filename: string | null;
+  chunk_id: number | null;
+  citation_unit_id: number | null;
+  snippet: string | null;
+}
+
+export interface KnowledgeGraphExportRelation {
+  id: number;
+  source_entity: string;
+  target_entity: string;
+  source_entity_id: number;
+  target_entity_id: number;
+  type: string;
+  label: string | null;
+  source_count: number;
+  sources: KnowledgeGraphExportSource[];
+}
+
+export interface KnowledgeGraphExport {
+  kb_id: number;
+  total_entities: number;
+  total_relations: number;
+  filtered_entities: number;
+  filtered_relations: number;
+  available_relation_types: string[];
+  entities: KnowledgeGraphExportEntity[];
+  relations: KnowledgeGraphExportRelation[];
+}
+
+export interface KnowledgeGraphExportParams {
+  q?: string;
+  relation_type?: string;
+  entity_id?: number | null;
+  limit_entities?: number;
+  limit_relations?: number;
+  limit_sources_per_relation?: number;
+}
+
 export interface ConversationSummary {
   id: number;
   knowledge_base_id: number;

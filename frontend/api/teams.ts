@@ -4,6 +4,8 @@ import type {
   KnowledgeBaseRagHealth,
   KnowledgeGraphEntityDetail,
   KnowledgeGraphEntityList,
+  KnowledgeGraphExport,
+  KnowledgeGraphExportParams,
   Team,
   TeamInvite,
   TeamMember
@@ -94,4 +96,41 @@ export function getTeamKnowledgeGraphEntity(
     `/teams/${teamId}/knowledge-bases/${kbId}/graph/entities/${entityId}`,
     token
   );
+}
+
+export function exportTeamKnowledgeGraph(
+  token: string,
+  teamId: number,
+  kbId: number,
+  params: KnowledgeGraphExportParams = {}
+) {
+  const search = buildGraphExportSearch(params);
+  return apiClient.get<KnowledgeGraphExport>(
+    `/teams/${teamId}/knowledge-bases/${kbId}/graph/export${search}`,
+    token
+  );
+}
+
+function buildGraphExportSearch(params: KnowledgeGraphExportParams) {
+  const searchParams = new URLSearchParams();
+  if (params.q?.trim()) {
+    searchParams.set("q", params.q.trim());
+  }
+  if (params.relation_type?.trim()) {
+    searchParams.set("relation_type", params.relation_type.trim());
+  }
+  if (typeof params.entity_id === "number") {
+    searchParams.set("entity_id", String(params.entity_id));
+  }
+  if (typeof params.limit_entities === "number") {
+    searchParams.set("limit_entities", String(params.limit_entities));
+  }
+  if (typeof params.limit_relations === "number") {
+    searchParams.set("limit_relations", String(params.limit_relations));
+  }
+  if (typeof params.limit_sources_per_relation === "number") {
+    searchParams.set("limit_sources_per_relation", String(params.limit_sources_per_relation));
+  }
+  const search = searchParams.toString();
+  return search ? `?${search}` : "";
 }
