@@ -232,6 +232,14 @@ export const en = {
     chooseFileError: "Choose a .txt, .md, .docx, or .pdf file first.",
     unsupportedFileType: "This Core build focuses on text knowledge bases and currently supports only .txt, .md, .docx, and .pdf files.",
     supportedFormats: "Supported formats: .txt, .md, .docx, .pdf",
+    supportedFormatsWithLimit: (formats: string, maxSizeMb: number) =>
+      `Supports ${formats} up to ${maxSizeMb} MB.`,
+    unsupportedFileTypeWithFormats: (formats: string) =>
+      `Unsupported file type. Please upload ${formats}.`,
+    fileTooLarge: (maxSizeMb: number) =>
+      `This file is too large. The maximum size is ${maxSizeMb} MB.`,
+    emptyFile: "The selected file is empty.",
+    invalidFileName: "Invalid file name.",
     uploadSubmit: "Upload document",
     uploading: "Uploading...",
     uploadFailed: "Upload failed.",
@@ -242,7 +250,8 @@ export const en = {
       indexed: "Ready",
       failed: "Failed",
       duplicate: "Duplicate",
-      too_large: "Too large"
+      too_large: "Too large",
+      unsupported: "Unsupported"
     },
     uploadSucceeded: (filename: string) =>
       `${filename} was uploaded successfully.`,

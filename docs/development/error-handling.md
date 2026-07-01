@@ -43,6 +43,12 @@ Stable codes include:
 - `BAD_REQUEST`
 - `INTERNAL_ERROR`
 
+Upload-specific usage:
+
+- `UPLOAD_TOO_LARGE`: file exceeds `MAX_UPLOAD_SIZE_MB`; details include max size in MB and bytes.
+- `UNSUPPORTED_FILE_TYPE`: extension or explicit MIME type is outside the upload allowlist.
+- `VALIDATION_ERROR`: empty file, invalid filename, or request validation failure.
+
 Legacy FastAPI `detail` payloads remain supported. A `detail` string becomes the
 message. A `detail` object with `code`/`error_code` and `message` preserves those
 business values.

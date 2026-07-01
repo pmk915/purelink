@@ -28,6 +28,22 @@ assert_code 201
 KB_ID="$(echo "$HTTP_BODY" | json_get id)"
 [[ -n "$KB_ID" ]] || fail "empty knowledge base id"
 
+log "reject unsupported upload"
+UNSUPPORTED_FIXTURE="$TMP_DIR/unsupported_${RUN_ID}.zip"
+printf 'not a supported document' > "$UNSUPPORTED_FIXTURE"
+http_upload "/api/v1/knowledge-bases/$KB_ID/documents" "$UNSUPPORTED_FIXTURE" "$TOKEN"
+assert_code 415
+ERROR_CODE="$(echo "$HTTP_BODY" | json_get error.code)"
+[[ "$ERROR_CODE" == "UNSUPPORTED_FILE_TYPE" ]] || fail "expected UNSUPPORTED_FILE_TYPE, got $ERROR_CODE"
+
+log "reject empty upload"
+EMPTY_FIXTURE="$TMP_DIR/empty_${RUN_ID}.txt"
+: > "$EMPTY_FIXTURE"
+http_upload "/api/v1/knowledge-bases/$KB_ID/documents" "$EMPTY_FIXTURE" "$TOKEN"
+assert_code 400
+ERROR_CODE="$(echo "$HTTP_BODY" | json_get error.code)"
+[[ "$ERROR_CODE" == "VALIDATION_ERROR" ]] || fail "expected VALIDATION_ERROR, got $ERROR_CODE"
+
 log "upload document"
 http_upload "/api/v1/knowledge-bases/$KB_ID/documents" "$FIXTURE" "$TOKEN"
 assert_code 201

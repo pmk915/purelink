@@ -66,6 +66,18 @@ denied, not found, graph export failure, document status failure, retrieval
 failure, empty document lists, empty graph data, and retry actions where
 available.
 
+## Upload Validation Checks
+
+Upload validation coverage should include:
+
+- `GET /api/v1/upload/constraints` returns max size, extensions, and MIME types
+- personal and team KB upload endpoints use the same backend validation
+- empty files return `VALIDATION_ERROR`
+- oversized files return `UPLOAD_TOO_LARGE`
+- unsupported extensions or dangerous MIME types return `UNSUPPORTED_FILE_TYPE`
+- invalid filenames return `VALIDATION_ERROR`
+- frontend upload card prechecks size, extension, empty files, and filename shape before sending
+
 ## Smoke
 
 Personal flow:
@@ -162,6 +174,9 @@ docker compose logs --tail=120 db
 ## Deterministic Smoke Query
 
 The personal smoke query is lexically aligned with `tests/fixtures/personal_sample.txt`. This is deliberate: smoke should validate upload, processing, retrieval, ask, and conversation flow without depending on subtle semantic embedding behavior.
+
+Before the successful fixture upload, smoke also verifies that unsupported files
+return `UNSUPPORTED_FILE_TYPE` and empty files return `VALIDATION_ERROR`.
 
 If the primary query returns no results, smoke tries a second deterministic fallback query before failing. If both fail, the script prints:
 

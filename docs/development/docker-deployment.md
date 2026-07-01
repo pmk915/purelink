@@ -78,9 +78,22 @@ Key groups:
 - Storage: `DATA_DIR`, `UPLOAD_DIR`, `PARSED_DIR`, `CHUNKS_DIR`, `VECTOR_STORE_DIR`
 - Models: `EMBEDDING_PROVIDER`, `EMBEDDING_MODEL`, `EMBEDDING_MODEL_CACHE_DIR`
 - LLM: `LLM_PROVIDER`, `LLM_API_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`
-- Processing limits: `MAX_UPLOAD_SIZE_MB`, `MAX_ACTIVE_JOBS_PER_USER`, `MAX_ACTIVE_JOBS_PER_KB`
+- Upload limits: `MAX_UPLOAD_SIZE_MB`, `ALLOWED_UPLOAD_EXTENSIONS`, `ALLOWED_UPLOAD_MIME_TYPES`
+- Processing limits: `MAX_ACTIVE_JOBS_PER_USER`, `MAX_ACTIVE_JOBS_PER_KB`
 
 Do not commit `.env`, `.env.production`, API keys, database dumps, upload data, vector indexes, logs, or model caches.
+
+Default upload policy:
+
+```env
+MAX_UPLOAD_SIZE_MB=25
+ALLOWED_UPLOAD_EXTENSIONS=.pdf,.docx,.md,.txt
+ALLOWED_UPLOAD_MIME_TYPES=application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/markdown,text/plain
+```
+
+The API enforces this policy on personal and team KB upload endpoints. The
+frontend reads `GET /api/v1/upload/constraints` and performs a precheck before
+sending files, but the backend remains the source of truth.
 
 ## 4. Service Layout
 
@@ -164,6 +177,7 @@ The personal smoke flow validates:
 
 - user registration and login
 - personal KB creation
+- unsupported and empty upload rejection
 - document upload
 - processing submission
 - retrieval

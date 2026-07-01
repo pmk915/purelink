@@ -5,10 +5,15 @@ import type {
   DocumentPreview,
   DocumentStatus,
   DocumentTask,
-  ProcessingJobSubmission
+  ProcessingJobSubmission,
+  UploadConstraints
 } from "@/types";
 
 type DocumentProcessingAction = "parse" | "chunk" | "embed";
+
+export function getUploadConstraints() {
+  return apiClient.get<UploadConstraints>("/upload/constraints");
+}
 
 export function listPersonalDocuments(token: string, kbId: number) {
   return apiClient.get<Document[]>(`/knowledge-bases/${kbId}/documents`, token);

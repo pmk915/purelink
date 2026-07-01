@@ -47,6 +47,13 @@ export interface ApiErrorPayload {
       };
 }
 
+export interface UploadConstraints {
+  max_upload_size_mb: number;
+  max_upload_size_bytes: number;
+  allowed_extensions: string[];
+  allowed_mime_types: string[];
+}
+
 export interface User {
   id: number;
   email: string;

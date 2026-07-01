@@ -191,6 +191,8 @@ class Settings:
     processing_queue_recovery_interval_seconds: int
     processing_job_timeout_seconds: int
     max_upload_size_mb: int
+    allowed_upload_extensions: tuple[str, ...]
+    allowed_upload_mime_types: tuple[str, ...]
     max_active_jobs_per_user: int
     max_active_jobs_per_kb: int
 
@@ -325,7 +327,20 @@ def get_settings() -> Settings:
             "PROCESSING_JOB_TIMEOUT_SECONDS",
             1800,
         ),
-        max_upload_size_mb=_get_int("MAX_UPLOAD_SIZE_MB", 50),
+        max_upload_size_mb=_get_int("MAX_UPLOAD_SIZE_MB", 25),
+        allowed_upload_extensions=_get_list(
+            "ALLOWED_UPLOAD_EXTENSIONS",
+            (".pdf", ".docx", ".md", ".txt"),
+        ),
+        allowed_upload_mime_types=_get_list(
+            "ALLOWED_UPLOAD_MIME_TYPES",
+            (
+                "application/pdf",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "text/markdown",
+                "text/plain",
+            ),
+        ),
         max_active_jobs_per_user=_get_int("MAX_ACTIVE_JOBS_PER_USER", 5),
         max_active_jobs_per_kb=_get_int("MAX_ACTIVE_JOBS_PER_KB", 10),
     )

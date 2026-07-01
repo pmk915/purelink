@@ -220,6 +220,14 @@ export const zh: Messages = {
     chooseFileError: "请先选择一个 .txt、.md、.docx 或 .pdf 文件。",
     unsupportedFileType: "当前版本专注文本类知识库，暂只支持 .txt、.md、.docx 和 .pdf 文件。",
     supportedFormats: "支持格式：.txt、.md、.docx、.pdf",
+    supportedFormatsWithLimit: (formats: string, maxSizeMb: number) =>
+      `支持 ${formats}，最大 ${maxSizeMb} MB。`,
+    unsupportedFileTypeWithFormats: (formats: string) =>
+      `文件类型不支持，请上传 ${formats}。`,
+    fileTooLarge: (maxSizeMb: number) =>
+      `文件过大，最大支持 ${maxSizeMb} MB。`,
+    emptyFile: "所选文件为空。",
+    invalidFileName: "文件名非法。",
     uploadSubmit: "上传文档",
     uploading: "上传中...",
     uploadFailed: "上传失败。",
@@ -230,7 +238,8 @@ export const zh: Messages = {
       indexed: "可问答",
       failed: "失败",
       duplicate: "已存在",
-      too_large: "文件过大"
+      too_large: "文件过大",
+      unsupported: "不支持"
     },
     uploadSucceeded: (filename: string) => `${filename} 上传成功。`,
     uploadSubmittedForReview: (filename: string) =>

@@ -18,6 +18,14 @@ function hasActiveProcessingJob(document: {
   );
 }
 
+export function useUploadConstraints() {
+  return useQuery({
+    queryKey: ["upload-constraints"],
+    queryFn: () => documentApi.getUploadConstraints(),
+    staleTime: 5 * 60 * 1000
+  });
+}
+
 export function usePersonalDocuments(token: string | null, kbId: number) {
   return useQuery({
     queryKey: ["documents", "personal", kbId],

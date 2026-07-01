@@ -50,6 +50,13 @@ class DocumentRead(BaseModel):
     updated_at: datetime
 
 
+class UploadConstraintsRead(BaseModel):
+    max_upload_size_mb: int
+    max_upload_size_bytes: int
+    allowed_extensions: list[str]
+    allowed_mime_types: list[str]
+
+
 class DocumentRejectRequest(BaseModel):
     review_comment: str = Field(min_length=1, max_length=2000)
 

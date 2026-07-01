@@ -8,6 +8,7 @@ This page is the main map for PureLink's product, RAG architecture, ingestion, G
 - [Knowledge Base Management](product/knowledge-base-management.md): personal and team KB management.
 - [RAG Answer Experience](product/rag-answer-experience.md): answer, citation, and source evidence UX.
 - [Document Processing Inspector](product/kb-workspace.md#document-processing-inspector): document-level RAG readiness and debug JSON.
+- [Upload Limits and Validation](product/kb-workspace.md#upload-limits-and-validation): supported file types, max upload size, and upload error handling.
 - [Graph Explorer](product/kb-workspace.md#graph-explorer): entity search, relation filters, one-hop neighborhood, source inspection, and export.
 
 ## RAG Architecture

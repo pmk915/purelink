@@ -51,8 +51,6 @@ from app.services.document import (
     compute_document_sha256,
     create_document,
     delete_document_and_artifacts,
-    DocumentUploadSupportError,
-    ensure_supported_document_upload,
     get_document_by_sha256_for_knowledge_base,
     get_document_for_knowledge_base,
     list_documents_for_knowledge_base,
@@ -116,8 +114,8 @@ from app.services.upload_guard import (
     DUPLICATE_DOCUMENT,
     UploadGuardError,
     build_upload_error_detail,
+    read_and_validate_upload_file,
     validate_active_job_limits,
-    validate_upload_size,
 )
 from app.services.knowledge_base import (
     UNSET,
@@ -163,6 +161,7 @@ def _raise_upload_guard_error(exc: UploadGuardError) -> None:
         detail=build_upload_error_detail(
             error_code=exc.error_code,
             message=exc.message,
+            details=exc.details,
         ),
     ) from exc
 
@@ -584,38 +583,13 @@ async def upload_document_to_team_knowledge_base_endpoint(
         knowledge_base_id=knowledge_base_id,
     )
 
-    if not file.filename:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Uploaded file must have a filename.",
-        )
-    try:
-        ensure_supported_document_upload(
-            filename=file.filename,
-            mime_type=file.content_type,
-        )
-    except DocumentUploadSupportError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error_code": exc.error_code,
-                "message": str(exc),
-            },
-        ) from exc
-
-    content = await file.read()
-    if not content:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Uploaded file is empty.",
-        )
-
     settings = get_settings()
-    file_size = len(content)
     try:
-        validate_upload_size(
-            file_size=file_size,
+        upload = await read_and_validate_upload_file(
+            file,
             max_upload_size_mb=settings.max_upload_size_mb,
+            allowed_extensions=settings.allowed_upload_extensions,
+            allowed_mime_types=settings.allowed_upload_mime_types,
         )
     except UploadGuardError as exc:
         logger.warning(
@@ -624,7 +598,7 @@ async def upload_document_to_team_knowledge_base_endpoint(
             current_user.id,
             knowledge_base.id,
             file.filename,
-            file_size,
+            None,
             None,
             False,
             None,
@@ -633,6 +607,8 @@ async def upload_document_to_team_knowledge_base_endpoint(
         )
         _raise_upload_guard_error(exc)
 
+    content = upload.content
+    file_size = upload.file_size
     file_sha256 = compute_document_sha256(content)
     duplicate_document = get_document_by_sha256_for_knowledge_base(
         db,
@@ -645,7 +621,7 @@ async def upload_document_to_team_knowledge_base_endpoint(
             "sha256=%s duplicate=%s job_id=%s duration_ms=%s error_code=%s",
             current_user.id,
             knowledge_base.id,
-            file.filename,
+            upload.filename,
             file_size,
             file_sha256,
             True,
@@ -676,7 +652,7 @@ async def upload_document_to_team_knowledge_base_endpoint(
                 "sha256=%s duplicate=%s job_id=%s duration_ms=%s error_code=%s",
                 current_user.id,
                 knowledge_base.id,
-                file.filename,
+                upload.filename,
                 file_size,
                 file_sha256,
                 False,
@@ -692,7 +668,7 @@ async def upload_document_to_team_knowledge_base_endpoint(
         scope=KnowledgeBaseScope.TEAM,
         team_id=team_id,
         knowledge_base_id=knowledge_base.id,
-        original_filename=file.filename,
+        original_filename=upload.filename,
         content=content,
     )
     try:
@@ -702,8 +678,8 @@ async def upload_document_to_team_knowledge_base_endpoint(
             owner_id=current_user.id,
             submitted_by=current_user.id,
             filename=internal_filename,
-            original_filename=file.filename,
-            file_type=file.content_type or "application/octet-stream",
+            original_filename=upload.filename,
+            file_type=upload.content_type,
             file_size=file_size,
             storage_path=storage_path,
             review_status=(
@@ -727,7 +703,7 @@ async def upload_document_to_team_knowledge_base_endpoint(
             "sha256=%s duplicate=%s job_id=%s duration_ms=%s error_code=%s",
             current_user.id,
             knowledge_base.id,
-            file.filename,
+            upload.filename,
             file_size,
             file_sha256,
             True,
@@ -758,7 +734,7 @@ async def upload_document_to_team_knowledge_base_endpoint(
                 "sha256=%s duplicate=%s job_id=%s duration_ms=%s error_code=%s",
                 current_user.id,
                 knowledge_base.id,
-                file.filename,
+                upload.filename,
                 file_size,
                 file_sha256,
                 False,
@@ -777,7 +753,7 @@ async def upload_document_to_team_knowledge_base_endpoint(
         "sha256=%s duplicate=%s job_id=%s duration_ms=%s error_code=%s",
         current_user.id,
         knowledge_base.id,
-        file.filename,
+        upload.filename,
         file_size,
         file_sha256,
         False,

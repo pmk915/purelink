@@ -776,7 +776,9 @@ async def test_personal_upload_rejects_file_larger_than_configured_limit(
     )
 
     assert upload_response.status_code == 413
-    assert upload_response.json()["error"]["code"] == "FILE_TOO_LARGE"
+    body = upload_response.json()
+    assert body["error"]["code"] == "UPLOAD_TOO_LARGE"
+    assert body["error"]["details"]["max_upload_size_mb"] == 0
 
 
 @pytest.mark.anyio
@@ -801,8 +803,8 @@ async def test_personal_upload_rejects_image_when_core_ocr_is_disabled(
         files={"file": ("whiteboard.png", b"fake png payload", "image/png")},
     )
 
-    assert upload_response.status_code == 400
-    assert upload_response.json()["error"]["code"] == "FEATURE_NOT_ENABLED"
+    assert upload_response.status_code == 415
+    assert upload_response.json()["error"]["code"] == "UNSUPPORTED_FILE_TYPE"
 
 
 @pytest.mark.anyio
@@ -827,8 +829,115 @@ async def test_personal_upload_rejects_video_when_core_media_is_disabled(
         files={"file": ("standup.mp4", b"fake mp4 payload", "video/mp4")},
     )
 
+    assert upload_response.status_code == 415
+    assert upload_response.json()["error"]["code"] == "UNSUPPORTED_FILE_TYPE"
+
+
+@pytest.mark.anyio
+async def test_upload_constraints_endpoint_returns_config(
+    document_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MAX_UPLOAD_SIZE_MB", "7")
+    monkeypatch.setenv("ALLOWED_UPLOAD_EXTENSIONS", ".txt,.md")
+    monkeypatch.setenv("ALLOWED_UPLOAD_MIME_TYPES", "text/plain,text/markdown")
+    get_settings.cache_clear()
+
+    response = await document_client.get("/api/v1/upload/constraints")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body == {
+        "max_upload_size_mb": 7,
+        "max_upload_size_bytes": 7 * 1024 * 1024,
+        "allowed_extensions": [".md", ".txt"],
+        "allowed_mime_types": ["text/markdown", "text/plain"],
+    }
+
+
+@pytest.mark.anyio
+async def test_personal_upload_rejects_empty_file(
+    document_client: AsyncClient,
+) -> None:
+    alice = await _register_and_login(
+        document_client,
+        email="upload-empty@example.com",
+        username="upload-empty",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+    knowledge_base_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(alice["access_token"]),
+        name="Empty Upload KB",
+    )
+
+    upload_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=alice_headers,
+        files={"file": ("empty.txt", b"", "text/plain")},
+    )
+
     assert upload_response.status_code == 400
-    assert upload_response.json()["error"]["code"] == "FEATURE_NOT_ENABLED"
+    assert upload_response.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert upload_response.json()["error"]["message"] == "Uploaded file is empty."
+
+
+@pytest.mark.anyio
+async def test_personal_upload_rejects_invalid_filename(
+    document_client: AsyncClient,
+) -> None:
+    alice = await _register_and_login(
+        document_client,
+        email="upload-invalid-name@example.com",
+        username="upload-invalid-name",
+    )
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+    knowledge_base_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(alice["access_token"]),
+        name="Invalid Filename KB",
+    )
+
+    upload_response = await document_client.post(
+        f"/api/v1/knowledge-bases/{knowledge_base_id}/documents",
+        headers=alice_headers,
+        files={"file": ("../secret.txt", b"secret", "text/plain")},
+    )
+
+    assert upload_response.status_code == 400
+    assert upload_response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+@pytest.mark.anyio
+async def test_team_upload_rejects_unsupported_file_type(
+    document_client: AsyncClient,
+) -> None:
+    admin = await _register_and_login(
+        document_client,
+        email="team-upload-unsupported@example.com",
+        username="team-upload-unsupported",
+    )
+    admin_headers = {"Authorization": f"Bearer {admin['access_token']}"}
+    team_id = await _create_team(
+        document_client,
+        access_token=str(admin["access_token"]),
+        name="Team Upload Unsupported",
+    )
+    knowledge_base_id = await _create_team_knowledge_base(
+        document_client,
+        access_token=str(admin["access_token"]),
+        team_id=team_id,
+        name="Team Unsupported KB",
+    )
+
+    upload_response = await document_client.post(
+        f"/api/v1/teams/{team_id}/knowledge-bases/{knowledge_base_id}/documents",
+        headers=admin_headers,
+        files={"file": ("archive.zip", b"zip", "application/zip")},
+    )
+
+    assert upload_response.status_code == 415
+    assert upload_response.json()["error"]["code"] == "UNSUPPORTED_FILE_TYPE"
 
 
 @pytest.mark.anyio

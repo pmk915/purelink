@@ -35,6 +35,23 @@ If status loading fails, the dialog uses the shared error state and displays the
 backend error message, code, and request id when available. The request id is the
 safe handoff value for backend log lookup.
 
+## Upload Limits and Validation
+
+The Documents tab upload card shows the active upload policy from
+`GET /api/v1/upload/constraints`.
+
+Current default policy:
+
+- supported types: PDF, DOCX, Markdown, TXT
+- max size: 25 MB
+- empty files are rejected
+- unsafe filenames are rejected, including blank names, path separators, null bytes, and names longer than 255 characters
+
+The frontend checks file size, extension, empty files, and filename shape before
+submitting. The backend repeats the validation for personal and team KB uploads
+and returns the M21.1 error envelope with codes such as `UPLOAD_TOO_LARGE`,
+`UNSUPPORTED_FILE_TYPE`, and `VALIDATION_ERROR`.
+
 ## Error, Empty, and Loading States
 
 M21.1 standardizes the workspace failure states:

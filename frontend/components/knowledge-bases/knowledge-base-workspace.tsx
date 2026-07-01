@@ -29,6 +29,7 @@ import {
   useDeleteTeamDocument,
   usePersonalDocuments,
   useTeamDocuments,
+  useUploadConstraints,
   useUploadPersonalDocument,
   useUploadTeamDocument
 } from "@/hooks/use-documents";
@@ -168,6 +169,7 @@ export function KnowledgeBaseWorkspace({
     teamId ?? Number.NaN,
     knowledgeBaseId
   );
+  const uploadConstraintsQuery = useUploadConstraints();
   const conversationsQuery = useConversations(accessToken);
   const uploadPersonal = useUploadPersonalDocument(accessToken, knowledgeBaseId);
   const uploadTeam = useUploadTeamDocument(accessToken, teamId ?? Number.NaN, knowledgeBaseId);
@@ -678,6 +680,7 @@ export function KnowledgeBaseWorkspace({
                   ? messages.knowledgeBases.uploadDescriptionPersonal
                   : messages.knowledgeBases.uploadDescriptionTeam
               }
+              constraints={uploadConstraintsQuery.data}
               onUpload={async (file) => {
                 if (scope === "personal") {
                   const uploadedDocument = await uploadPersonal.mutateAsync(file);
