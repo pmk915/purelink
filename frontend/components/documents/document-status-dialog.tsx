@@ -1,8 +1,11 @@
 "use client";
 
-import { CheckCircle2, Circle, Copy, LoaderCircle, TriangleAlert, X } from "lucide-react";
+import { CheckCircle2, Circle, Copy, TriangleAlert, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { EmptyState } from "@/components/common/empty-state";
+import { ErrorState } from "@/components/common/error-state";
+import { LoadingState } from "@/components/common/loading-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
@@ -14,6 +17,7 @@ type DocumentStatusDialogProps = {
   status: DocumentStatus | null | undefined;
   loading?: boolean;
   error?: unknown;
+  onRetry?: () => void;
   onClose: () => void;
 };
 
@@ -99,6 +103,7 @@ export function DocumentStatusDialog({
   status,
   loading = false,
   error,
+  onRetry,
   onClose
 }: DocumentStatusDialogProps) {
   const { messages } = useI18n();
@@ -194,14 +199,15 @@ export function DocumentStatusDialog({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
           {loading ? (
-            <div className="flex items-center gap-2 rounded-2xl bg-secondary/60 px-4 py-6 text-sm text-muted-foreground">
-              <LoaderCircle className="h-4 w-4 animate-spin" />
-              {messages.common.loading}
-            </div>
+            <LoadingState message={messages.common.loading} />
           ) : error ? (
-            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              {messages.documents.statusLoadError}
-            </div>
+            <ErrorState
+              title={messages.documents.statusLoadError}
+              error={error}
+              actionLabel={onRetry ? messages.common.tryAgain : undefined}
+              onAction={onRetry}
+              requestIdLabel={messages.common.requestId}
+            />
           ) : status ? (
             <div className="space-y-6">
               <section className="space-y-3">
@@ -330,9 +336,10 @@ export function DocumentStatusDialog({
               </section>
             </div>
           ) : (
-            <div className="rounded-2xl bg-secondary/60 px-4 py-6 text-sm text-muted-foreground">
-              {messages.documents.diagnosticsMissing}
-            </div>
+            <EmptyState
+              title={messages.documents.diagnosticsMissing}
+              message={messages.documents.statusDialogDescription}
+            />
           )}
         </div>
 

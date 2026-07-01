@@ -60,6 +60,10 @@ ask 接口返回结构：
 - `metadata.context_chunks`：保留给当前 QA prompt 和可靠性判断使用的 chunk 对象
 - `metadata.evidence_units`：保留给当前 citation 生成使用的 citation unit 候选
 
+失败响应不改变成功的 ask/retrieval schema。Ask 和 Retrieval Debug 的失败
+会返回统一 API error envelope，前端显示 error code、message 和 request id
+以便排查；citation 和 retrieval trace 仍只出现在成功响应中。
+
 ## 4. Model Provider Layer
 
 M2/M3 新增 `app/providers/`，用于把模型接入层和业务流程解耦。

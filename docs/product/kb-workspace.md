@@ -31,6 +31,23 @@ index. Graph index status is shown because it affects Graph Explorer and
 `graph_vector_mix`, but a missing graph index is treated as optional and does not
 block base Q&A readiness.
 
+If status loading fails, the dialog uses the shared error state and displays the
+backend error message, code, and request id when available. The request id is the
+safe handoff value for backend log lookup.
+
+## Error, Empty, and Loading States
+
+M21.1 standardizes the workspace failure states:
+
+- KB load failures show a compact error panel with retry.
+- Documents tab uses a shared empty state for an empty KB and a shared error state for document-list load failures.
+- Document Processing Inspector, Graph Explorer, Ask, and Retrieval Debug display backend error code/request id when the API provides them.
+- Graph Explorer uses shared empty states for no graph data and no matching relations.
+
+These states intentionally reuse the existing cards, badges, muted borders, and
+button sizes so error handling feels like part of the workspace instead of a
+separate debug UI.
+
 ## Graph Maintenance
 
 The backend now supports lightweight GraphRAG lifecycle operations:

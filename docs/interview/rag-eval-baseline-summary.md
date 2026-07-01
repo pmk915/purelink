@@ -48,32 +48,32 @@ Evaluate PureLink retrieval quality across fixed chunking, block-aware chunking,
 
 | Baseline | retrieval_hit | citation_hit | top_1_doc_hit | top_3_doc_hit | keyword_coverage | trace_available | avg_latency_ms |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| `fixed_chunk_only` | 50.0% | 50.0% | 20.0% | 25.0% | 29.3% | 100.0% | 9.5 |
-| `block_aware_chunk_only` | 65.0% | 65.0% | 35.0% | 45.0% | 27.7% | 100.0% | 12.5 |
-| `block_aware_hybrid_text` | 55.0% | 55.0% | 20.0% | 40.0% | 21.7% | 100.0% | 17.2 |
-| `block_aware_graph_vector_mix` | 30.0% | 30.0% | 15.0% | 20.0% | 20.0% | 100.0% | 14.0 |
-| `block_aware_auto` | 45.0% | 45.0% | 25.0% | 40.0% | 21.4% | 100.0% | 14.3 |
+| `fixed_chunk_only` | 55.0% | 55.0% | 15.0% | 30.0% | 25.6% | 100.0% | 10.7 |
+| `block_aware_chunk_only` | 60.0% | 60.0% | 35.0% | 45.0% | 26.4% | 100.0% | 12.5 |
+| `block_aware_hybrid_text` | 50.0% | 50.0% | 20.0% | 40.0% | 19.2% | 100.0% | 18.5 |
+| `block_aware_graph_vector_mix` | 25.0% | 25.0% | 15.0% | 20.0% | 15.0% | 100.0% | 14.9 |
+| `block_aware_auto` | 45.0% | 45.0% | 25.0% | 40.0% | 21.4% | 100.0% | 14.9 |
 
 ### Results by Case Type
 
 | Baseline | Case Type | retrieval_hit | citation_hit | keyword_coverage |
 |---|---|---:|---:|---:|
 | `fixed_chunk_only` | factual | 60.0% | 60.0% | 14.0% |
-| `fixed_chunk_only` | overview | 25.0% | 25.0% | 25.0% |
-| `fixed_chunk_only` | relation | 60.0% | 60.0% | 50.0% |
-| `fixed_chunk_only` | technical | 50.0% | 50.0% | 27.8% |
+| `fixed_chunk_only` | overview | 25.0% | 25.0% | 6.2% |
+| `fixed_chunk_only` | relation | 60.0% | 60.0% | 55.0% |
+| `fixed_chunk_only` | technical | 66.7% | 66.7% | 23.6% |
 | `block_aware_chunk_only` | factual | 60.0% | 60.0% | 9.0% |
 | `block_aware_chunk_only` | overview | 25.0% | 25.0% | 25.0% |
-| `block_aware_chunk_only` | relation | 60.0% | 60.0% | 25.0% |
+| `block_aware_chunk_only` | relation | 40.0% | 40.0% | 20.0% |
 | `block_aware_chunk_only` | technical | 100.0% | 100.0% | 47.2% |
 | `block_aware_hybrid_text` | factual | 60.0% | 60.0% | 5.0% |
 | `block_aware_hybrid_text` | overview | 50.0% | 50.0% | 25.0% |
-| `block_aware_hybrid_text` | relation | 40.0% | 40.0% | 25.0% |
+| `block_aware_hybrid_text` | relation | 20.0% | 20.0% | 15.0% |
 | `block_aware_hybrid_text` | technical | 66.7% | 66.7% | 30.6% |
-| `block_aware_graph_vector_mix` | factual | 40.0% | 40.0% | 5.0% |
+| `block_aware_graph_vector_mix` | factual | 20.0% | 20.0% | 5.0% |
 | `block_aware_graph_vector_mix` | overview | 50.0% | 50.0% | 25.0% |
 | `block_aware_graph_vector_mix` | relation | 20.0% | 20.0% | 30.0% |
-| `block_aware_graph_vector_mix` | technical | 16.7% | 16.7% | 20.8% |
+| `block_aware_graph_vector_mix` | technical | 16.7% | 16.7% | 4.2% |
 | `block_aware_auto` | factual | 60.0% | 60.0% | 9.0% |
 | `block_aware_auto` | overview | 25.0% | 25.0% | 12.5% |
 | `block_aware_auto` | relation | 20.0% | 20.0% | 30.0% |
@@ -83,16 +83,16 @@ Evaluate PureLink retrieval quality across fixed chunking, block-aware chunking,
 
 ### 6.1 Block-aware vs fixed
 
-`block_aware_chunk_only` vs `fixed_chunk_only`: retrieval_hit delta +15.0pp, citation_hit delta +15.0pp, keyword_coverage delta -1.7pp. This supports the comparison for block-aware chunking under chunk_only without assuming improvement where the data does not show it.
+`block_aware_chunk_only` vs `fixed_chunk_only`: retrieval_hit delta +5.0pp, citation_hit delta +5.0pp, keyword_coverage delta +0.8pp. This supports the comparison for block-aware chunking under chunk_only without assuming improvement where the data does not show it.
 
 ### 6.2 Hybrid text retrieval
 
-`block_aware_hybrid_text` vs `block_aware_chunk_only`: retrieval_hit delta -10.0pp, citation_hit delta -10.0pp, keyword_coverage delta -6.0pp. This supports the comparison for hybrid_text over block-aware chunks without assuming improvement where the data does not show it.
+`block_aware_hybrid_text` vs `block_aware_chunk_only`: retrieval_hit delta -10.0pp, citation_hit delta -10.0pp, keyword_coverage delta -7.2pp. This supports the comparison for hybrid_text over block-aware chunks without assuming improvement where the data does not show it.
 For technical/API/config cases, `block_aware_hybrid_text` produced retrieval_hit 66.7%, citation_hit 66.7%, and keyword_coverage 30.6%.
 
 ### 6.3 Graph vector mix
 
-`block_aware_graph_vector_mix` vs `block_aware_chunk_only`: retrieval_hit delta -35.0pp, citation_hit delta -35.0pp, keyword_coverage delta -7.7pp. This supports the comparison for graph_vector_mix over block-aware chunks without assuming improvement where the data does not show it.
+`block_aware_graph_vector_mix` vs `block_aware_chunk_only`: retrieval_hit delta -35.0pp, citation_hit delta -35.0pp, keyword_coverage delta -11.4pp. This supports the comparison for graph_vector_mix over block-aware chunks without assuming improvement where the data does not show it.
 For relation/dependency cases, `block_aware_graph_vector_mix` produced retrieval_hit 20.0%, citation_hit 20.0%, and keyword_coverage 30.0%.
 
 ### 6.4 Auto router

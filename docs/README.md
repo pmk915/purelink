@@ -41,6 +41,7 @@ This page is the main map for PureLink's product, RAG architecture, ingestion, G
 - [Testing and Smoke](development/testing-and-smoke.md): unit tests, smoke, eval, and demo verification.
 - [Development Commands](development/dev-commands.md): common local commands.
 - [Docker Deployment](development/docker-deployment.md): local and production-like Docker Compose, env files, backup/restore, and troubleshooting.
+- [Error Handling](development/error-handling.md): API error envelope, request ids, frontend error states, and troubleshooting.
 - [Frontend-Backend Integration Test](development/frontend-backend-integration-test.md): local integration checks.
 - [Troubleshooting](troubleshooting.md): operational and debugging notes.
 - [Environment Variables](../.env.example): local configuration template.

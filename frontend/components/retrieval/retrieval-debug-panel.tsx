@@ -2,8 +2,10 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Search } from "lucide-react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 
+import { ErrorState } from "@/components/common/error-state";
 import { EvidencePanel } from "@/components/qa/evidence-panel";
 import { RetrievalDetails } from "@/components/qa/retrieval-details";
 import { Button } from "@/components/ui/button";
@@ -24,6 +26,7 @@ export function RetrievalDebugPanel({
   result: RetrievalResponse | null;
 }) {
   const { messages } = useI18n();
+  const [runError, setRunError] = useState<unknown>(null);
   const form = useForm<RetrievalValues>({
     resolver: zodResolver(retrievalSchema),
     defaultValues: {
@@ -45,12 +48,11 @@ export function RetrievalDebugPanel({
             className="grid gap-4"
             onSubmit={form.handleSubmit(async (values) => {
               try {
+                setRunError(null);
                 await onRetrieve(values);
               } catch (error) {
                 console.error("retrieval debug failed", { error });
-                form.setError("root", {
-                  message: messages.retrievalDebug.failed
-                });
+                setRunError(error);
               }
             })}
           >
@@ -90,10 +92,12 @@ export function RetrievalDebugPanel({
               </div>
             </div>
 
-            {form.formState.errors.root?.message ? (
-              <div className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                {form.formState.errors.root.message}
-              </div>
+            {runError ? (
+              <ErrorState
+                title={messages.retrievalDebug.failed}
+                error={runError}
+                requestIdLabel={messages.common.requestId}
+              />
             ) : null}
 
             <Button disabled={isRunning}>

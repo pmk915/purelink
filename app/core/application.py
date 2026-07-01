@@ -8,7 +8,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import router as api_router
 from app.core.config import get_settings
-from app.core.exceptions import register_exception_handlers
+from app.core.exceptions import (
+    REQUEST_ID_HEADER,
+    register_exception_handlers,
+    register_request_id_middleware,
+)
 from app.core.logging import configure_logging
 
 
@@ -41,8 +45,10 @@ def create_app() -> FastAPI:
         allow_credentials=settings.cors_allow_credentials,
         allow_methods=list(settings.cors_allow_methods),
         allow_headers=list(settings.cors_allow_headers),
+        expose_headers=[REQUEST_ID_HEADER],
     )
 
+    register_request_id_middleware(app)
     register_exception_handlers(app)
     app.include_router(api_router)
 

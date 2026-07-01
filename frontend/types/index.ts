@@ -29,12 +29,21 @@ export type ProcessingJobTrigger = "process" | "retry" | "reprocess" | "index";
 export type MessageRole = "system" | "user" | "assistant";
 
 export interface ApiErrorPayload {
+  error?: {
+    code: string;
+    message: string;
+    details?: Record<string, unknown> | null;
+    request_id?: string | null;
+  };
   detail?:
     | string
-    | {
+     | {
+        code?: string;
         error_code?: string;
         message?: string;
+        detail?: string;
         document_id?: string;
+        [key: string]: unknown;
       };
 }
 

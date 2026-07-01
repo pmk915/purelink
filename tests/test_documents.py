@@ -776,7 +776,7 @@ async def test_personal_upload_rejects_file_larger_than_configured_limit(
     )
 
     assert upload_response.status_code == 413
-    assert upload_response.json()["detail"]["error_code"] == "FILE_TOO_LARGE"
+    assert upload_response.json()["error"]["code"] == "FILE_TOO_LARGE"
 
 
 @pytest.mark.anyio
@@ -802,7 +802,7 @@ async def test_personal_upload_rejects_image_when_core_ocr_is_disabled(
     )
 
     assert upload_response.status_code == 400
-    assert upload_response.json()["detail"]["error_code"] == "FEATURE_NOT_ENABLED"
+    assert upload_response.json()["error"]["code"] == "FEATURE_NOT_ENABLED"
 
 
 @pytest.mark.anyio
@@ -828,7 +828,7 @@ async def test_personal_upload_rejects_video_when_core_media_is_disabled(
     )
 
     assert upload_response.status_code == 400
-    assert upload_response.json()["detail"]["error_code"] == "FEATURE_NOT_ENABLED"
+    assert upload_response.json()["error"]["code"] == "FEATURE_NOT_ENABLED"
 
 
 @pytest.mark.anyio
@@ -861,7 +861,7 @@ async def test_personal_upload_duplicate_in_same_knowledge_base_reuses_existing_
 
     assert first_response.status_code == 201
     assert second_response.status_code == 409
-    assert second_response.json()["detail"]["error_code"] == "DUPLICATE_DOCUMENT"
+    assert second_response.json()["error"]["code"] == "DUPLICATE_DOCUMENT"
 
     with test_session_factory() as db:
         documents = list(
@@ -964,7 +964,7 @@ async def test_personal_upload_rejects_when_user_active_job_limit_is_reached(
 
     assert first_response.status_code == 201
     assert second_response.status_code == 429
-    assert second_response.json()["detail"]["error_code"] == "TOO_MANY_ACTIVE_JOBS"
+    assert second_response.json()["error"]["code"] == "TOO_MANY_ACTIVE_JOBS"
 
     with test_session_factory() as db:
         documents = list(
@@ -4219,7 +4219,7 @@ async def test_personal_process_submission_failure_leaves_queued_job_when_queue_
         files={"file": ("queue-down.txt", b"Queue failure should not fallback.", "text/plain")},
     )
     assert upload_response.status_code == 500
-    assert "remains queued" in upload_response.json()["detail"]
+    assert "remains queued" in upload_response.json()["error"]["message"]
 
     with test_session_factory() as db:
         saved_document = db.scalar(

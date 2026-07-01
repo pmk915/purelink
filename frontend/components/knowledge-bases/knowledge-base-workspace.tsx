@@ -7,6 +7,9 @@ import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import * as documentApi from "@/api/documents";
+import { EmptyState } from "@/components/common/empty-state";
+import { ErrorState } from "@/components/common/error-state";
+import { LoadingState } from "@/components/common/loading-state";
 import { DocumentListItem } from "@/components/documents/document-list-item";
 import { DocumentStatusDialog } from "@/components/documents/document-status-dialog";
 import { DocumentUploadCard } from "@/components/documents/document-upload-card";
@@ -191,6 +194,8 @@ export function KnowledgeBaseWorkspace({
   });
 
   const knowledgeBase = scope === "personal" ? personalKbQuery.data : teamKbQuery.data;
+  const knowledgeBaseQuery = scope === "personal" ? personalKbQuery : teamKbQuery;
+  const documentsQuery = scope === "personal" ? personalDocumentsQuery : teamDocumentsQuery;
   const ragHealth = scope === "personal" ? personalHealthQuery.data : teamHealthQuery.data;
   const documents =
     scope === "personal" ? personalDocumentsQuery.data ?? [] : teamDocumentsQuery.data ?? [];
@@ -332,20 +337,32 @@ export function KnowledgeBaseWorkspace({
 
   if (isLoading) {
     return (
-      <div className="rounded-3xl border border-border/70 bg-white/80 px-6 py-10 text-sm text-muted-foreground shadow-card">
-        {messages.common.loadingWorkspace}
-      </div>
+      <LoadingState
+        message={messages.common.loadingWorkspace}
+        className="rounded-3xl border border-border/70 bg-white/80 px-6 py-10 shadow-card"
+      />
+    );
+  }
+
+  if (knowledgeBaseQuery.error) {
+    return (
+      <ErrorState
+        title={messages.common.somethingWentWrong}
+        error={knowledgeBaseQuery.error}
+        actionLabel={messages.common.tryAgain}
+        onAction={() => knowledgeBaseQuery.refetch()}
+        requestIdLabel={messages.common.requestId}
+        variant="card"
+      />
     );
   }
 
   if (!knowledgeBase) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{messages.knowledgeBases.notFoundTitle}</CardTitle>
-          <CardDescription>{messages.knowledgeBases.notFoundDescription}</CardDescription>
-        </CardHeader>
-      </Card>
+      <EmptyState
+        title={messages.knowledgeBases.notFoundTitle}
+        message={messages.knowledgeBases.notFoundDescription}
+      />
     );
   }
 
@@ -468,6 +485,7 @@ export function KnowledgeBaseWorkspace({
         status={documentStatusQuery.data}
         loading={documentStatusQuery.isLoading || documentStatusQuery.isFetching}
         error={documentStatusQuery.error}
+        onRetry={() => documentStatusQuery.refetch()}
         onClose={() => setStatusDocument(null)}
       />
 
@@ -706,10 +724,19 @@ export function KnowledgeBaseWorkspace({
               <CardDescription>{messages.knowledgeBases.documentsDescription}</CardDescription>
             </CardHeader>
             <CardContent>
-              {documents.length === 0 ? (
-                <div className="rounded-2xl bg-secondary/60 p-4 text-sm text-muted-foreground">
-                  {messages.knowledgeBases.noDocuments}
-                </div>
+              {documentsQuery.error ? (
+                <ErrorState
+                  title={messages.common.somethingWentWrong}
+                  error={documentsQuery.error}
+                  actionLabel={messages.common.tryAgain}
+                  onAction={() => documentsQuery.refetch()}
+                  requestIdLabel={messages.common.requestId}
+                />
+              ) : documents.length === 0 ? (
+                <EmptyState
+                  title={messages.common.noDocumentsYet}
+                  message={messages.knowledgeBases.noDocuments}
+                />
               ) : (
                 <div className="max-h-[520px] space-y-3 overflow-y-auto pr-1">
                   {documents.map((document) => (

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 
+import { ErrorState } from "@/components/common/error-state";
 import { EvidencePanel } from "@/components/qa/evidence-panel";
 import { RetrievalDetails } from "@/components/qa/retrieval-details";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ export function AskWorkspace({
   const router = useRouter();
   const { messages } = useI18n();
   const [latestAnswer, setLatestAnswer] = useState<AskResponse | null>(null);
+  const [askError, setAskError] = useState<unknown>(null);
 
   const askForm = useForm<AskValues>({
     resolver: zodResolver(askSchema),
@@ -83,6 +85,7 @@ export function AskWorkspace({
             }
 
             try {
+              setAskError(null);
               const result = await onAsk(values);
               setLatestAnswer(result);
               askForm.reset({
@@ -93,9 +96,7 @@ export function AskWorkspace({
               });
             } catch (error) {
               console.error("ask failed", { error });
-              askForm.setError("root", {
-                message: messages.qa.askFailed
-              });
+              setAskError(error);
             }
           })}
         >
@@ -131,10 +132,12 @@ export function AskWorkspace({
             </div>
           ) : null}
 
-          {askForm.formState.errors.root?.message ? (
-            <div className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              {askForm.formState.errors.root.message}
-            </div>
+          {askError ? (
+            <ErrorState
+              title={messages.qa.askFailed}
+              error={askError}
+              requestIdLabel={messages.common.requestId}
+            />
           ) : null}
 
           <Button disabled={!canAsk || askForm.formState.isSubmitting}>

@@ -3,7 +3,6 @@
 import {
   Download,
   FileText,
-  LoaderCircle,
   Network,
   RefreshCcw,
   Search,
@@ -12,6 +11,9 @@ import {
 import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
 
+import { EmptyState } from "@/components/common/empty-state";
+import { ErrorState } from "@/components/common/error-state";
+import { LoadingState } from "@/components/common/loading-state";
 import { DocumentStatusDialog } from "@/components/documents/document-status-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -186,6 +188,7 @@ export function GraphExplorer({
               selectedEntityId={selectedEntityId}
               onSelectEntity={setSelectedEntityId}
               onClearSelection={() => setSelectedEntityId(null)}
+              onRetry={() => graphQuery.refetch()}
             />
           </CardContent>
         </Card>
@@ -214,6 +217,7 @@ export function GraphExplorer({
               loading={graphQuery.isLoading}
               error={graphQuery.error}
               onOpenSources={setSelectedRelation}
+              onRetry={() => graphQuery.refetch()}
             />
           </CardContent>
         </Card>
@@ -229,6 +233,7 @@ export function GraphExplorer({
         status={documentStatusQuery.data}
         loading={documentStatusQuery.isLoading}
         error={documentStatusQuery.error}
+        onRetry={() => documentStatusQuery.refetch()}
         onClose={() => setStatusDocumentId(null)}
       />
     </div>
@@ -261,7 +266,8 @@ function GraphEntityList({
   error,
   selectedEntityId,
   onSelectEntity,
-  onClearSelection
+  onClearSelection,
+  onRetry
 }: {
   graph: KnowledgeGraphExport | undefined;
   loading: boolean;
@@ -269,21 +275,26 @@ function GraphEntityList({
   selectedEntityId: number | null;
   onSelectEntity: (entityId: number) => void;
   onClearSelection: () => void;
+  onRetry: () => void;
 }) {
   const { messages } = useI18n();
   if (loading) {
-    return <LoadingState />;
+    return <LoadingState message={messages.common.loading} />;
   }
   if (error) {
-    return <ErrorState message={messages.graph.loadError} />;
+    return (
+      <ErrorState
+        title={messages.graph.loadError}
+        error={error}
+        actionLabel={messages.common.tryAgain}
+        onAction={onRetry}
+        requestIdLabel={messages.common.requestId}
+      />
+    );
   }
   const entities = graph?.entities ?? [];
   if (entities.length === 0) {
-    return (
-      <div className="rounded-2xl bg-secondary/70 px-4 py-3 text-sm text-muted-foreground">
-        {messages.graph.empty}
-      </div>
-    );
+    return <EmptyState title={messages.common.noGraphDataYet} message={messages.graph.empty} />;
   }
 
   return (
@@ -324,27 +335,33 @@ function GraphRelationList({
   graph,
   loading,
   error,
-  onOpenSources
+  onOpenSources,
+  onRetry
 }: {
   graph: KnowledgeGraphExport | undefined;
   loading: boolean;
   error: unknown;
   onOpenSources: (relation: KnowledgeGraphExportRelation) => void;
+  onRetry: () => void;
 }) {
   const { messages } = useI18n();
   if (loading) {
-    return <LoadingState />;
+    return <LoadingState message={messages.common.loading} />;
   }
   if (error) {
-    return <ErrorState message={messages.graph.loadError} />;
+    return (
+      <ErrorState
+        title={messages.graph.loadError}
+        error={error}
+        actionLabel={messages.common.tryAgain}
+        onAction={onRetry}
+        requestIdLabel={messages.common.requestId}
+      />
+    );
   }
   const relations = graph?.relations ?? [];
   if (relations.length === 0) {
-    return (
-      <div className="rounded-2xl bg-secondary/70 px-4 py-3 text-sm text-muted-foreground">
-        {messages.graph.noRelations}
-      </div>
-    );
+    return <EmptyState title={messages.common.noMatchingResults} message={messages.graph.noRelations} />;
   }
 
   return (
@@ -517,24 +534,6 @@ function GraphExportButtons({ graph }: { graph: KnowledgeGraphExport | undefined
         {messages.graph.exportRelationsCsv}
       </Button>
     </>
-  );
-}
-
-function LoadingState() {
-  const { messages } = useI18n();
-  return (
-    <div className="flex items-center gap-2 rounded-2xl bg-secondary/60 px-4 py-6 text-sm text-muted-foreground">
-      <LoaderCircle className="h-4 w-4 animate-spin" />
-      {messages.common.loading}
-    </div>
-  );
-}
-
-function ErrorState({ message }: { message: string }) {
-  return (
-    <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-      {message}
-    </div>
   );
 }
 

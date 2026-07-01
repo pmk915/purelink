@@ -141,7 +141,8 @@ export function DocumentUploadCard({
                     uploadError.errorCode === "DUPLICATE_DOCUMENT"
                       ? "duplicate"
                       : uploadError instanceof ApiClientError &&
-                          uploadError.errorCode === "FILE_TOO_LARGE"
+                          (uploadError.errorCode === "FILE_TOO_LARGE" ||
+                            uploadError.errorCode === "UPLOAD_TOO_LARGE")
                         ? "too_large"
                         : "failed";
                   updateItem(item.id, {

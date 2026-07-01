@@ -1,19 +1,13 @@
-import type { ApiErrorPayload } from "@/types";
+import {
+  ApiError,
+  createNetworkApiError,
+  parseApiErrorResponse
+} from "@/api/errors";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
 
-export class ApiClientError extends Error {
-  status: number;
-  errorCode: string | null;
-
-  constructor(message: string, status: number, errorCode: string | null = null) {
-    super(message);
-    this.name = "ApiClientError";
-    this.status = status;
-    this.errorCode = errorCode;
-  }
-}
+export { ApiError as ApiClientError };
 
 type RequestOptions = {
   method?: string;
@@ -91,28 +85,11 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       ? "Unable to connect to the server. Check that the backend is running and that the browser is allowed to access it across origins."
       : "Unable to connect to the server. Check that the backend is running and reachable.";
 
-    throw new ApiClientError(detail, 0);
+    throw createNetworkApiError(detail);
   }
 
   if (!response.ok) {
-    let detail = `Request failed with status ${response.status}.`;
-    let errorCode: string | null = null;
-
-    try {
-      const payload = (await response.json()) as ApiErrorPayload;
-      if (payload.detail) {
-        if (typeof payload.detail === "string") {
-          detail = payload.detail;
-        } else {
-          detail = payload.detail.message ?? payload.detail.error_code ?? detail;
-          errorCode = payload.detail.error_code ?? null;
-        }
-      }
-    } catch {
-      // Ignore JSON parsing errors for non-JSON responses.
-    }
-
-    throw new ApiClientError(detail, response.status, errorCode);
+    throw await parseApiErrorResponse(response);
   }
 
   if (response.status === 204) {
@@ -129,31 +106,22 @@ async function requestBlob(path: string, token?: string | null): Promise<Blob> {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: "GET",
-    headers,
-    cache: "no-store"
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method: "GET",
+      headers,
+      cache: "no-store"
+    });
+  } catch {
+    throw createNetworkApiError(
+      "Unable to connect to the server. Check that the backend is running and reachable."
+    );
+  }
 
   if (!response.ok) {
-    let detail = `Request failed with status ${response.status}.`;
-    let errorCode: string | null = null;
-
-    try {
-      const payload = (await response.json()) as ApiErrorPayload;
-      if (payload.detail) {
-        if (typeof payload.detail === "string") {
-          detail = payload.detail;
-        } else {
-          detail = payload.detail.message ?? payload.detail.error_code ?? detail;
-          errorCode = payload.detail.error_code ?? null;
-        }
-      }
-    } catch {
-      // Binary endpoints may return non-JSON error bodies.
-    }
-
-    throw new ApiClientError(detail, response.status, errorCode);
+    throw await parseApiErrorResponse(response);
   }
 
   return response.blob();

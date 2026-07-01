@@ -48,6 +48,24 @@ change slightly after documentation changes, so update
 For Docker-specific startup, production-like Compose, backup/restore, and
 security checklist details, see [Docker Deployment](docker-deployment.md).
 
+For API error envelopes, request ids, and frontend error state behavior, see
+[Error Handling](error-handling.md).
+
+## Error Response Checks
+
+Backend error response coverage should include:
+
+- `HTTPException` responses return `{"error": ...}` with code, message, details, and request id
+- `RequestValidationError` returns `VALIDATION_ERROR`
+- unhandled exceptions return `INTERNAL_ERROR` without stack traces or sensitive values
+- incoming `X-Request-ID` is preserved in the response header and error body
+- legacy `detail` strings/dicts remain readable by the frontend client
+
+Frontend validation is lint/build based. Manual checks should cover permission
+denied, not found, graph export failure, document status failure, retrieval
+failure, empty document lists, empty graph data, and retry actions where
+available.
+
 ## Smoke
 
 Personal flow:
