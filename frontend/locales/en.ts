@@ -366,6 +366,16 @@ export const en = {
       "This shows citation/evidence data currently available to the frontend. Fields such as trace_id will appear when the backend response exposes them.",
     evidenceCount: (count: number) => `Evidence count: ${count}`,
     retrievalMode: "Retrieval mode",
+    selectedRetrievalMode: "System selected",
+    routerReason: "Reason",
+    retrievalModeLabel: (mode: string) =>
+      ({
+        auto: "Auto",
+        chunk_only: "Chunk retrieval",
+        overview: "Overview retrieval",
+        graph_vector_mix: "Graph + vector hybrid",
+        hybrid_text: "Keyword + vector hybrid"
+      })[mode] ?? mode,
     usedReranker: "Used reranker",
     openConversation: (id: number) => `Open conversation #${id}`
   },

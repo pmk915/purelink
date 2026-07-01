@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class RetrievalMode(str, Enum):
+    AUTO = "auto"
     CHUNK_ONLY = "chunk_only"
     OVERVIEW = "overview"
     HYBRID_TEXT = "hybrid_text"
@@ -98,6 +99,9 @@ class RetrievalResult(BaseModel):
 
     query: str
     mode: RetrievalMode
+    requested_mode: RetrievalMode | None = None
+    selected_mode: RetrievalMode | None = None
+    router_reason: str | None = None
 
     evidences: list[RetrievedEvidence]
     context_text: str

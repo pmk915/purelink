@@ -12,6 +12,7 @@ from app.services.retrieval import (
 
 
 def test_retrieval_mode_defines_m1_and_future_modes() -> None:
+    assert RetrievalMode.AUTO.value == "auto"
     assert RetrievalMode.CHUNK_ONLY.value == "chunk_only"
     assert RetrievalMode.OVERVIEW.value == "overview"
     assert RetrievalMode.GRAPH_LOCAL.value == "graph_local"
@@ -53,5 +54,8 @@ def test_retrieval_result_serializes_evidence() -> None:
     payload = result.model_dump(mode="json")
 
     assert payload["mode"] == "chunk_only"
+    assert payload["requested_mode"] is None
+    assert payload["selected_mode"] is None
+    assert payload["router_reason"] is None
     assert payload["evidences"][0]["citation_unit_id"] == 10
     assert payload["evidences"][0]["metadata"] == {}

@@ -1,5 +1,5 @@
 export type KnowledgeBaseScope = "personal" | "team";
-export type RetrievalMode = "chunk_only" | "overview" | "graph_vector_mix" | "hybrid_text";
+export type RetrievalMode = "auto" | "chunk_only" | "overview" | "graph_vector_mix" | "hybrid_text";
 export type TeamMemberRole = "admin" | "member";
 export type TeamMemberStatus = "active" | "invited" | "removed";
 export type TeamInviteStatus = "active" | "used" | "expired" | "revoked";
@@ -262,6 +262,9 @@ export interface RetrievalResponse {
   query: string;
   top_k: number;
   mode?: RetrievalMode | null;
+  requested_mode?: RetrievalMode | null;
+  selected_mode?: RetrievalMode | null;
+  router_reason?: string | null;
   used_reranker?: boolean | null;
   trace_id?: number | string | null;
   results: RetrievalResult[];
@@ -275,6 +278,9 @@ export interface AskResponse {
   citations: Citation[];
   intent?: string | null;
   retrieval_mode?: RetrievalMode | null;
+  requested_mode?: RetrievalMode | null;
+  selected_mode?: RetrievalMode | null;
+  router_reason?: string | null;
   used_reranker?: boolean | null;
   trace_id?: number | string | null;
 }

@@ -26,9 +26,11 @@ The workspace borrows LightRAG-style information architecture around document in
 
 Retrieval Debug can compare:
 
+- `auto`: rule-based router that chooses a concrete retrieval mode from the query.
 - `chunk_only`: normal chunk/vector retrieval.
 - `overview`: broad knowledge-base overview retrieval.
 - `graph_vector_mix`: lightweight graph candidates plus vector candidates.
 - `hybrid_text`: keyword candidates plus vector candidates.
 
 Use `hybrid_text` for exact technical terms such as API paths, config keys, file names, commands, error codes, and migration identifiers.
+Use `auto` to inspect the backend-selected retrieval mode and router reason without manually choosing a mode.

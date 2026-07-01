@@ -24,6 +24,7 @@ from app.services.retrieval.citation_builder import build_evidences
 from app.services.retrieval.context_builder import build_context
 from app.services.retrieval.hybrid_text_retriever import retrieve_hybrid_text_chunks
 from app.services.retrieval.overview_retriever_adapter import retrieve_overview_chunks
+from app.services.retrieval.query_router import route_query
 from app.services.retrieval.rerank_service import (
     align_chunks_to_evidences,
     rerank_evidences,
@@ -40,7 +41,13 @@ logger = logging.getLogger("purelink.retrieval")
 
 async def retrieve(request: RetrievalRequest) -> RetrievalResult:
     active_settings = request.settings or get_settings()
-    resolved_mode = resolve_mode(request.mode)
+    requested_mode = request.mode
+    resolved_mode, router_reason = _select_retrieval_mode(request)
+    router_metadata = _build_router_metadata(
+        requested_mode=requested_mode,
+        selected_mode=resolved_mode,
+        router_reason=router_reason,
+    )
     final_top_k = request.top_k
     expand_for_reranker = should_expand_initial_recall(active_settings)
     initial_top_k = (
@@ -50,7 +57,7 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
         else final_top_k
     )
 
-    _validate_internal_context(request)
+    _validate_internal_context(request, mode=resolved_mode)
     scope = _coerce_scope(request.scope)
     required_review_status = _coerce_review_status(request.required_review_status)
     trace_id = _safe_start_trace(
@@ -179,6 +186,7 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
             used_reranker=used_reranker,
             metadata={
                 "mode": resolved_mode.value,
+                **router_metadata,
                 "context_chunk_count": len(context_chunks),
                 "evidence_unit_count": len(evidence_units),
                 "graph_candidate_count": len(locals().get("graph_chunks", [])),
@@ -207,11 +215,15 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
         return RetrievalResult(
             query=request.query,
             mode=resolved_mode,
+            requested_mode=requested_mode,
+            selected_mode=resolved_mode,
+            router_reason=router_reason,
             evidences=evidences,
             context_text=context_text,
             used_reranker=used_reranker,
             trace_id=trace_id,
             metadata={
+                **router_metadata,
                 "retrieved_chunks": retrieved_chunks,
                 "initial_chunks": raw_chunks,
                 "context_chunks": context_chunks,
@@ -228,19 +240,44 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
             initial_candidate_count=0,
             final_evidence_count=0,
             used_reranker=False,
-            metadata={"error": f"{type(exc).__name__}: {exc}"},
+            metadata={
+                **router_metadata,
+                "error": f"{type(exc).__name__}: {exc}",
+            },
         )
         raise
 
 
-def _validate_internal_context(request: RetrievalRequest) -> None:
+def _select_retrieval_mode(request: RetrievalRequest) -> tuple[RetrievalMode, str | None]:
+    if request.mode == RetrievalMode.AUTO:
+        decision = route_query(request.query)
+        return decision.selected_mode, decision.reason
+    return resolve_mode(request.mode), "manual mode specified"
+
+
+def _build_router_metadata(
+    *,
+    requested_mode: RetrievalMode,
+    selected_mode: RetrievalMode,
+    router_reason: str | None,
+) -> dict[str, object]:
+    return {
+        "requested_mode": requested_mode.value,
+        "selected_mode": selected_mode.value,
+        "router_reason": router_reason,
+        "router_type": "rule_based" if requested_mode == RetrievalMode.AUTO else None,
+    }
+
+
+def _validate_internal_context(request: RetrievalRequest, *, mode: RetrievalMode | None = None) -> None:
     if request.db is None:
         raise ValueError("RetrievalRequest.db is required for M1 retrieval.")
     if request.scope is None:
         raise ValueError("RetrievalRequest.scope is required for M1 retrieval.")
     if request.required_review_status is None:
         raise ValueError("RetrievalRequest.required_review_status is required for M1 retrieval.")
-    if resolve_mode(request.mode) in {RetrievalMode.CHUNK_ONLY, RetrievalMode.GRAPH_VECTOR_MIX, RetrievalMode.HYBRID_TEXT} and request.vector_root is None:
+    resolved_mode = mode or resolve_mode(request.mode)
+    if resolved_mode in {RetrievalMode.CHUNK_ONLY, RetrievalMode.GRAPH_VECTOR_MIX, RetrievalMode.HYBRID_TEXT} and request.vector_root is None:
         raise ValueError("RetrievalRequest.vector_root is required for chunk retrieval.")
 
 

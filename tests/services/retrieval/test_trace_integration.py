@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from types import SimpleNamespace
+
 import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
@@ -19,7 +22,7 @@ from app.models.retrieval_trace import RetrievalTrace, RetrievalTraceItem
 from app.models.user import User
 from app.services.document_embedding import RetrievedChunk
 from app.services.retrieval.retrieval_service import retrieve
-from app.services.retrieval.types import RetrievalRequest
+from app.services.retrieval.types import RetrievalMode, RetrievalRequest
 
 
 load_all_models()
@@ -249,6 +252,155 @@ async def test_trace_start_failure_does_not_break_retrieval(
 
     assert result.trace_id is None
     assert result.evidences
+
+
+@pytest.mark.anyio
+async def test_auto_mode_records_selected_mode_and_router_trace_metadata(
+    session_factory: sessionmaker,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RERANKER_ENABLED", "false")
+    get_settings.cache_clear()
+
+    def fake_retrieve_hybrid_text_chunks(**kwargs):  # noqa: ANN003
+        return [
+            _retrieved_chunk(
+                document_id=kwargs["documents"][0].id,
+                chunk_id="chunk-api",
+                text="The API path is handled in knowledge base routes.",
+                score=0.92,
+            )
+        ], SimpleNamespace(keyword_candidate_count=1, fallback_reason=None)
+
+    monkeypatch.setattr(
+        "app.services.retrieval.retrieval_service.retrieve_hybrid_text_chunks",
+        fake_retrieve_hybrid_text_chunks,
+    )
+
+    with session_factory() as db:
+        user, knowledge_base, document = _create_user_kb_document(db)
+        result = await retrieve(
+            RetrievalRequest(
+                db=db,
+                documents=[document],
+                vector_root=tmp_path,
+                scope=KnowledgeBaseScope.PERSONAL,
+                knowledge_base_id=knowledge_base.id,
+                user_id=user.id,
+                query="/api/kb/documents 接口在哪里",
+                top_k=3,
+                mode=RetrievalMode.AUTO,
+                include_citations=False,
+                required_review_status=DocumentReviewStatus.NOT_REQUIRED,
+            )
+        )
+        trace = db.scalar(select(RetrievalTrace).where(RetrievalTrace.id == result.trace_id))
+
+    assert result.requested_mode == RetrievalMode.AUTO
+    assert result.selected_mode == RetrievalMode.HYBRID_TEXT
+    assert result.mode == RetrievalMode.HYBRID_TEXT
+    assert result.router_reason == "question contains API/path/config/code-like tokens"
+    assert result.metadata["requested_mode"] == "auto"
+    assert result.metadata["selected_mode"] == "hybrid_text"
+    assert trace is not None
+    trace_metadata = json.loads(trace.metadata_json or "{}")
+    assert trace_metadata["requested_mode"] == "auto"
+    assert trace_metadata["selected_mode"] == "hybrid_text"
+    assert trace_metadata["router_type"] == "rule_based"
+    assert trace_metadata["router_reason"] == "question contains API/path/config/code-like tokens"
+
+
+@pytest.mark.anyio
+async def test_manual_chunk_only_mode_bypasses_auto_router(
+    session_factory: sessionmaker,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RERANKER_ENABLED", "false")
+    get_settings.cache_clear()
+
+    monkeypatch.setattr(
+        "app.services.retrieval.retrieval_service.chunk_retriever.retrieve_chunks_for_documents",
+        lambda **kwargs: [
+            _retrieved_chunk(
+                document_id=kwargs["documents"][0].id,
+                chunk_id="chunk-manual",
+                text="Manual chunk retrieval result.",
+                score=0.9,
+            )
+        ],
+    )
+
+    with session_factory() as db:
+        user, knowledge_base, document = _create_user_kb_document(db)
+        result = await retrieve(
+            RetrievalRequest(
+                db=db,
+                documents=[document],
+                vector_root=tmp_path,
+                scope=KnowledgeBaseScope.PERSONAL,
+                knowledge_base_id=knowledge_base.id,
+                user_id=user.id,
+                query="/api/kb/documents 接口在哪里",
+                top_k=3,
+                mode=RetrievalMode.CHUNK_ONLY,
+                include_citations=False,
+                required_review_status=DocumentReviewStatus.NOT_REQUIRED,
+            )
+        )
+
+    assert result.requested_mode == RetrievalMode.CHUNK_ONLY
+    assert result.selected_mode == RetrievalMode.CHUNK_ONLY
+    assert result.mode == RetrievalMode.CHUNK_ONLY
+    assert result.router_reason == "manual mode specified"
+
+
+@pytest.mark.anyio
+async def test_manual_hybrid_text_mode_keeps_selected_mode(
+    session_factory: sessionmaker,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RERANKER_ENABLED", "false")
+    get_settings.cache_clear()
+
+    def fake_retrieve_hybrid_text_chunks(**kwargs):  # noqa: ANN003
+        return [
+            _retrieved_chunk(
+                document_id=kwargs["documents"][0].id,
+                chunk_id="chunk-hybrid",
+                text="Manual hybrid retrieval result.",
+                score=0.88,
+            )
+        ], SimpleNamespace(keyword_candidate_count=1, fallback_reason=None)
+
+    monkeypatch.setattr(
+        "app.services.retrieval.retrieval_service.retrieve_hybrid_text_chunks",
+        fake_retrieve_hybrid_text_chunks,
+    )
+
+    with session_factory() as db:
+        user, knowledge_base, document = _create_user_kb_document(db)
+        result = await retrieve(
+            RetrievalRequest(
+                db=db,
+                documents=[document],
+                vector_root=tmp_path,
+                scope=KnowledgeBaseScope.PERSONAL,
+                knowledge_base_id=knowledge_base.id,
+                user_id=user.id,
+                query="这个文档说了什么结论",
+                top_k=3,
+                mode=RetrievalMode.HYBRID_TEXT,
+                include_citations=False,
+                required_review_status=DocumentReviewStatus.NOT_REQUIRED,
+            )
+        )
+
+    assert result.requested_mode == RetrievalMode.HYBRID_TEXT
+    assert result.selected_mode == RetrievalMode.HYBRID_TEXT
+    assert result.mode == RetrievalMode.HYBRID_TEXT
 
 
 def _create_user_kb_document(db: Session) -> tuple[User, KnowledgeBase, Document]:

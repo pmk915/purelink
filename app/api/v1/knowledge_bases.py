@@ -81,7 +81,6 @@ from app.services.conversation import (
     persist_question_answer_exchange,
 )
 from app.services.qa import AnswerGenerationError, answer_question
-from app.services.qa_intent import QAIntent, classify_qa_intent
 from app.services.retrieval import (
     RetrievalMode,
     RetrievalRequest,
@@ -1210,6 +1209,9 @@ async def retrieve_personal_knowledge_base_chunks_endpoint(
         query=payload.query,
         top_k=payload.top_k,
         mode=retrieval_result.mode.value,
+        requested_mode=retrieval_result.requested_mode.value if retrieval_result.requested_mode else None,
+        selected_mode=retrieval_result.selected_mode.value if retrieval_result.selected_mode else None,
+        router_reason=retrieval_result.router_reason,
         used_reranker=retrieval_result.used_reranker,
         trace_id=retrieval_result.trace_id,
         results=[
@@ -1266,11 +1268,6 @@ async def ask_personal_knowledge_base_endpoint(
 
     settings = get_settings()
     vector_root = resolve_vector_store_root(settings.vector_store_dir, base_dir=BASE_DIR)
-    retrieval_mode = (
-        RetrievalMode.OVERVIEW
-        if classify_qa_intent(payload.question) == QAIntent.KB_OVERVIEW
-        else RetrievalMode.CHUNK_ONLY
-    )
     try:
         retrieval_result = await retrieve_knowledge(
             RetrievalRequest(
@@ -1283,7 +1280,7 @@ async def ask_personal_knowledge_base_endpoint(
                 query=payload.question,
                 evidence_query=payload.question,
                 top_k=payload.top_k,
-                mode=retrieval_mode,
+                mode=RetrievalMode(payload.mode),
                 required_review_status=DocumentReviewStatus.NOT_REQUIRED,
             )
         )
@@ -1342,6 +1339,9 @@ async def ask_personal_knowledge_base_endpoint(
         citations=qa_result.citations,
         intent=qa_result.intent,
         retrieval_mode=retrieval_result.mode.value,
+        requested_mode=retrieval_result.requested_mode.value if retrieval_result.requested_mode else None,
+        selected_mode=retrieval_result.selected_mode.value if retrieval_result.selected_mode else None,
+        router_reason=retrieval_result.router_reason,
         used_reranker=retrieval_result.used_reranker,
         trace_id=retrieval_result.trace_id,
     )

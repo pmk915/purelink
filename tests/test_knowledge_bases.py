@@ -42,6 +42,16 @@ def test_retrieval_query_request_accepts_hybrid_text_mode() -> None:
     assert payload.mode == "hybrid_text"
 
 
+def test_retrieval_query_request_accepts_auto_mode() -> None:
+    payload = RetrievalQueryRequest(
+        query="CHUNK_STRATEGY 在哪里配置",
+        top_k=3,
+        mode="auto",
+    )
+
+    assert payload.mode == "auto"
+
+
 @pytest.fixture
 def test_session_factory() -> sessionmaker:
     engine = create_engine(

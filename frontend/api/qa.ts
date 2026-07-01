@@ -14,7 +14,7 @@ export function retrievePersonal(
 export function askPersonal(
   token: string,
   kbId: number,
-  payload: { question: string; top_k: number; conversation_id?: number | null }
+  payload: { question: string; top_k: number; conversation_id?: number | null; mode?: RetrievalMode }
 ) {
   return apiClient.post<AskResponse>(`/knowledge-bases/${kbId}/ask`, payload, token);
 }
@@ -36,7 +36,7 @@ export function askTeam(
   token: string,
   teamId: number,
   kbId: number,
-  payload: { question: string; top_k: number; conversation_id?: number | null }
+  payload: { question: string; top_k: number; conversation_id?: number | null; mode?: RetrievalMode }
 ) {
   return apiClient.post<AskResponse>(
     `/teams/${teamId}/knowledge-bases/${kbId}/ask`,

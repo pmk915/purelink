@@ -44,16 +44,19 @@ ask 接口返回结构：
 
 当前支持的检索模式：
 
+- `RetrievalMode.AUTO`：规则版 Query Router，先根据 query 选择真实检索模式
 - `RetrievalMode.CHUNK_ONLY`：复用当前 chunk-level hybrid 检索、rerank 和 DB fallback 行为
 - `RetrievalMode.OVERVIEW`：通过 adapter 复用现有 overview 检索
 - `RetrievalMode.GRAPH_VECTOR_MIX`：先取 vector candidates，再加入轻量 graph candidates，合并后可交给 reranker
+- `RetrievalMode.HYBRID_TEXT`：将 keyword candidates 与 vector candidates 合并，用于 API path、配置项、文件路径、命令、错误码等精确技术词
 
-未来模式（如 hybrid text、graph local / global）仍然保留为占位，当前会 fallback 到 `CHUNK_ONLY`。
+未来模式（如 graph local / global）仍然保留为占位，当前会 fallback 到 `CHUNK_ONLY`。
 
 `RetrievalResult` 会包含：
 
 - `evidences`：citation-ready evidence
 - `context_text`：带 `[S1]` / `[S2]` 标记的 LLM context
+- `requested_mode` / `selected_mode` / `router_reason`：记录用户请求模式、实际执行模式和规则 router 原因
 - `metadata.context_chunks`：保留给当前 QA prompt 和可靠性判断使用的 chunk 对象
 - `metadata.evidence_units`：保留给当前 citation 生成使用的 citation unit 候选
 
@@ -105,6 +108,7 @@ M5 新增 retrieval trace，用于调试和评估 RAG 检索质量。
 
 - trace 由 `retrieval_service.retrieve()` 生成。
 - trace header 记录 query、retrieval mode、top_k、provider metadata、reranker 配置、初始候选数量和最终 evidence 数量。
+- trace metadata 记录 `requested_mode`、`selected_mode`、`router_reason`、`router_type`。
 - trace item 关联 document、chunk、citation unit。
 - trace item 记录 initial rank、rerank rank、final rank、vector score、rerank score、final score。
 - trace item 标记 `selected_for_context`，说明哪些 evidence 进入最终 context。

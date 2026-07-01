@@ -13,6 +13,7 @@ class QuestionAnswerRequest(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
     top_k: int = Field(default=5, ge=1, le=20)
     conversation_id: int | None = Field(default=None, ge=1)
+    mode: str = "auto"
 
     @field_validator("question")
     @classmethod
@@ -20,6 +21,15 @@ class QuestionAnswerRequest(BaseModel):
         normalized = value.strip()
         if not normalized:
             raise ValueError("Question cannot be empty.")
+        return normalized
+
+    @field_validator("mode")
+    @classmethod
+    def normalize_mode(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        supported = {"auto", "chunk_only", "overview", "graph_vector_mix", "hybrid_text"}
+        if normalized not in supported:
+            raise ValueError("Unsupported retrieval mode.")
         return normalized
 
 
@@ -59,5 +69,8 @@ class QuestionAnswerResponse(BaseModel):
     citations: list[CitationRead]
     intent: str | None = None
     retrieval_mode: str | None = None
+    requested_mode: str | None = None
+    selected_mode: str | None = None
+    router_reason: str | None = None
     used_reranker: bool | None = None
     trace_id: int | str | None = None

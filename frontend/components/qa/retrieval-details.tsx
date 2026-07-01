@@ -8,17 +8,25 @@ import type { RetrievalMode } from "@/types";
 
 export function RetrievalDetails({
   retrievalMode,
+  requestedMode,
+  selectedMode,
+  routerReason,
   usedReranker,
   traceId,
   evidenceCount
 }: {
   retrievalMode?: RetrievalMode | string | null;
+  requestedMode?: RetrievalMode | string | null;
+  selectedMode?: RetrievalMode | string | null;
+  routerReason?: string | null;
   usedReranker?: boolean | null;
   traceId?: string | number | null;
   evidenceCount: number;
 }) {
   const { messages } = useI18n();
   const [copied, setCopied] = useState(false);
+  const displayMode = selectedMode ?? retrievalMode;
+  const isAutoRouted = requestedMode === "auto" && Boolean(selectedMode);
 
   return (
     <details className="rounded-2xl border border-border/60 bg-secondary/50 px-4 py-3 text-sm text-muted-foreground">
@@ -27,7 +35,16 @@ export function RetrievalDetails({
       </summary>
       <div className="mt-3 grid gap-2">
         <p>{messages.qa.evidenceCount(evidenceCount)}</p>
-        {retrievalMode ? <p>{messages.qa.retrievalMode}: {retrievalMode}</p> : null}
+        {isAutoRouted ? (
+          <>
+            <p>
+              {messages.qa.selectedRetrievalMode}: {messages.qa.retrievalModeLabel(String(selectedMode))}
+            </p>
+            {routerReason ? <p>{messages.qa.routerReason}: {routerReason}</p> : null}
+          </>
+        ) : displayMode ? (
+          <p>{messages.qa.retrievalMode}: {messages.qa.retrievalModeLabel(String(displayMode))}</p>
+        ) : null}
         {typeof usedReranker === "boolean" ? (
           <p>{messages.qa.usedReranker}: {usedReranker ? messages.common.yes : messages.common.no}</p>
         ) : null}

@@ -139,7 +139,7 @@ class RetrievalQueryRequest(BaseModel):
     @classmethod
     def normalize_mode(cls, value: str) -> str:
         normalized = value.strip().lower()
-        supported = {"chunk_only", "overview", "graph_vector_mix", "hybrid_text"}
+        supported = {"auto", "chunk_only", "overview", "graph_vector_mix", "hybrid_text"}
         if normalized not in supported:
             raise ValueError("Unsupported retrieval mode.")
         return normalized
@@ -182,6 +182,9 @@ class RetrievalResponse(BaseModel):
     query: str
     top_k: int
     mode: str | None = None
+    requested_mode: str | None = None
+    selected_mode: str | None = None
+    router_reason: str | None = None
     used_reranker: bool | None = None
     trace_id: int | str | None = None
     results: list[RetrievedChunkRead]

@@ -41,7 +41,8 @@ export function AskWorkspace({
     defaultValues: {
       question: "",
       top_k: 5,
-      conversation_id: null
+      conversation_id: null,
+      mode: "auto"
     }
   });
 
@@ -87,7 +88,8 @@ export function AskWorkspace({
               askForm.reset({
                 question: "",
                 top_k: values.top_k,
-                conversation_id: result.conversation_id
+                conversation_id: result.conversation_id,
+                mode: "auto"
               });
             } catch (error) {
               console.error("ask failed", { error });
@@ -157,6 +159,9 @@ export function AskWorkspace({
             </div>
             <RetrievalDetails
               retrievalMode={latestAnswer.retrieval_mode}
+              requestedMode={latestAnswer.requested_mode}
+              selectedMode={latestAnswer.selected_mode}
+              routerReason={latestAnswer.router_reason}
               usedReranker={latestAnswer.used_reranker}
               traceId={latestAnswer.trace_id}
               evidenceCount={latestAnswer.citations.length}

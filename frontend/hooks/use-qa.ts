@@ -21,6 +21,7 @@ export function useAskPersonal(token: string | null, kbId: number) {
       question: string;
       top_k: number;
       conversation_id?: number | null;
+      mode?: RetrievalMode;
     }) => qaApi.askPersonal(token as string, kbId, payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["conversations"] });
@@ -42,6 +43,7 @@ export function useAskTeam(token: string | null, teamId: number, kbId: number) {
       question: string;
       top_k: number;
       conversation_id?: number | null;
+      mode?: RetrievalMode;
     }) => qaApi.askTeam(token as string, teamId, kbId, payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["conversations"] });

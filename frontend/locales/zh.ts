@@ -340,6 +340,16 @@ export const zh: Messages = {
       "这里会显示当前前端可见的 citation/evidence 信息；trace_id 等字段会在后端响应提供后自动展示。",
     evidenceCount: (count: number) => `证据数量：${count}`,
     retrievalMode: "检索模式",
+    selectedRetrievalMode: "系统选择",
+    routerReason: "原因",
+    retrievalModeLabel: (mode: string) =>
+      ({
+        auto: "自动选择",
+        chunk_only: "普通片段检索",
+        overview: "概览检索",
+        graph_vector_mix: "图谱 + 向量混合检索",
+        hybrid_text: "关键词 + 向量混合检索"
+      })[mode] ?? mode,
     usedReranker: "是否使用重排",
     openConversation: (id: number) => `打开会话 #${id}`
   },

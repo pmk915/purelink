@@ -29,7 +29,7 @@ export function RetrievalDebugPanel({
     defaultValues: {
       query: "",
       top_k: 8,
-      mode: "chunk_only"
+      mode: "auto"
     }
   });
 
@@ -71,9 +71,10 @@ export function RetrievalDebugPanel({
                   className="flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
                   {...form.register("mode")}
                 >
-                  <option value="chunk_only">chunk_only</option>
-                  <option value="overview">overview</option>
-                  <option value="graph_vector_mix">graph_vector_mix</option>
+                  <option value="auto">{messages.qa.retrievalModeLabel("auto")}</option>
+                  <option value="chunk_only">{messages.qa.retrievalModeLabel("chunk_only")}</option>
+                  <option value="overview">{messages.qa.retrievalModeLabel("overview")}</option>
+                  <option value="graph_vector_mix">{messages.qa.retrievalModeLabel("graph_vector_mix")}</option>
                   <option value="hybrid_text">{messages.retrievalDebug.hybridTextMode}</option>
                 </select>
               </div>
@@ -106,6 +107,9 @@ export function RetrievalDebugPanel({
       <div className="space-y-4">
         <RetrievalDetails
           retrievalMode={result?.mode}
+          requestedMode={result?.requested_mode}
+          selectedMode={result?.selected_mode}
+          routerReason={result?.router_reason}
           usedReranker={result?.used_reranker}
           traceId={result?.trace_id}
           evidenceCount={result?.results.length ?? 0}

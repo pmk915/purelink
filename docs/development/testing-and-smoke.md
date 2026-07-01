@@ -47,8 +47,10 @@ The workspace Retrieval Debug tab can compare:
 - `overview`
 - `graph_vector_mix`
 - `hybrid_text`
+- `auto`
 
 Use `hybrid_text` when validating exact technical terms such as API paths, config keys, file paths, commands, error codes, or migration ids.
+Use `auto` when validating the rule-based query router and confirm the response includes `requested_mode`, `selected_mode`, and `router_reason`.
 
 ## GitHub Actions
 
