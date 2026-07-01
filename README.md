@@ -6,492 +6,172 @@
 ![Next.js](https://img.shields.io/badge/Next.js-frontend-black.svg)
 ![Docker](https://img.shields.io/badge/Docker-ready-2496ED.svg)
 
-PureLink Core 是一个轻量级 local-first 文本知识库问答系统，专注 `txt` / `md` / `docx` / 普通文本型 `pdf` 的上传、处理、语义检索和带来源问答。
+PureLink is an engineering-focused RAG knowledge base system for personal and team workspaces. It emphasizes document-structure-aware ingestion, hybrid retrieval, lightweight GraphRAG, citation grounding, retrieval traceability, RAG evaluation, and productized debugging tools.
 
-它不是多模态助手、视频处理系统，也不是默认启用 OCR / ASR 的重型 RAG 平台。当前 `Core` 版本的边界很明确：围绕团队内部文本知识沉淀、检索、问答和来源追踪，把默认部署保持在轻量、稳定、可自部署的范围内。
+It is not a production SaaS template, a full LightRAG clone, a graph database product, or a multimodal assistant. The current core focuses on text knowledge bases with clear local deployment and evaluation paths.
 
-PureLink is a local-first, cloud-ready, self-hosted AI knowledge workspace for text knowledge bases.
+## What PureLink Solves
 
-## What Is PureLink Core?
+Typical RAG demos often hide the hard parts: document structure gets flattened, retrieval modes are hard to compare, citations are unstable, failures require reading backend logs, and there is no repeatable eval baseline.
 
-PureLink Core 面向这样的主路径：
+PureLink turns those concerns into visible engineering surfaces:
+
+- Personal and team knowledge base workspaces.
+- Document ingestion with parser routing, document blocks, chunks, citation units, vector index metadata, and graph index metadata.
+- Retrieval modes for `chunk_only`, `overview`, `graph_vector_mix`, `hybrid_text`, and `auto`.
+- Citation-grounded Q&A and retrieval details.
+- Retrieval trace metadata for debugging recall, reranking, router decisions, and final evidence.
+- Document Processing Inspector for RAG readiness checks.
+- Graph Explorer for entity search, relation filters, one-hop neighborhoods, and source provenance.
+- A reproducible RAG eval baseline over repository docs.
+
+## Architecture Overview
 
 ```text
-注册登录 -> 创建知识库 -> 上传 txt/md/docx/pdf -> 自动处理 -> 建立索引 -> 提问 -> 查看 answer + citations
+Next.js frontend
+  -> FastAPI API
+  -> PostgreSQL business data
+  -> Redis processing queue
+  -> worker document parsing/chunking/indexing
+  -> local vector store
 ```
 
-适合场景：
+Core backend areas:
 
-- 个人本机部署
-- 小团队内网部署
-- 实验室 / 项目组服务器
-- 自己控制数据和模型配置的云服务器
+- `app/api/v1/`: auth, personal KB, team KB, documents, QA, graph, and status endpoints.
+- `app/services/document_parsing/`: parser registry and `DocumentBlock` creation.
+- `app/services/document_chunking/`: fixed and block-aware chunking.
+- `app/services/retrieval/`: retrieval modes, query router, trace, context, and citations.
+- `app/services/knowledge_graph/`: lightweight GraphRAG extraction, lifecycle cleanup, retrieval, and export.
+- `scripts/eval/`: retrieval/citation eval runners.
 
-## Current Features
+Core frontend areas:
 
-- 用户注册 / 登录
-- 个人知识库 / 团队知识库
-- txt / md / docx / 普通文本型 PDF 上传
-- sha256 文件去重
-- Redis + Worker 异步处理
-- `ProcessingJob` 状态管理、retry、timeout、worker 抢占
-- 文本清洗与质量检测
-- 文档 chunk 化
-- `fastembed` + `BAAI/bge-small-zh-v1.5` 本地语义检索
-- knowledge base 级 `reindex`
-- ask 问答
-- citations 来源引用
-- 轻量 Docker 本地部署
-
-## Current Core Does Not Support
-
-- 图片 OCR
-- 扫描 PDF OCR
-- 音频 / 视频 ASR
-- 多模态图片 / 视频理解
-- 默认 `PyTorch` / `sentence-transformers`
-- MinIO / S3
-- Go file service
-
-这些能力可以进入 Roadmap，但不属于当前 `Core` 默认能力。如果上传不支持的文件，后端会返回 `UNSUPPORTED_FILE_TYPE` 或 `FEATURE_NOT_ENABLED`。
+- `frontend/components/knowledge-bases/knowledge-base-workspace.tsx`
+- `frontend/components/qa/`
+- `frontend/components/retrieval/`
+- `frontend/components/documents/document-status-dialog.tsx`
+- `frontend/components/graph/graph-explorer.tsx`
 
 ## Quick Start
 
-### 环境要求
+Prerequisites:
 
-- Docker Desktop 或 Linux Docker Engine
-- Docker Compose v2
-- 建议 Python 3.12（本地跑测试时）
-- 建议 Node.js 24 LTS（本地跑前端 lint/build 时）
+- Python 3.12
+- Node.js 24
+- Docker Engine or Docker Desktop with Docker Compose v2
 
-### 启动服务
+Install Python dependencies if you are running tests locally:
 
 ```bash
-git clone https://github.com/pmk915/purelink.git
-cd purelink
-cp .env.example .env
-docker compose up -d --build api worker frontend
-make check
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
 ```
 
-访问入口：
+Install frontend dependencies:
+
+```bash
+cd frontend
+npm install
+cd ..
+```
+
+## Docker Quick Start
+
+```bash
+cp .env.example .env
+docker compose up -d --build db redis api worker frontend
+docker compose ps
+```
+
+Open:
 
 - Frontend: `http://localhost:3000`
-- API: `http://localhost:8000/api/v1`
+- API: `http://localhost:8000`
 - Swagger: `http://localhost:8000/docs`
-- Provider status: `http://localhost:8000/api/v1/system/providers`
 
-默认不预置账号。启动后需要先注册，再创建知识库并上传文件。
-
-### 最小演示流程
-
-1. 打开 `http://localhost:3000`
-2. 注册账号并登录
-3. 创建个人知识库
-4. 上传 `sample_docs/sample.txt`
-5. 上传 `sample_docs/sample.md`
-6. 也可以额外上传任意一个可复制文字的普通文本型 PDF
-7. 等待文档状态变为“可问答”
-8. 在问答区提问
-9. 查看 answer 下方“参考来源”
-
-`sample_docs/` 中的文件用于本地演示，不包含隐私内容。
-
-## 配置说明
-
-当前 `Core` 默认推荐配置：
-
-```env
-EMBEDDING_PROVIDER=fastembed
-EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
-EMBEDDING_MODEL_CACHE_DIR=/app/models/embedding
-EMBEDDING_NORMALIZE=true
-
-LLM_PROVIDER=heuristic
-
-OCR_PROVIDER=disabled
-ASR_PROVIDER=disabled
-MULTIMODAL_PROVIDER=disabled
-
-RETRIEVAL_MIN_SCORE=0.15
-CITATION_UNIT_MIN_CHARS=40
-CITATION_UNIT_TARGET_CHARS=120
-CITATION_UNIT_MAX_CHARS=300
-CITATION_UNIT_MAX_SENTENCES=3
-MAX_CITATIONS=6
-```
-
-说明：
-
-- `EMBEDDING_PROVIDER=fastembed` 是默认本地语义检索方案
-- 默认模型为 `BAAI/bge-small-zh-v1.5`
-- 模型缓存放在宿主机 `./models`，容器内挂载到 `/app/models`
-- 模型权重不会提交到 Git，也不会被打进默认 Docker 镜像
-- `LLM_PROVIDER=heuristic` 适合本地 demo；如需更强回答能力，可改为 `openai_compatible` 或 `deepseek`
-- `OCR_PROVIDER`、`ASR_PROVIDER`、`MULTIMODAL_PROVIDER` 在 Core 中默认关闭
-- `RERANKER_ENABLED=false` 是默认值；可选 reranker 已接入 retrieval pipeline，但默认不启用
-- `RETRIEVAL_MIN_SCORE` 用于控制“是否有足够可靠来源可以回答”
-- citation 会先从 retrieval chunk 中挑选更短的 `citation unit` 片段，再返回给前端展示
-
-如果你不想下载任何 embedding 模型，可以切到：
-
-```env
-EMBEDDING_PROVIDER=local_hashed_bow
-EMBEDDING_MODEL=
-```
-
-但检索质量会明显弱于真实语义 embedding。
-
-## RAG v2 Highlights
-
-PureLink includes an engineering-oriented RAG v2 core:
-
-- Unified Retrieval Layer: separates evidence retrieval from answer generation.
-- Provider Layer: abstracts embedding, reranker, and LLM providers.
-- Optional Reranker: supports initial recall -> rerank -> final evidence selection.
-- Index Metadata: records embedding provider/model/dimension for vector index compatibility.
-- Retrieval Trace: records candidate evidence, scores, rerank effects, selected evidence, and filter reasons.
-- Document Blocks: normalizes parsed documents into structured blocks before chunking/indexing.
-- Lightweight GraphRAG: extracts simple entities/relations and supports graph-vector mixed retrieval.
-- Hybrid Text Retrieval: combines vector candidates with deterministic keyword candidates for API paths, config keys, file names, commands, error codes, and migration ids.
-- RAG Evaluation: JSONL-based evaluation harness for retrieval hit, citation hit, keyword coverage, and top-k document hit.
-
-PureLink does not aim to fully replicate LightRAG or provide full multimodal RAG yet. The current GraphRAG implementation is lightweight and evidence-grounded.
-
-## Product UX
-
-PureLink includes user-facing RAG evidence display and knowledge base management. Personal knowledge bases can be deleted by their owners with confirmation, while team knowledge base deletion is restricted to team admins. The knowledge base workspace also shows a compact RAG health summary for document, vector index, and graph index status.
-
-The M13 workspace organizes each knowledge base into Ask, Documents, Graph, Retrieval Debug, Health, and Settings tabs. This is LightRAG-inspired information architecture, not a full LightRAG clone or a full graph visualization system.
-
-## RAG Model Providers
-
-PureLink M2 增加了 `app/providers/`，把 embedding、reranker 和 LLM 的接入层抽成 provider 接口。当前默认仍然是轻量本地配置，方便 Docker 本地部署和 smoke test。
-
-当前默认：
-
-- Embedding: `fastembed` + `BAAI/bge-small-zh-v1.5`
-- Reranker: disabled / `noop`
-- LLM: 沿用现有 `LLM_PROVIDER` 配置
-
-Reranker 说明：
-
-- 默认关闭，保持本地部署轻量。
-- 开发/测试可启用 `local_rule_reranker`，这是确定性的词面重排，不下载模型。
-- 增强本地重排可配置 `flagembedding` + `BAAI/bge-reranker-v2-m3`，但需要额外安装可选依赖并承担更高内存和启动成本。
-
-典型 reranking 流程：
-
-1. 初始召回 top 50 candidates。
-2. 对 query-candidate pairs 做 rerank。
-3. 保留最终 top 8 evidences 给回答生成。
-
-推荐预设：
-
-- Lightweight local：`BAAI/bge-small-zh-v1.5` embedding，reranker disabled
-- Enhanced local（可选）：`BAAI/bge-small-zh-v1.5` embedding，`BAAI/bge-reranker-v2-m3` reranker
-- Cloud/API（未来选项）：OpenAI-compatible embeddings，外部 rerank API
-
-注意：切换 embedding provider 或 model 后，已有向量索引需要重建，否则检索结果可能不可靠。
-不要在低资源机器上启用大型 reranker，除非你已经评估过内存和模型加载成本。
-
-## Index Metadata and Rebuild Safety
-
-PureLink records which embedding provider and model were used to create vector indexes. Each indexed document has vector index metadata with provider, model name, vector dimension when known, status, and indexed time.
-
-Changing `EMBEDDING_PROVIDER` or `EMBEDDING_MODEL` does not automatically make existing vectors compatible. Run a reindex workflow when switching embedding models.
-
-Legacy documents created before M4 may not have `document_indexes` rows. They remain retrievable for backward compatibility, but newly indexed documents record explicit index metadata for stale-index detection and future rebuild workflows.
-
-## Retrieval Trace
-
-PureLink records retrieval traces for debugging RAG quality. A trace can show the query, retrieval mode, initial candidate count, selected evidence count, provider metadata, reranker usage, candidate ranks, rerank scores, selected evidences, and filtered reasons.
-
-This helps diagnose whether a poor answer came from retrieval, reranking, stale or incompatible indexes, citation selection, or context construction. M5 keeps this backend-only; it does not add frontend trace visualization.
-
-## Lightweight RAG Evaluation
-
-PureLink includes a manual RAG evaluation harness for local retrieval quality checks. It loads JSONL cases and reports retrieval hit, citation hit, keyword coverage, reranker usage, and trace availability.
+Useful Docker commands:
 
 ```bash
-.venv/bin/python scripts/eval/run_rag_eval.py \
-  --cases tests/eval/purelink_rag_cases.jsonl \
-  --output tests/eval/reports/latest.json
+docker compose logs -f api worker frontend
+docker compose restart api worker frontend
+docker compose down
+docker compose down -v
 ```
 
-The default JSONL file is a template. Update `knowledge_base_id`, `user_id`, and expected document names for your local test KB before running `make eval-rag`.
+`docker compose down -v` deletes the database volume. Use it only when you intentionally want to reset local data.
 
-## Lightweight GraphRAG
-
-PureLink includes a lightweight GraphRAG prototype inspired by LightRAG. It extracts simple entities and relations from indexed documents, stores them in PostgreSQL, and supports `graph_vector_mix` retrieval to merge graph candidates with vector candidates.
-
-This is intentionally not a full LightRAG implementation:
-
-- no external graph database
-- no complex multi-hop reasoning
-- no graph community detection
-- no graph visualization UI
-
-Graph relations remain grounded to source document, chunk, and citation-unit records when possible. Normal vector RAG remains the default path.
-
-## 接入大模型回答
-
-如果你只是想接入一个现成的大模型 API，而不是改代码，当前最小路径是直接配置：
-
-```env
-LLM_PROVIDER=openai_compatible
-LLM_API_BASE_URL=https://api.example.com/v1
-LLM_API_KEY=your-api-key
-LLM_MODEL=your-chat-model
-LLM_TIMEOUT_SECONDS=30
-```
-
-然后重启 API / worker：
+## Smoke Test
 
 ```bash
-docker compose up -d --build api worker
+make smoke
 ```
 
-### DeepSeek 配置示例
+The smoke test starts the Docker stack, registers a user, creates a personal KB, uploads a document, runs retrieval, asks a question, and checks conversation persistence.
 
-如果你要接 DeepSeek，当前支持直接使用：
+If Docker reports a socket permission error, run Docker Desktop or add your user to the Docker group, then open a new shell. The command needs access to `/var/run/docker.sock`.
 
-```env
-LLM_PROVIDER=deepseek
-LLM_API_BASE_URL=https://api.deepseek.com
-LLM_API_KEY=your-deepseek-api-key
-# 或者直接使用 DEEPSEEK_API_KEY=your-deepseek-api-key
-LLM_MODEL=deepseek-v4-pro
-LLM_TIMEOUT_SECONDS=30
-LLM_REASONING_EFFORT=high
-LLM_THINKING_ENABLED=true
-```
-
-说明：
-
-- `LLM_API_BASE_URL` 对 DeepSeek 应该写 `https://api.deepseek.com`
-- `LLM_API_KEY` 和 `DEEPSEEK_API_KEY` 当前都可用，优先读取 `LLM_API_KEY`
-- 当前后端会请求 `POST /chat/completions`
-- `LLM_REASONING_EFFORT` 和 `LLM_THINKING_ENABLED` 会透传到 DeepSeek 请求体
-- 如果你不需要 thinking 模式，可以把 `LLM_THINKING_ENABLED=false`
-
-### 当前代码入口在哪里
-
-如果你想看 PureLink 现在是在哪里接入大模型回答的，核心文件是：
-
-- [app/services/qa.py](app/services/qa.py)
-  - `answer_question()`：问答主入口
-  - `resolve_answer_generator()`：根据 `LLM_PROVIDER` 选择回答实现
-  - `OpenAICompatibleAnswerGenerator`：当前默认的外部大模型回答器
-- [app/services/retrieval/](app/services/retrieval/)
-  - `retrieval_service.retrieve()`：知识检索统一入口
-  - `types.py`：`RetrievalMode` / `RetrievalRequest` / `RetrievalResult`
-  - `chunk_retriever.py`：复用当前 chunk-level hybrid 检索
-  - `overview_retriever_adapter.py`：适配现有知识库概览检索
-  - `context_builder.py` / `citation_builder.py`：生成 LLM context 和 citation-ready evidence
-- [app/providers/](app/providers/)
-  - `embedding/`：embedding provider 接口、factory 和现有实现 adapter
-  - `reranker/`：reranker provider 接口和 no-op 默认实现
-  - `llm/`：LLM provider 接口和 legacy adapter
-- [app/services/llm.py](app/services/llm.py)
-  - `generate_openai_compatible_chat_completion()`：真正发起 HTTP 请求的地方
-- [app/schemas/llm.py](app/schemas/llm.py)
-  - `HEURISTIC_PROVIDER`
-  - `OPENAI_COMPATIBLE_PROVIDER`
-  - `DEEPSEEK_PROVIDER`
-  - `SUPPORTED_LLM_PROVIDERS`
-- [app/core/config.py](app/core/config.py)
-  - 读取 `LLM_PROVIDER`、`LLM_API_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`
-  - 读取 `LLM_REASONING_EFFORT`、`LLM_THINKING_ENABLED`
-
-### 如果要新增一个新的 LLM provider，应该改哪里
-
-建议按这条路径改：
-
-1. 在 [app/schemas/llm.py](app/schemas/llm.py) 增加新的 provider 常量
-2. 在 [app/core/config.py](app/core/config.py) 复用现有配置项，或补充新 provider 需要的配置
-3. 在 [app/services/llm.py](app/services/llm.py) 新增对应的请求函数
-4. 在 [app/services/qa.py](app/services/qa.py) 新增一个新的 `AnswerGenerator` 实现，并接到 `resolve_answer_generator()`
-
-也就是说：
-
-- **问答路由入口不需要改**
-- **retrieval 和 citations 逻辑不需要改**
-- 真正需要扩展的是 `qa.py` 里的回答器选择逻辑，以及 `llm.py` 里的 provider 调用实现
-
-### 为什么入口放在这里
-
-PureLink 当前把问答链路拆成两段：
-
-- retrieval / citations：由后端自己控制，保证来源可靠
-- answer generation：由 `LLM_PROVIDER` 决定
-
-这样做的好处是，你可以替换回答模型，但不用动 citations 生成逻辑，也不会让大模型自己编来源。
-
-## Citation 与可靠性策略
-
-问答接口会直接返回结构化 `citations`，不是让大模型自己编造来源。
-
-当前 Core 的 chunk metadata 规范：
-
-- txt: `source_type=text`，`source_locator=text:chunk:<chunk_index>`
-- markdown: `source_type=markdown`，`source_locator=heading:<heading>` 或 `markdown:chunk:<chunk_index>`
-- pdf: `source_type=pdf`，`page_number=<n>`，`source_locator=page:<n>`
-
-如果没有检索到结果，或者最高分低于 `RETRIEVAL_MIN_SCORE`，系统会返回：
-
-```text
-当前知识库中没有找到足够可靠的依据，无法确认该问题。
-```
-
-同时 `citations=[]`，避免无依据作答。
-
-## 架构概览
-
-```mermaid
-flowchart LR
-  U[User] --> FE[Next.js Frontend]
-  FE --> API[FastAPI API]
-  API --> PG[(PostgreSQL)]
-  API --> R[(Redis Queue)]
-  R --> W[Processing Worker]
-  W --> PG
-  W --> VS[(Local Vector Index)]
-  W --> MC[(Model Cache)]
-  API --> VS
-```
-
-系统组件说明：
-
-- Frontend：登录、知识库管理、上传、问答、citation 展示
-- API：鉴权、权限控制、上传入口、ask/reindex 接口
-- PostgreSQL：业务主数据
-- Redis：异步任务队列
-- Worker：文档处理和索引
-- Local Vector Index：本地索引产物
-- Model Cache：`fastembed` 模型缓存
-
-## 文件处理流程
-
-```mermaid
-flowchart TD
-  A[Upload txt/md/docx/pdf] --> B[Auth and KB permission check]
-  B --> C[Compute sha256]
-  C --> D{Duplicate in KB?}
-  D -->|Yes| E[Return duplicate document]
-  D -->|No| F[Save file and create Document]
-  F --> G[Create ProcessingJob]
-  G --> H[Worker claims queued job]
-  H --> I[Parse into document blocks]
-  I --> J[Text quality check]
-  J --> K[Chunk and citation persist]
-  K --> L[Embedding and index]
-  L --> M[Document indexed]
-  M --> N[Ask with citations]
-```
-
-这条链路强调两点：
-
-- 上传接口只做轻量入口工作，不同步解析文件
-- 文本质量不达标时，chunk 不会入库，避免脏数据污染索引
-
-## Document Parsing and Block Schema
-
-PureLink 会把解析结果标准化为 `document_blocks`，当前支持 heading、text、table、code 等结构化 block，并保留 image、formula、unknown 类型给后续扩展。
-
-当前 Core 仍然走轻量文本解析：
-
-- `.txt`：按文本内容生成 block
-- `.md`：识别 heading、段落、pipe table 和 fenced code
-- `.docx`：复用现有 DOCX 文本解析并转换为 blocks
-- `.pdf`：复用文本型 PDF 解析并按已有 segment/page 信息转换为 blocks
-
-下游 chunking、citation 和 embedding 行为保持兼容：默认 `CHUNK_STRATEGY=fixed` 继续使用稳定的文本切分路径；可选 `CHUNK_STRATEGY=block_aware` 会利用 `document_blocks` 保留 heading、table、code 等结构来生成更贴近原文结构的 chunks。M6/M14 不包含 OCR、VLM 或外部 parser 服务。
-
-## 问答流程
-
-```mermaid
-flowchart TD
-  Q[User question] --> A[Check KB access]
-  A --> B[Retrieve relevant chunks]
-  B --> C{Reliable source?}
-  C -->|No| D[Return no reliable source answer]
-  C -->|Yes| E[Build context]
-  E --> F[LLM or heuristic answer]
-  F --> G[Return answer and citations]
-```
-
-## 项目设计取舍
-
-当前版本不默认做多模态，原因很直接：
-
-- 轻量开源项目不应该默认带上 OCR / ASR / 视频 / 多模态重依赖
-- 当前核心业务是团队文本知识库，而不是通用多模态助手
-- 语义检索是核心智能能力，先把文本处理、索引、问答和来源追踪做稳
-- OCR、ASR、Go file service 等更适合作为未来扩展，而不是默认路径
-
-## 支持的文件类型
-
-| 类型 | 格式 | 说明 |
-| --- | --- | --- |
-| Text | `.txt`, `.md` | 推荐首次 demo 使用 |
-| PDF | `.pdf` | 仅支持普通文本型 PDF |
-
-## 相关文档
-
-- [文档索引](docs/README.md)
-- [架构说明](docs/architecture.md)
-- [RAG v2 Architecture](docs/architecture/rag-v2-architecture.md)
-- [RAG Pipeline](docs/rag/rag-pipeline.md)
-- [Lightweight GraphRAG](docs/rag/lightweight-graphrag.md)
-- [RAG Evaluation](docs/rag/rag-evaluation.md)
-- [Docker Deployment](docs/deployment/docker-deployment.md)
-- [RAG Project Story](docs/interview/purelink-rag-project-story.md)
-- [RAG Demo Guide](docs/interview/rag-v2-demo-guide.md)
-- [处理流水线](docs/processing-pipeline.md)
-- [任务状态机](docs/job-state-machine.md)
-- [检索与 citations](docs/retrieval-and-citations.md)
-- [本地演示指南](docs/demo-guide.md)
-- [项目复盘 / 面试说明](docs/project-notes.md)
-- [故障排查](docs/troubleshooting.md)
-
-## Roadmap
-
-### Short-term
-
-- 继续优化 txt / md / docx / 普通文本型 PDF 的处理稳定性
-- 改善 fastembed 检索质量和 reindex 体验
-- 完善 citation 展示和 source preview 体验
-- 持续收紧默认部署边界
-
-### Mid-term
-
-- OCR extension
-- media extension
-- `sentence_transformers` advanced embedding
-- 云服务器部署指南
-- 更完整的管理员调试视图
-
-### Long-term
-
-- Go file service
-- MinIO / S3
-- pgvector / Qdrant / FAISS 可替换索引后端
-- 更细粒度权限与审计
-
-## 验证命令
+## RAG Eval Baseline
 
 ```bash
-python3 -m compileall app tests
-PYTHONPATH=/home/pmk/projects/purelink ./.venv/bin/pytest -q
+make eval-rag-baseline
+```
+
+This builds temporary eval KBs from repository docs and compares:
+
+- `fixed + chunk_only`
+- `block_aware + chunk_only`
+- `block_aware + hybrid_text`
+- `block_aware + graph_vector_mix`
+- `block_aware + auto`
+
+Current results are recorded in [docs/interview/rag-eval-baseline-summary.md](docs/interview/rag-eval-baseline-summary.md). The numbers are a regression baseline, not a statistical benchmark.
+
+## Test Commands
+
+```bash
+make test
 cd frontend && npm run lint
 cd frontend && npm run build
-bash -n scripts/check_stack.sh
-docker compose --env-file .env.example config
-docker compose up -d --build api worker frontend
-make check
-git diff --check
+make smoke
+make eval-rag-baseline
 ```
+
+For a demo-readiness checklist, see [docs/development/testing-and-smoke.md](docs/development/testing-and-smoke.md).
+
+## Interview Demo
+
+Start here:
+
+- [PureLink Interview Demo Guide](docs/interview/purelink-demo-guide.md)
+- [PureLink Project Storyline](docs/interview/project-storyline.md)
+- [Feature Map](docs/interview/feature-map.md)
+- [RAG Eval Talking Points](docs/interview/eval-talking-points.md)
+
+Recommended demo surfaces:
+
+1. KB Workspace tabs: Ask, Documents, Graph, Retrieval Debug, Health, Settings.
+2. Ask normal factual, technical/API/config, relation/dependency, and overview questions.
+3. Show Retrieval Details, selected retrieval mode, trace id, and citations.
+4. Open Document Processing Inspector from a document row.
+5. Open Graph Explorer, filter relations, inspect source snippets, and jump to document status.
+6. Show the eval baseline report and explain the honest findings.
+
+## Key Docs Index
+
+The full documentation index is [docs/README.md](docs/README.md).
+
+High-value entries:
+
+- [KB Workspace](docs/product/kb-workspace.md)
+- [RAG v2 Architecture](docs/architecture/rag-v2-architecture.md)
+- [Retrieval Layer](docs/rag/retrieval-layer.md)
+- [Retrieval and Citations](docs/retrieval-and-citations.md)
+- [Document Blocks](docs/ingestion/document-blocks.md)
+- [File Processing Pipeline](docs/ingestion/file-processing-pipeline.md)
+- [Lightweight GraphRAG](docs/rag/lightweight-graphrag.md)
+- [RAG Evaluation](docs/rag/rag-evaluation.md)
+- [Testing and Smoke](docs/development/testing-and-smoke.md)
 
 ## License
 

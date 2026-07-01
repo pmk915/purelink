@@ -11,6 +11,10 @@ M13 organizes each knowledge base as a RAG workspace rather than a single ask pa
 - Health: document, vector index, and graph index status summary.
 - Settings: metadata and safe destructive actions.
 
+For a step-by-step interview walkthrough, use
+[PureLink Interview Demo Guide](../interview/purelink-demo-guide.md). For a
+feature-to-code map, use [Feature Map](../interview/feature-map.md).
+
 ## Document Processing Inspector
 
 M19 adds a document status dialog from the Documents tab. Each document row has
@@ -55,6 +59,12 @@ The UI intentionally uses the same cards, badges, muted borders, and compact
 actions as the rest of the KB workspace. It avoids canvas visualization and large
 new frontend dependencies.
 
+In interviews, Graph Explorer is best framed as a provenance and debugging
+surface. Show entity search, relation type filtering, one-hop neighborhood,
+source snippets, and the jump from a relation source to Document Processing
+Inspector. Do not describe it as a full graph visualization or multi-hop graph
+reasoning system.
+
 ## Permission Model
 
 - Personal KB owner can access all tabs.
@@ -81,3 +91,11 @@ Retrieval Debug can compare:
 
 Use `hybrid_text` for exact technical terms such as API paths, config keys, file names, commands, error codes, and migration identifiers.
 Use `auto` to inspect the backend-selected retrieval mode and router reason without manually choosing a mode.
+
+## Demo Entry Points
+
+- Ask tab: show citations, Retrieval Details, selected mode, and trace id.
+- Documents tab: open Document Processing Inspector and copy debug info.
+- Graph tab: inspect relation sources and export graph JSON/CSV.
+- Retrieval Debug tab: compare `chunk_only`, `hybrid_text`, `graph_vector_mix`, and `auto`.
+- Health tab: verify document, vector index, and graph index readiness.

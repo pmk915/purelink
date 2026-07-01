@@ -17,6 +17,34 @@ Focused examples:
 .venv/bin/python -m pytest tests/test_document_status.py
 ```
 
+## Recommended Verification Before Demo
+
+Run this set before recording or presenting a demo:
+
+```bash
+make test
+cd frontend && npm run lint
+cd frontend && npm run build
+make smoke
+make eval-rag-baseline
+```
+
+What each command proves:
+
+- `make test`: Python service/API tests and Go worker tests pass.
+- `npm run lint`: frontend code style and static checks pass.
+- `npm run build`: Next.js production build and TypeScript checks pass.
+- `make smoke`: Docker personal flow can register, create a KB, upload/process a document, retrieve, ask, and persist a conversation.
+- `make eval-rag-baseline`: the reproducible retrieval/citation baseline still runs.
+
+If `make smoke` fails with Docker socket permissions, the issue is local Docker
+access rather than PureLink app logic. Ensure Docker is running and the current
+user can access `/var/run/docker.sock`, then open a new shell and rerun.
+
+`make eval-rag-baseline` uses repository docs as the eval corpus. Results can
+change slightly after documentation changes, so update
+`docs/interview/rag-eval-baseline-summary.md` only from actual runner output.
+
 ## Smoke
 
 Personal flow:
