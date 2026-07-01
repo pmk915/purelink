@@ -11,6 +11,22 @@ M13 organizes each knowledge base as a RAG workspace rather than a single ask pa
 - Health: document, vector index, and graph index status summary.
 - Settings: metadata and safe destructive actions.
 
+## Document Processing Inspector
+
+M19 adds a document status dialog from the Documents tab. Each document row has
+a status/debug entry that opens a compact inspector with:
+
+- processing status and RAG-ready badge
+- block, chunk, citation-unit, vector-index, and graph-index counts
+- pipeline checks for processing, document blocks, chunks, citation units, vector index, and graph index
+- warning and error details, including latest processing step and error code/message when available
+- copyable debug JSON for support and troubleshooting
+
+Base RAG readiness requires chunks, citation units, and a ready compatible vector
+index. Graph index status is shown because it affects Graph Explorer and
+`graph_vector_mix`, but a missing graph index is treated as optional and does not
+block base Q&A readiness.
+
 ## Graph Maintenance
 
 The backend now supports lightweight GraphRAG lifecycle operations:
@@ -26,9 +42,10 @@ contributed by that document before the document row is removed.
 ## Permission Model
 
 - Personal KB owner can access all tabs.
+- Personal KB owner can view document status/debug.
 - Personal KB owner can run graph maintenance.
 - Team admin can access all tabs and run graph maintenance.
-- Team member can access Ask, Documents, Graph, and Health, and can export/view graph data.
+- Team member can access Ask, Documents, Graph, and Health, export/view graph data, and view document status/debug.
 - Team member cannot rebuild graph, cleanup orphan entities, or deduplicate relations.
 - Backend permission checks remain authoritative.
 

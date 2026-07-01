@@ -113,6 +113,40 @@ class DocumentRagDebugRead(BaseModel):
     latest_processing_job: LatestProcessingJobDebugRead | None = None
 
 
+class DocumentStatusCheckRead(BaseModel):
+    name: str
+    label: str
+    status: str
+    count: int | None = None
+    message: str
+
+
+class DocumentStatusRead(BaseModel):
+    document_id: int
+    kb_id: int
+    filename: str
+    processing_status: DocumentProcessingStatus
+    rag_ready: bool
+    block_count: int
+    chunk_count: int
+    citation_unit_count: int
+    vector_index_status: str
+    vector_index_count: int
+    vector_index_compatible: bool | None = None
+    graph_index_status: str
+    entity_count: int
+    relation_count: int
+    latest_processing_job_step: str | None = None
+    latest_processing_job_status: ProcessingJobStatus | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    last_indexed_at: datetime | None = None
+    warnings: list[str]
+    checks: list[DocumentStatusCheckRead]
+
+
 class DocumentEmbedRead(BaseModel):
     document_id: int
     knowledge_base_id: int

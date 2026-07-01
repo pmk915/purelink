@@ -22,6 +22,7 @@ from app.schemas.document import (
     DocumentPreviewRead,
     DocumentRagDebugRead,
     DocumentRead,
+    DocumentStatusRead,
     RetrievalQueryRequest,
     RetrievalResponse,
     RetrievedChunkRead,
@@ -73,6 +74,7 @@ from app.services.document_preview import (
     resolve_document_file_path,
 )
 from app.services.document_rag_debug import build_document_rag_debug
+from app.services.document_status import build_document_status
 from app.services.document_parser import (
     DocumentParseError,
     parse_document_to_local_result,
@@ -686,6 +688,34 @@ async def get_personal_document_rag_debug_endpoint(
     return DocumentRagDebugRead.model_validate(
         build_document_rag_debug(db, document=document)
     )
+
+
+@router.get(
+    "/{knowledge_base_id}/documents/{document_id}/status",
+    response_model=DocumentStatusRead,
+)
+async def get_personal_document_status_endpoint(
+    knowledge_base_id: int,
+    document_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+) -> DocumentStatusRead:
+    knowledge_base = _get_owned_knowledge_base_or_404(
+        db,
+        knowledge_base_id=knowledge_base_id,
+        user_id=current_user.id,
+    )
+    document = get_document_for_knowledge_base(
+        db,
+        knowledge_base_id=knowledge_base.id,
+        document_id=document_id,
+    )
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found.",
+        )
+    return DocumentStatusRead.model_validate(build_document_status(db, document=document))
 
 
 @router.get(

@@ -70,6 +70,9 @@ if [[ "$RET_COUNT" -lt 1 ]]; then
   echo "Document RAG debug:"
   http_json GET "/api/v1/knowledge-bases/$KB_ID/documents/$DOC_ID/rag-debug" "" "$TOKEN" || true
   echo "$HTTP_BODY"
+  echo "Document status:"
+  http_json GET "/api/v1/knowledge-bases/$KB_ID/documents/$DOC_ID/status" "" "$TOKEN" || true
+  echo "$HTTP_BODY"
   echo "KB RAG health:"
   http_json GET "/api/v1/knowledge-bases/$KB_ID/rag-health" "" "$TOKEN" || true
   echo "$HTTP_BODY"

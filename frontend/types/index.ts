@@ -185,6 +185,48 @@ export interface DocumentPreview {
   chunks: DocumentPreviewChunk[];
 }
 
+export type DocumentStatusCheckState =
+  | "ready"
+  | "missing"
+  | "warning"
+  | "failed"
+  | "optional"
+  | "pending";
+
+export interface DocumentStatusCheck {
+  name: string;
+  label: string;
+  status: DocumentStatusCheckState;
+  count: number | null;
+  message: string;
+}
+
+export interface DocumentStatus {
+  document_id: number;
+  kb_id: number;
+  filename: string;
+  processing_status: DocumentProcessingStatus;
+  rag_ready: boolean;
+  block_count: number;
+  chunk_count: number;
+  citation_unit_count: number;
+  vector_index_status: DocumentStatusCheckState;
+  vector_index_count: number;
+  vector_index_compatible: boolean | null;
+  graph_index_status: DocumentStatusCheckState;
+  entity_count: number;
+  relation_count: number;
+  latest_processing_job_step: string | null;
+  latest_processing_job_status: ProcessingJobStatus | null;
+  error_code: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+  last_indexed_at: string | null;
+  warnings: string[];
+  checks: DocumentStatusCheck[];
+}
+
 export interface CitationLike {
   citation_id?: number | null;
   citation_marker?: string | null;

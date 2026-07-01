@@ -1,7 +1,9 @@
 import { apiClient } from "@/lib/api-client";
+import { documentStatusSchema } from "@/schemas/documents";
 import type {
   Document,
   DocumentPreview,
+  DocumentStatus,
   DocumentTask,
   ProcessingJobSubmission
 } from "@/types";
@@ -21,6 +23,18 @@ export function getPersonalDocumentPreview(
     `/knowledge-bases/${kbId}/documents/${documentId}/preview`,
     token
   );
+}
+
+export async function getPersonalDocumentStatus(
+  token: string,
+  kbId: number,
+  documentId: number
+) {
+  const payload = await apiClient.get<DocumentStatus>(
+    `/knowledge-bases/${kbId}/documents/${documentId}/status`,
+    token
+  );
+  return documentStatusSchema.parse(payload);
 }
 
 export function getPersonalDocumentFile(
@@ -56,6 +70,19 @@ export function getTeamDocumentPreview(
     `/teams/${teamId}/knowledge-bases/${kbId}/documents/${documentId}/preview`,
     token
   );
+}
+
+export async function getTeamDocumentStatus(
+  token: string,
+  teamId: number,
+  kbId: number,
+  documentId: number
+) {
+  const payload = await apiClient.get<DocumentStatus>(
+    `/teams/${teamId}/knowledge-bases/${kbId}/documents/${documentId}/status`,
+    token
+  );
+  return documentStatusSchema.parse(payload);
 }
 
 export function getTeamDocumentFile(

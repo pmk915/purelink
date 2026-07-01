@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FileText, LoaderCircle, Trash2 } from "lucide-react";
+import { FileText, Info, LoaderCircle, Trash2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -40,6 +40,7 @@ export function DocumentListItem({
   onProcess,
   isProcessing,
   onDelete,
+  onViewStatus,
   canDelete = false,
   deleteDisabledReason
 }: {
@@ -50,6 +51,7 @@ export function DocumentListItem({
   onProcess?: (() => Promise<void> | void) | null;
   isProcessing?: boolean;
   onDelete?: (() => void) | null;
+  onViewStatus?: (() => void) | null;
   canDelete?: boolean;
   deleteDisabledReason?: string | null;
 }) {
@@ -187,6 +189,12 @@ export function DocumentListItem({
           >
             {messages.common.open}
           </Link>
+          {onViewStatus ? (
+            <Button size="sm" variant="outline" onClick={onViewStatus}>
+              <Info className="h-4 w-4" />
+              {messages.documents.viewStatus}
+            </Button>
+          ) : null}
           {canRetry ? (
             <Button
               size="sm"

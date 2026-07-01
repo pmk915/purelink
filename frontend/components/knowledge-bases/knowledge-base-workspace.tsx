@@ -8,6 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import * as documentApi from "@/api/documents";
 import { DocumentListItem } from "@/components/documents/document-list-item";
+import { DocumentStatusDialog } from "@/components/documents/document-status-dialog";
 import { DocumentUploadCard } from "@/components/documents/document-upload-card";
 import { GraphExplorer } from "@/components/graph/graph-explorer";
 import { AskWorkspace, type QaAvailability } from "@/components/qa/ask-workspace";
@@ -18,6 +19,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useAuth } from "@/hooks/use-auth";
 import { useConversations } from "@/hooks/use-conversations";
+import { useDocumentStatus } from "@/hooks/use-document-status";
 import { useI18n } from "@/hooks/use-i18n";
 import {
   useDeletePersonalDocument,
@@ -132,6 +134,7 @@ export function KnowledgeBaseWorkspace({
   const [processingDocumentIds, setProcessingDocumentIds] = useState<number[]>([]);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const [pendingDeleteDocument, setPendingDeleteDocument] = useState<Document | null>(null);
+  const [statusDocument, setStatusDocument] = useState<Document | null>(null);
   const [deleteKnowledgeBaseDialogOpen, setDeleteKnowledgeBaseDialogOpen] = useState(false);
 
   const personalKbQuery = usePersonalKnowledgeBase(
@@ -178,6 +181,14 @@ export function KnowledgeBaseWorkspace({
   const retrievePersonal = useRetrievePersonal(accessToken, knowledgeBaseId);
   const retrieveTeam = useRetrieveTeam(accessToken, teamId ?? Number.NaN, knowledgeBaseId);
   const [retrievalDebugResult, setRetrievalDebugResult] = useState<RetrievalResponse | null>(null);
+  const documentStatusQuery = useDocumentStatus({
+    token: accessToken,
+    scope,
+    knowledgeBaseId,
+    teamId,
+    documentId: statusDocument?.id ?? null,
+    enabled: statusDocument !== null
+  });
 
   const knowledgeBase = scope === "personal" ? personalKbQuery.data : teamKbQuery.data;
   const ragHealth = scope === "personal" ? personalHealthQuery.data : teamHealthQuery.data;
@@ -452,6 +463,14 @@ export function KnowledgeBaseWorkspace({
         }}
       />
 
+      <DocumentStatusDialog
+        open={statusDocument !== null}
+        status={documentStatusQuery.data}
+        loading={documentStatusQuery.isLoading || documentStatusQuery.isFetching}
+        error={documentStatusQuery.error}
+        onClose={() => setStatusDocument(null)}
+      />
+
       <Card className="border-border/70 shadow-card">
         <CardHeader className="space-y-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -721,6 +740,7 @@ export function KnowledgeBaseWorkspace({
                           : null
                       }
                       onDelete={() => setPendingDeleteDocument(document)}
+                      onViewStatus={() => setStatusDocument(document)}
                     />
                   ))}
                 </div>
