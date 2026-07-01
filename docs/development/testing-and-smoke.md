@@ -13,6 +13,7 @@ Focused examples:
 ```bash
 .venv/bin/python -m pytest tests/services/retrieval tests/eval
 .venv/bin/python -m pytest tests/services/document_parsing tests/services/indexing
+.venv/bin/python -m pytest tests/services/knowledge_graph tests/test_graph_maintenance.py
 ```
 
 ## Smoke
@@ -36,8 +37,25 @@ docker compose stop
 
 ```bash
 make eval-rag
+make eval-rag-baseline
 make eval-rag EVAL_CASES=tests/eval/purelink_rag_interview_cases.local.jsonl
 ```
+
+Run `make eval-rag-baseline` after retrieval or graph lifecycle changes. It
+rebuilds temporary eval KBs and verifies the fixed/block-aware and retrieval
+mode baseline report still runs, including `graph_vector_mix`.
+
+## Graph Lifecycle Checks
+
+Graph lifecycle coverage should include:
+
+- document deletion removes graph mentions and source-grounded relation evidence
+- shared entities and relations from other documents are preserved
+- orphan entities can be cleaned explicitly
+- duplicate relation evidence can be deduplicated
+- single-document graph rebuild uses existing chunks/citation units and does not rebuild the vector index
+- personal owners and team admins can run maintenance
+- team members can export/view graph data but cannot run maintenance
 
 ## Retrieval Debug Modes
 

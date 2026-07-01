@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-01T09:15:16.585512+00:00",
+  "generated_at": "2026-07-01T10:34:10.563794+00:00",
   "cases_path": "docs/interview/rag-eval-cases.json",
   "case_count": 20,
   "case_type_counts": {
@@ -158,7 +158,7 @@
       "trace_available_rate": 1.0,
       "trace_available_count": 20,
       "reranker_used_count": 0,
-      "average_latency_ms": 8.7,
+      "average_latency_ms": 7.35,
       "selected_mode_counts": {
         "chunk_only": 20
       },
@@ -218,7 +218,7 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 9,
+          "latency_ms": 6,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
@@ -249,7 +249,7 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 8,
+          "latency_ms": 7,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
@@ -281,7 +281,7 @@
           "trace_item_count": 4,
           "initial_candidate_count": 6,
           "used_reranker": false,
-          "latency_ms": 6,
+          "latency_ms": 5,
           "answer_contains_expected": null,
           "final_evidence_count": 4,
           "top_documents": [
@@ -310,7 +310,7 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 8,
+          "latency_ms": 7,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
@@ -339,16 +339,16 @@
           ],
           "trace_available": true,
           "trace_id": 6,
-          "trace_item_count": 7,
+          "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 10,
+          "latency_ms": 8,
           "answer_contains_expected": null,
-          "final_evidence_count": 7,
+          "final_evidence_count": 8,
           "top_documents": [
             "docs/retrieval-and-citations.md",
             "docs/product/kb-workspace.md",
-            "docs/ingestion/document-blocks.md"
+            "docs/development/testing-and-smoke.md"
           ]
         },
         {
@@ -374,13 +374,13 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 8,
+          "latency_ms": 7,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
             "docs/retrieval-and-citations.md",
             "docs/rag/retrieval-layer.md",
-            "docs/product/kb-workspace.md"
+            "docs/rag/index-metadata.md"
           ]
         },
         {
@@ -407,7 +407,7 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 9,
+          "latency_ms": 7,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
@@ -439,7 +439,7 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 9,
+          "latency_ms": 7,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
@@ -472,7 +472,7 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 8,
+          "latency_ms": 7,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
@@ -502,16 +502,15 @@
           "missing_keywords": [],
           "trace_available": true,
           "trace_id": 11,
-          "trace_item_count": 8,
+          "trace_item_count": 6,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 7,
+          "latency_ms": 6,
           "answer_contains_expected": null,
-          "final_evidence_count": 8,
+          "final_evidence_count": 6,
           "top_documents": [
             "docs/retrieval-and-citations.md",
-            "docs/ingestion/file-processing-pipeline.md",
-            "docs/product/kb-workspace.md"
+            "docs/ingestion/file-processing-pipeline.md"
           ]
         },
         {
@@ -538,7 +537,7 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 8,
+          "latency_ms": 7,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
@@ -569,7 +568,7 @@
           "trace_item_count": 7,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 7,
+          "latency_ms": 6,
           "answer_contains_expected": null,
           "final_evidence_count": 7,
           "top_documents": [
@@ -599,17 +598,16 @@
           ],
           "trace_available": true,
           "trace_id": 14,
-          "trace_item_count": 8,
+          "trace_item_count": 7,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 8,
+          "latency_ms": 6,
           "answer_contains_expected": null,
-          "final_evidence_count": 8,
+          "final_evidence_count": 7,
           "top_documents": [
             "docs/retrieval-and-citations.md",
             "docs/architecture/rag-v2-architecture.md",
-            "docs/ingestion/document-blocks.md",
-            "docs/product/kb-workspace.md"
+            "docs/ingestion/document-blocks.md"
           ]
         },
         {
@@ -636,7 +634,7 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 8,
+          "latency_ms": 7,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
@@ -670,7 +668,7 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 9,
+          "latency_ms": 7,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
@@ -700,16 +698,16 @@
           ],
           "trace_available": true,
           "trace_id": 17,
-          "trace_item_count": 8,
+          "trace_item_count": 7,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 7,
+          "latency_ms": 6,
           "answer_contains_expected": null,
-          "final_evidence_count": 8,
+          "final_evidence_count": 7,
           "top_documents": [
             "docs/retrieval-and-citations.md",
             "docs/rag/reranker.md",
-            "docs/ingestion/file-processing-pipeline.md"
+            "docs/rag/lightweight-graphrag.md"
           ]
         },
         {
@@ -735,13 +733,13 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 7,
+          "latency_ms": 6,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
             "docs/retrieval-and-citations.md",
-            "docs/architecture/rag-v2-architecture.md",
-            "docs/ingestion/file-processing-pipeline.md"
+            "docs/development/testing-and-smoke.md",
+            "docs/architecture/rag-v2-architecture.md"
           ]
         },
         {
@@ -768,7 +766,7 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 8,
+          "latency_ms": 6,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
@@ -800,7 +798,7 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 8,
+          "latency_ms": 7,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
@@ -818,15 +816,15 @@
       "mode": "chunk_only",
       "purpose": "Isolates the effect of block-aware chunking under the default retrieval mode.",
       "total_cases": 20,
-      "retrieval_hit_rate": 0.7,
-      "citation_hit_rate": 0.7,
+      "retrieval_hit_rate": 0.65,
+      "citation_hit_rate": 0.65,
       "top_1_doc_hit_rate": 0.35,
-      "top_3_doc_hit_rate": 0.5,
+      "top_3_doc_hit_rate": 0.45,
       "average_keyword_coverage": 0.27666666666666667,
       "trace_available_rate": 1.0,
       "trace_available_count": 20,
       "reranker_used_count": 0,
-      "average_latency_ms": 11.05,
+      "average_latency_ms": 8.95,
       "selected_mode_counts": {
         "chunk_only": 20
       },
@@ -853,7 +851,7 @@
           "trace_item_count": 5,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 13,
+          "latency_ms": 11,
           "answer_contains_expected": null,
           "final_evidence_count": 5,
           "top_documents": [
@@ -887,7 +885,7 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 11,
+          "latency_ms": 9,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
@@ -904,10 +902,10 @@
           "requested_mode": "chunk_only",
           "selected_mode": "chunk_only",
           "router_reason": "manual mode specified",
-          "retrieval_hit": true,
-          "citation_hit": true,
+          "retrieval_hit": false,
+          "citation_hit": false,
           "top_1_doc_hit": false,
-          "top_3_doc_hit": true,
+          "top_3_doc_hit": false,
           "keyword_coverage": 0.0,
           "matched_keywords": [],
           "missing_keywords": [
@@ -917,17 +915,17 @@
           ],
           "trace_available": true,
           "trace_id": 3,
-          "trace_item_count": 6,
+          "trace_item_count": 7,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 10,
+          "latency_ms": 9,
           "answer_contains_expected": null,
-          "final_evidence_count": 6,
+          "final_evidence_count": 7,
           "top_documents": [
             "docs/retrieval-and-citations.md",
-            "docs/rag/retrieval-layer.md",
             "docs/ingestion/file-processing-pipeline.md",
             "docs/rag/rag-evaluation.md",
+            "docs/product/kb-workspace.md",
             "docs/development/testing-and-smoke.md"
           ]
         },
@@ -954,7 +952,7 @@
           "trace_item_count": 3,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 10,
+          "latency_ms": 7,
           "answer_contains_expected": null,
           "final_evidence_count": 3,
           "top_documents": [
@@ -985,7 +983,7 @@
           "trace_item_count": 3,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 11,
+          "latency_ms": 8,
           "answer_contains_expected": null,
           "final_evidence_count": 3,
           "top_documents": [
@@ -1017,7 +1015,7 @@
           "trace_item_count": 3,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 11,
+          "latency_ms": 9,
           "answer_contains_expected": null,
           "final_evidence_count": 3,
           "top_documents": [
@@ -1048,7 +1046,7 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 12,
+          "latency_ms": 9,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
@@ -1083,7 +1081,7 @@
           "trace_item_count": 7,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 10,
+          "latency_ms": 9,
           "answer_contains_expected": null,
           "final_evidence_count": 7,
           "top_documents": [
@@ -1116,7 +1114,7 @@
           "trace_item_count": 4,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 12,
+          "latency_ms": 9,
           "answer_contains_expected": null,
           "final_evidence_count": 4,
           "top_documents": [
@@ -1148,7 +1146,7 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 12,
+          "latency_ms": 10,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
@@ -1183,7 +1181,7 @@
           "trace_item_count": 7,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 11,
+          "latency_ms": 9,
           "answer_contains_expected": null,
           "final_evidence_count": 7,
           "top_documents": [
@@ -1217,15 +1215,15 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 12,
+          "latency_ms": 10,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
             "docs/product/kb-workspace.md",
             "docs/retrieval-and-citations.md",
-            "docs/rag/retrieval-layer.md",
             "docs/development/testing-and-smoke.md",
-            "docs/architecture/rag-v2-architecture.md"
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/rag/retrieval-layer.md"
           ]
         },
         {
@@ -1252,7 +1250,7 @@
           "trace_item_count": 6,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 10,
+          "latency_ms": 9,
           "answer_contains_expected": null,
           "final_evidence_count": 6,
           "top_documents": [
@@ -1286,7 +1284,7 @@
           "trace_item_count": 5,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 12,
+          "latency_ms": 9,
           "answer_contains_expected": null,
           "final_evidence_count": 5,
           "top_documents": [
@@ -1319,7 +1317,7 @@
           "trace_item_count": 3,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 10,
+          "latency_ms": 9,
           "answer_contains_expected": null,
           "final_evidence_count": 3,
           "top_documents": [
@@ -1352,7 +1350,7 @@
           "trace_item_count": 5,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 12,
+          "latency_ms": 9,
           "answer_contains_expected": null,
           "final_evidence_count": 5,
           "top_documents": [
@@ -1385,7 +1383,7 @@
           "trace_item_count": 1,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 10,
+          "latency_ms": 9,
           "answer_contains_expected": null,
           "final_evidence_count": 1,
           "top_documents": [
@@ -1415,14 +1413,13 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 10,
+          "latency_ms": 9,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
             "docs/retrieval-and-citations.md",
             "docs/development/testing-and-smoke.md",
             "docs/rag/rag-evaluation.md",
-            "docs/architecture/rag-v2-architecture.md",
             "docs/ingestion/file-processing-pipeline.md"
           ]
         },
@@ -1450,7 +1447,7 @@
           "trace_item_count": 2,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 11,
+          "latency_ms": 7,
           "answer_contains_expected": null,
           "final_evidence_count": 2,
           "top_documents": [
@@ -1480,7 +1477,7 @@
           "trace_item_count": 7,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 11,
+          "latency_ms": 9,
           "answer_contains_expected": null,
           "final_evidence_count": 7,
           "top_documents": [
@@ -1499,15 +1496,15 @@
       "mode": "hybrid_text",
       "purpose": "Tests lexical recall for exact API paths, config keys, file paths, and technical tokens.",
       "total_cases": 20,
-      "retrieval_hit_rate": 0.65,
-      "citation_hit_rate": 0.65,
-      "top_1_doc_hit_rate": 0.3,
-      "top_3_doc_hit_rate": 0.5,
-      "average_keyword_coverage": 0.25,
+      "retrieval_hit_rate": 0.6,
+      "citation_hit_rate": 0.6,
+      "top_1_doc_hit_rate": 0.25,
+      "top_3_doc_hit_rate": 0.45,
+      "average_keyword_coverage": 0.21666666666666665,
       "trace_available_rate": 1.0,
       "trace_available_count": 20,
       "reranker_used_count": 0,
-      "average_latency_ms": 15.4,
+      "average_latency_ms": 14.3,
       "selected_mode_counts": {
         "hybrid_text": 20
       },
@@ -1534,7 +1531,7 @@
           "trace_item_count": 4,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 17,
+          "latency_ms": 14,
           "answer_contains_expected": null,
           "final_evidence_count": 4,
           "top_documents": [
@@ -1567,7 +1564,7 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 13,
+          "latency_ms": 11,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
@@ -1586,7 +1583,7 @@
           "router_reason": "manual mode specified",
           "retrieval_hit": true,
           "citation_hit": true,
-          "top_1_doc_hit": true,
+          "top_1_doc_hit": false,
           "top_3_doc_hit": true,
           "keyword_coverage": 0.0,
           "matched_keywords": [],
@@ -1597,15 +1594,16 @@
           ],
           "trace_available": true,
           "trace_id": 3,
-          "trace_item_count": 2,
+          "trace_item_count": 3,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 16,
+          "latency_ms": 28,
           "answer_contains_expected": null,
-          "final_evidence_count": 2,
+          "final_evidence_count": 3,
           "top_documents": [
+            "docs/retrieval-and-citations.md",
             "docs/rag/retrieval-layer.md",
-            "docs/retrieval-and-citations.md"
+            "docs/ingestion/file-processing-pipeline.md"
           ]
         },
         {
@@ -1631,7 +1629,7 @@
           "trace_item_count": 3,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 12,
+          "latency_ms": 10,
           "answer_contains_expected": null,
           "final_evidence_count": 3,
           "top_documents": [
@@ -1645,29 +1643,27 @@
           "requested_mode": "hybrid_text",
           "selected_mode": "hybrid_text",
           "router_reason": "manual mode specified",
-          "retrieval_hit": true,
-          "citation_hit": true,
+          "retrieval_hit": false,
+          "citation_hit": false,
           "top_1_doc_hit": false,
-          "top_3_doc_hit": true,
-          "keyword_coverage": 0.6666666666666666,
-          "matched_keywords": [
-            "CHUNK_STRATEGY",
-            "block_aware"
-          ],
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
           "missing_keywords": [
+            "CHUNK_STRATEGY",
+            "block_aware",
             "fixed"
           ],
           "trace_available": true,
           "trace_id": 5,
-          "trace_item_count": 3,
+          "trace_item_count": 2,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 17,
+          "latency_ms": 14,
           "answer_contains_expected": null,
-          "final_evidence_count": 3,
+          "final_evidence_count": 2,
           "top_documents": [
             "docs/retrieval-and-citations.md",
-            "docs/ingestion/document-blocks.md",
             "docs/ingestion/file-processing-pipeline.md"
           ]
         },
@@ -1724,7 +1720,7 @@
           "trace_item_count": 4,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 16,
+          "latency_ms": 14,
           "answer_contains_expected": null,
           "final_evidence_count": 4,
           "top_documents": [
@@ -1756,7 +1752,7 @@
           "trace_item_count": 7,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 15,
+          "latency_ms": 16,
           "answer_contains_expected": null,
           "final_evidence_count": 7,
           "top_documents": [
@@ -1789,7 +1785,7 @@
           "trace_item_count": 5,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 16,
+          "latency_ms": 15,
           "answer_contains_expected": null,
           "final_evidence_count": 5,
           "top_documents": [
@@ -1821,7 +1817,7 @@
           "trace_item_count": 7,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 17,
+          "latency_ms": 15,
           "answer_contains_expected": null,
           "final_evidence_count": 7,
           "top_documents": [
@@ -1855,7 +1851,7 @@
           "trace_item_count": 6,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 16,
+          "latency_ms": 14,
           "answer_contains_expected": null,
           "final_evidence_count": 6,
           "top_documents": [
@@ -1888,7 +1884,7 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 17,
+          "latency_ms": 15,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
@@ -1922,7 +1918,7 @@
           "trace_item_count": 2,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 16,
+          "latency_ms": 14,
           "answer_contains_expected": null,
           "final_evidence_count": 2,
           "top_documents": [
@@ -1953,7 +1949,7 @@
           "trace_item_count": 2,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 17,
+          "latency_ms": 14,
           "answer_contains_expected": null,
           "final_evidence_count": 2,
           "top_documents": [
@@ -2015,7 +2011,7 @@
           "trace_item_count": 3,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 16,
+          "latency_ms": 14,
           "answer_contains_expected": null,
           "final_evidence_count": 3,
           "top_documents": [
@@ -2047,7 +2043,7 @@
           "trace_item_count": 1,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 13,
+          "latency_ms": 12,
           "answer_contains_expected": null,
           "final_evidence_count": 1,
           "top_documents": [
@@ -2077,13 +2073,13 @@
           "trace_item_count": 6,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 16,
+          "latency_ms": 13,
           "answer_contains_expected": null,
           "final_evidence_count": 6,
           "top_documents": [
             "docs/retrieval-and-citations.md",
             "docs/rag/rag-evaluation.md",
-            "docs/architecture/rag-v2-architecture.md"
+            "docs/development/testing-and-smoke.md"
           ]
         },
         {
@@ -2110,7 +2106,7 @@
           "trace_item_count": 2,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 12,
+          "latency_ms": 10,
           "answer_contains_expected": null,
           "final_evidence_count": 2,
           "top_documents": [
@@ -2140,7 +2136,7 @@
           "trace_item_count": 5,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 16,
+          "latency_ms": 13,
           "answer_contains_expected": null,
           "final_evidence_count": 5,
           "top_documents": [
@@ -2165,7 +2161,7 @@
       "trace_available_rate": 1.0,
       "trace_available_count": 20,
       "reranker_used_count": 0,
-      "average_latency_ms": 13.2,
+      "average_latency_ms": 12.7,
       "selected_mode_counts": {
         "graph_vector_mix": 20
       },
@@ -2192,7 +2188,7 @@
           "trace_item_count": 5,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 17,
+          "latency_ms": 16,
           "answer_contains_expected": null,
           "final_evidence_count": 5,
           "top_documents": [
@@ -2257,7 +2253,7 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 12,
+          "latency_ms": 28,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
@@ -2317,16 +2313,15 @@
           ],
           "trace_available": true,
           "trace_id": 5,
-          "trace_item_count": 5,
+          "trace_item_count": 3,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 14,
+          "latency_ms": 12,
           "answer_contains_expected": null,
-          "final_evidence_count": 5,
+          "final_evidence_count": 3,
           "top_documents": [
-            "docs/product/kb-workspace.md",
-            "docs/rag/retrieval-layer.md",
-            "docs/architecture/rag-v2-architecture.md"
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/product/kb-workspace.md"
           ]
         },
         {
@@ -2353,7 +2348,7 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 13,
+          "latency_ms": 12,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
@@ -2387,7 +2382,7 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 14,
+          "latency_ms": 13,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
@@ -2418,16 +2413,15 @@
           ],
           "trace_available": true,
           "trace_id": 8,
-          "trace_item_count": 5,
+          "trace_item_count": 3,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 13,
+          "latency_ms": 12,
           "answer_contains_expected": null,
-          "final_evidence_count": 5,
+          "final_evidence_count": 3,
           "top_documents": [
             "docs/architecture/rag-v2-architecture.md",
-            "docs/product/kb-workspace.md",
-            "docs/rag/retrieval-layer.md"
+            "docs/product/kb-workspace.md"
           ]
         },
         {
@@ -2453,7 +2447,7 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 15,
+          "latency_ms": 11,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
@@ -2488,15 +2482,15 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 14,
+          "latency_ms": 12,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
             "docs/architecture/rag-v2-architecture.md",
+            "docs/rag/lightweight-graphrag.md",
             "docs/rag/index-metadata.md",
             "docs/retrieval-and-citations.md",
-            "docs/ingestion/file-processing-pipeline.md",
-            "docs/ingestion/document-blocks.md"
+            "docs/ingestion/file-processing-pipeline.md"
           ]
         },
         {
@@ -2520,16 +2514,15 @@
           ],
           "trace_available": true,
           "trace_id": 11,
-          "trace_item_count": 5,
+          "trace_item_count": 3,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 15,
+          "latency_ms": 11,
           "answer_contains_expected": null,
-          "final_evidence_count": 5,
+          "final_evidence_count": 3,
           "top_documents": [
-            "docs/product/kb-workspace.md",
-            "docs/rag/retrieval-layer.md",
-            "docs/architecture/rag-v2-architecture.md"
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/product/kb-workspace.md"
           ]
         },
         {
@@ -2556,7 +2549,7 @@
           "trace_item_count": 7,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 14,
+          "latency_ms": 12,
           "answer_contains_expected": null,
           "final_evidence_count": 7,
           "top_documents": [
@@ -2589,7 +2582,7 @@
           "trace_item_count": 2,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 14,
+          "latency_ms": 12,
           "answer_contains_expected": null,
           "final_evidence_count": 2,
           "top_documents": [
@@ -2620,7 +2613,7 @@
           "trace_item_count": 5,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 13,
+          "latency_ms": 12,
           "answer_contains_expected": null,
           "final_evidence_count": 5,
           "top_documents": [
@@ -2653,7 +2646,7 @@
           "trace_item_count": 6,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 13,
+          "latency_ms": 12,
           "answer_contains_expected": null,
           "final_evidence_count": 6,
           "top_documents": [
@@ -2687,7 +2680,7 @@
           "trace_item_count": 4,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 12,
+          "latency_ms": 13,
           "answer_contains_expected": null,
           "final_evidence_count": 4,
           "top_documents": [
@@ -2718,7 +2711,7 @@
           "trace_item_count": 3,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 12,
+          "latency_ms": 11,
           "answer_contains_expected": null,
           "final_evidence_count": 3,
           "top_documents": [
@@ -2749,7 +2742,7 @@
           "trace_item_count": 3,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 12,
+          "latency_ms": 10,
           "answer_contains_expected": null,
           "final_evidence_count": 3,
           "top_documents": [
@@ -2812,7 +2805,7 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 13,
+          "latency_ms": 11,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
@@ -2831,15 +2824,15 @@
       "mode": "auto",
       "purpose": "Tests the M16 rule-based query router over the same block-aware KB.",
       "total_cases": 20,
-      "retrieval_hit_rate": 0.6,
-      "citation_hit_rate": 0.6,
+      "retrieval_hit_rate": 0.5,
+      "citation_hit_rate": 0.5,
       "top_1_doc_hit_rate": 0.3,
-      "top_3_doc_hit_rate": 0.55,
-      "average_keyword_coverage": 0.26,
+      "top_3_doc_hit_rate": 0.45,
+      "average_keyword_coverage": 0.22666666666666666,
       "trace_available_rate": 1.0,
       "trace_available_count": 20,
       "reranker_used_count": 0,
-      "average_latency_ms": 12.8,
+      "average_latency_ms": 11.1,
       "selected_mode_counts": {
         "chunk_only": 7,
         "graph_vector_mix": 5,
@@ -2869,7 +2862,7 @@
           "trace_item_count": 8,
           "initial_candidate_count": 10,
           "used_reranker": false,
-          "latency_ms": 10,
+          "latency_ms": 9,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
@@ -2905,7 +2898,7 @@
           "trace_item_count": 8,
           "initial_candidate_count": 10,
           "used_reranker": false,
-          "latency_ms": 7,
+          "latency_ms": 6,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
@@ -2923,10 +2916,10 @@
           "requested_mode": "auto",
           "selected_mode": "chunk_only",
           "router_reason": "default factual question",
-          "retrieval_hit": true,
-          "citation_hit": true,
+          "retrieval_hit": false,
+          "citation_hit": false,
           "top_1_doc_hit": false,
-          "top_3_doc_hit": true,
+          "top_3_doc_hit": false,
           "keyword_coverage": 0.0,
           "matched_keywords": [],
           "missing_keywords": [
@@ -2936,17 +2929,17 @@
           ],
           "trace_available": true,
           "trace_id": 3,
-          "trace_item_count": 6,
+          "trace_item_count": 7,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 11,
+          "latency_ms": 9,
           "answer_contains_expected": null,
-          "final_evidence_count": 6,
+          "final_evidence_count": 7,
           "top_documents": [
             "docs/retrieval-and-citations.md",
-            "docs/rag/retrieval-layer.md",
             "docs/ingestion/file-processing-pipeline.md",
             "docs/rag/rag-evaluation.md",
+            "docs/product/kb-workspace.md",
             "docs/development/testing-and-smoke.md"
           ]
         },
@@ -2973,7 +2966,7 @@
           "trace_item_count": 3,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 9,
+          "latency_ms": 8,
           "answer_contains_expected": null,
           "final_evidence_count": 3,
           "top_documents": [
@@ -2987,29 +2980,27 @@
           "requested_mode": "auto",
           "selected_mode": "hybrid_text",
           "router_reason": "question contains API/path/config/code-like tokens",
-          "retrieval_hit": true,
-          "citation_hit": true,
+          "retrieval_hit": false,
+          "citation_hit": false,
           "top_1_doc_hit": false,
-          "top_3_doc_hit": true,
-          "keyword_coverage": 0.6666666666666666,
-          "matched_keywords": [
-            "CHUNK_STRATEGY",
-            "block_aware"
-          ],
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
           "missing_keywords": [
+            "CHUNK_STRATEGY",
+            "block_aware",
             "fixed"
           ],
           "trace_available": true,
           "trace_id": 5,
-          "trace_item_count": 3,
+          "trace_item_count": 2,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 17,
+          "latency_ms": 14,
           "answer_contains_expected": null,
-          "final_evidence_count": 3,
+          "final_evidence_count": 2,
           "top_documents": [
             "docs/retrieval-and-citations.md",
-            "docs/ingestion/document-blocks.md",
             "docs/ingestion/file-processing-pipeline.md"
           ]
         },
@@ -3036,7 +3027,7 @@
           "trace_item_count": 2,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 17,
+          "latency_ms": 14,
           "answer_contains_expected": null,
           "final_evidence_count": 2,
           "top_documents": [
@@ -3066,7 +3057,7 @@
           "trace_item_count": 8,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 13,
+          "latency_ms": 9,
           "answer_contains_expected": null,
           "final_evidence_count": 8,
           "top_documents": [
@@ -3101,7 +3092,7 @@
           "trace_item_count": 7,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 15,
+          "latency_ms": 14,
           "answer_contains_expected": null,
           "final_evidence_count": 7,
           "top_documents": [
@@ -3134,7 +3125,7 @@
           "trace_item_count": 5,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 15,
+          "latency_ms": 13,
           "answer_contains_expected": null,
           "final_evidence_count": 5,
           "top_documents": [
@@ -3197,16 +3188,15 @@
           ],
           "trace_available": true,
           "trace_id": 11,
-          "trace_item_count": 5,
+          "trace_item_count": 3,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 15,
+          "latency_ms": 12,
           "answer_contains_expected": null,
-          "final_evidence_count": 5,
+          "final_evidence_count": 3,
           "top_documents": [
-            "docs/product/kb-workspace.md",
-            "docs/rag/retrieval-layer.md",
-            "docs/architecture/rag-v2-architecture.md"
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/product/kb-workspace.md"
           ]
         },
         {
@@ -3233,7 +3223,7 @@
           "trace_item_count": 7,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 13,
+          "latency_ms": 14,
           "answer_contains_expected": null,
           "final_evidence_count": 7,
           "top_documents": [
@@ -3266,7 +3256,7 @@
           "trace_item_count": 2,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 14,
+          "latency_ms": 12,
           "answer_contains_expected": null,
           "final_evidence_count": 2,
           "top_documents": [
@@ -3297,7 +3287,7 @@
           "trace_item_count": 5,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 14,
+          "latency_ms": 12,
           "answer_contains_expected": null,
           "final_evidence_count": 5,
           "top_documents": [
@@ -3330,7 +3320,7 @@
           "trace_item_count": 6,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 13,
+          "latency_ms": 11,
           "answer_contains_expected": null,
           "final_evidence_count": 6,
           "top_documents": [
@@ -3365,7 +3355,7 @@
           "trace_item_count": 5,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 12,
+          "latency_ms": 10,
           "answer_contains_expected": null,
           "final_evidence_count": 5,
           "top_documents": [
@@ -3398,7 +3388,7 @@
           "trace_item_count": 1,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 10,
+          "latency_ms": 8,
           "answer_contains_expected": null,
           "final_evidence_count": 1,
           "top_documents": [
@@ -3428,13 +3418,13 @@
           "trace_item_count": 6,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 15,
+          "latency_ms": 13,
           "answer_contains_expected": null,
           "final_evidence_count": 6,
           "top_documents": [
             "docs/retrieval-and-citations.md",
             "docs/rag/rag-evaluation.md",
-            "docs/architecture/rag-v2-architecture.md"
+            "docs/development/testing-and-smoke.md"
           ]
         },
         {
@@ -3461,7 +3451,7 @@
           "trace_item_count": 2,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 9,
+          "latency_ms": 8,
           "answer_contains_expected": null,
           "final_evidence_count": 2,
           "top_documents": [
@@ -3491,7 +3481,7 @@
           "trace_item_count": 7,
           "initial_candidate_count": 8,
           "used_reranker": false,
-          "latency_ms": 12,
+          "latency_ms": 11,
           "answer_contains_expected": null,
           "final_evidence_count": 7,
           "top_documents": [

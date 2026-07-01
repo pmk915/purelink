@@ -18,6 +18,7 @@ from app.models.enums import (
 from app.models.knowledge_base import KnowledgeBase
 from app.services.document_chunker import build_chunk_relative_path
 from app.services.document_parser import build_parsed_relative_path
+from app.services.knowledge_graph.graph_index_service import delete_document_graph
 
 
 UNSET = object()
@@ -332,6 +333,7 @@ def delete_document_and_artifacts(
         team_id=team_id,
     )
 
+    delete_document_graph(db, document_id=document.id)
     db.delete(document)
     db.commit()
 

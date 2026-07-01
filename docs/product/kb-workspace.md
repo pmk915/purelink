@@ -11,11 +11,25 @@ M13 organizes each knowledge base as a RAG workspace rather than a single ask pa
 - Health: document, vector index, and graph index status summary.
 - Settings: metadata and safe destructive actions.
 
+## Graph Maintenance
+
+The backend now supports lightweight GraphRAG lifecycle operations:
+
+- Rebuild a single document graph from existing chunks and citation units.
+- Cleanup orphan entities that no longer have mentions or relations.
+- Deduplicate exact duplicate relation evidence rows.
+- Export bounded graph JSON for debugging and interview demos.
+
+Deleting a document also cleans the graph mentions and relation evidence
+contributed by that document before the document row is removed.
+
 ## Permission Model
 
 - Personal KB owner can access all tabs.
-- Team admin can access all tabs.
-- Team member can access Ask, Documents, Graph, and Health.
+- Personal KB owner can run graph maintenance.
+- Team admin can access all tabs and run graph maintenance.
+- Team member can access Ask, Documents, Graph, and Health, and can export/view graph data.
+- Team member cannot rebuild graph, cleanup orphan entities, or deduplicate relations.
 - Backend permission checks remain authoritative.
 
 ## LightRAG-inspired Boundary

@@ -37,8 +37,12 @@ from app.schemas.knowledge_base import (
     KnowledgeBaseUpdateRequest,
 )
 from app.schemas.knowledge_graph import (
+    KnowledgeGraphCleanupRead,
+    KnowledgeGraphDeduplicationRead,
     KnowledgeGraphEntityDetailRead,
     KnowledgeGraphEntityListRead,
+    KnowledgeGraphExportRead,
+    KnowledgeGraphDocumentRebuildRead,
 )
 from app.services.document import (
     compute_document_sha256,
@@ -123,6 +127,12 @@ from app.services.knowledge_base_health import build_knowledge_base_rag_health
 from app.services.knowledge_graph.graph_browser import (
     get_graph_entity_detail,
     list_graph_entities,
+)
+from app.services.knowledge_graph.graph_export_service import export_graph
+from app.services.knowledge_graph.graph_index_service import (
+    cleanup_orphan_entities,
+    deduplicate_relations,
+    rebuild_document_graph,
 )
 
 
@@ -324,6 +334,103 @@ async def get_knowledge_base_graph_entity_endpoint(
             detail="Graph entity not found.",
         )
     return detail
+
+
+@router.post(
+    "/{knowledge_base_id}/documents/{document_id}/graph/rebuild",
+    response_model=KnowledgeGraphDocumentRebuildRead,
+)
+async def rebuild_personal_document_graph_endpoint(
+    knowledge_base_id: int,
+    document_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+) -> KnowledgeGraphDocumentRebuildRead:
+    knowledge_base = _get_owned_knowledge_base_or_404(
+        db,
+        knowledge_base_id=knowledge_base_id,
+        user_id=current_user.id,
+    )
+    document = get_document_for_knowledge_base(
+        db,
+        knowledge_base_id=knowledge_base.id,
+        document_id=document_id,
+    )
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found.",
+        )
+    result = rebuild_document_graph(db, document_id=document.id)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found.",
+        )
+    db.commit()
+    return KnowledgeGraphDocumentRebuildRead.model_validate(result, from_attributes=True)
+
+
+@router.post(
+    "/{knowledge_base_id}/graph/cleanup-orphans",
+    response_model=KnowledgeGraphCleanupRead,
+)
+async def cleanup_personal_graph_orphans_endpoint(
+    knowledge_base_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+) -> KnowledgeGraphCleanupRead:
+    knowledge_base = _get_owned_knowledge_base_or_404(
+        db,
+        knowledge_base_id=knowledge_base_id,
+        user_id=current_user.id,
+    )
+    result = cleanup_orphan_entities(db, kb_id=knowledge_base.id)
+    db.commit()
+    return KnowledgeGraphCleanupRead.model_validate(result, from_attributes=True)
+
+
+@router.post(
+    "/{knowledge_base_id}/graph/deduplicate-relations",
+    response_model=KnowledgeGraphDeduplicationRead,
+)
+async def deduplicate_personal_graph_relations_endpoint(
+    knowledge_base_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+) -> KnowledgeGraphDeduplicationRead:
+    knowledge_base = _get_owned_knowledge_base_or_404(
+        db,
+        knowledge_base_id=knowledge_base_id,
+        user_id=current_user.id,
+    )
+    result = deduplicate_relations(db, kb_id=knowledge_base.id)
+    db.commit()
+    return KnowledgeGraphDeduplicationRead.model_validate(result, from_attributes=True)
+
+
+@router.get("/{knowledge_base_id}/graph/export", response_model=KnowledgeGraphExportRead)
+async def export_personal_graph_endpoint(
+    knowledge_base_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+    entity_limit: int = Query(default=100, ge=1, le=500),
+    relation_limit: int = Query(default=300, ge=1, le=1000),
+    sources_per_relation: int = Query(default=5, ge=1, le=10),
+) -> KnowledgeGraphExportRead:
+    knowledge_base = _get_owned_knowledge_base_or_404(
+        db,
+        knowledge_base_id=knowledge_base_id,
+        user_id=current_user.id,
+    )
+    result = export_graph(
+        db,
+        kb_id=knowledge_base.id,
+        entity_limit=entity_limit,
+        relation_limit=relation_limit,
+        sources_per_relation=sources_per_relation,
+    )
+    return KnowledgeGraphExportRead.model_validate(result, from_attributes=True)
 
 
 @router.post(
