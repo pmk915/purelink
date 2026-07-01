@@ -1,0 +1,3508 @@
+{
+  "generated_at": "2026-07-01T09:15:16.585512+00:00",
+  "cases_path": "docs/interview/rag-eval-cases.json",
+  "case_count": 20,
+  "case_type_counts": {
+    "factual": 5,
+    "overview": 4,
+    "relation": 5,
+    "technical": 6
+  },
+  "cases": [
+    {
+      "id": "overview_architecture_001",
+      "case_type": "overview",
+      "expected_mode": "overview",
+      "expected_source_hint": "docs/architecture/rag-v2-architecture.md"
+    },
+    {
+      "id": "overview_workspace_002",
+      "case_type": "overview",
+      "expected_mode": "overview",
+      "expected_source_hint": "docs/product/kb-workspace.md"
+    },
+    {
+      "id": "overview_retrieval_layer_003",
+      "case_type": "overview",
+      "expected_mode": "overview",
+      "expected_source_hint": "docs/rag/retrieval-layer.md"
+    },
+    {
+      "id": "overview_processing_pipeline_004",
+      "case_type": "overview",
+      "expected_mode": "overview",
+      "expected_source_hint": "docs/ingestion/file-processing-pipeline.md"
+    },
+    {
+      "id": "technical_chunk_strategy_005",
+      "case_type": "technical",
+      "expected_mode": "hybrid_text",
+      "expected_source_hint": "docs/ingestion/document-blocks.md"
+    },
+    {
+      "id": "technical_hybrid_text_006",
+      "case_type": "technical",
+      "expected_mode": "hybrid_text",
+      "expected_source_hint": "docs/rag/retrieval-layer.md"
+    },
+    {
+      "id": "technical_trace_metadata_007",
+      "case_type": "technical",
+      "expected_mode": "hybrid_text",
+      "expected_source_hint": "docs/retrieval-and-citations.md"
+    },
+    {
+      "id": "technical_block_table_code_008",
+      "case_type": "technical",
+      "expected_mode": "hybrid_text",
+      "expected_source_hint": "docs/ingestion/document-blocks.md"
+    },
+    {
+      "id": "technical_retrieval_entrypoint_009",
+      "case_type": "technical",
+      "expected_mode": "hybrid_text",
+      "expected_source_hint": "docs/rag/retrieval-layer.md"
+    },
+    {
+      "id": "technical_index_metadata_010",
+      "case_type": "technical",
+      "expected_mode": "hybrid_text",
+      "expected_source_hint": "docs/rag/index-metadata.md"
+    },
+    {
+      "id": "relation_blocks_chunks_011",
+      "case_type": "relation",
+      "expected_mode": "graph_vector_mix",
+      "expected_source_hint": "docs/ingestion/file-processing-pipeline.md"
+    },
+    {
+      "id": "relation_workspace_permission_012",
+      "case_type": "relation",
+      "expected_mode": "graph_vector_mix",
+      "expected_source_hint": "docs/product/kb-workspace.md"
+    },
+    {
+      "id": "relation_graph_citation_013",
+      "case_type": "relation",
+      "expected_mode": "graph_vector_mix",
+      "expected_source_hint": "docs/rag/lightweight-graphrag.md"
+    },
+    {
+      "id": "relation_reranker_retrieval_014",
+      "case_type": "relation",
+      "expected_mode": "graph_vector_mix",
+      "expected_source_hint": "docs/rag/reranker.md"
+    },
+    {
+      "id": "relation_index_compatibility_015",
+      "case_type": "relation",
+      "expected_mode": "graph_vector_mix",
+      "expected_source_hint": "docs/rag/index-metadata.md"
+    },
+    {
+      "id": "factual_modes_016",
+      "case_type": "factual",
+      "expected_mode": "chunk_only",
+      "expected_source_hint": "docs/rag/retrieval-layer.md"
+    },
+    {
+      "id": "factual_reranker_optional_017",
+      "case_type": "factual",
+      "expected_mode": "chunk_only",
+      "expected_source_hint": "docs/rag/reranker.md"
+    },
+    {
+      "id": "factual_eval_metrics_018",
+      "case_type": "factual",
+      "expected_mode": "chunk_only",
+      "expected_source_hint": "docs/rag/rag-evaluation.md"
+    },
+    {
+      "id": "factual_parser_routing_019",
+      "case_type": "factual",
+      "expected_mode": "chunk_only",
+      "expected_source_hint": "docs/ingestion/file-processing-pipeline.md"
+    },
+    {
+      "id": "factual_smoke_diagnostics_020",
+      "case_type": "factual",
+      "expected_mode": "chunk_only",
+      "expected_source_hint": "docs/development/testing-and-smoke.md"
+    }
+  ],
+  "data_sources": [
+    "docs/architecture/rag-v2-architecture.md",
+    "docs/product/kb-workspace.md",
+    "docs/rag/retrieval-layer.md",
+    "docs/ingestion/file-processing-pipeline.md",
+    "docs/ingestion/document-blocks.md",
+    "docs/retrieval-and-citations.md",
+    "docs/rag/index-metadata.md",
+    "docs/rag/lightweight-graphrag.md",
+    "docs/rag/reranker.md",
+    "docs/rag/rag-evaluation.md",
+    "docs/development/testing-and-smoke.md"
+  ],
+  "baselines": [
+    {
+      "name": "fixed_chunk_only",
+      "chunk_strategy": "fixed",
+      "mode": "chunk_only",
+      "purpose": "Legacy fixed chunking with default vector retrieval.",
+      "total_cases": 20,
+      "retrieval_hit_rate": 0.5,
+      "citation_hit_rate": 0.5,
+      "top_1_doc_hit_rate": 0.2,
+      "top_3_doc_hit_rate": 0.25,
+      "average_keyword_coverage": 0.2558333333333333,
+      "trace_available_rate": 1.0,
+      "trace_available_count": 20,
+      "reranker_used_count": 0,
+      "average_latency_ms": 8.7,
+      "selected_mode_counts": {
+        "chunk_only": 20
+      },
+      "cases": [
+        {
+          "id": "overview_architecture_001",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "Retrieval Layer",
+            "Provider Layer",
+            "Retrieval Trace"
+          ],
+          "trace_available": true,
+          "trace_id": 1,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 22,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/development/testing-and-smoke.md",
+            "docs/product/kb-workspace.md"
+          ]
+        },
+        {
+          "id": "overview_workspace_002",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.5,
+          "matched_keywords": [
+            "Documents",
+            "Graph"
+          ],
+          "missing_keywords": [
+            "Ask",
+            "Retrieval Debug"
+          ],
+          "trace_available": true,
+          "trace_id": 2,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 9,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/ingestion/file-processing-pipeline.md",
+            "docs/rag/retrieval-layer.md"
+          ]
+        },
+        {
+          "id": "overview_retrieval_layer_003",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "RetrievalRequest",
+            "RetrievedEvidence",
+            "reranking"
+          ],
+          "trace_available": true,
+          "trace_id": 3,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 8,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/product/kb-workspace.md",
+            "docs/rag/rag-evaluation.md"
+          ]
+        },
+        {
+          "id": "overview_processing_pipeline_004",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "upload",
+            "ParsedDocument",
+            "document_blocks",
+            "chunks"
+          ],
+          "trace_available": true,
+          "trace_id": 4,
+          "trace_item_count": 4,
+          "initial_candidate_count": 6,
+          "used_reranker": false,
+          "latency_ms": 6,
+          "answer_contains_expected": null,
+          "final_evidence_count": 4,
+          "top_documents": [
+            "docs/retrieval-and-citations.md"
+          ]
+        },
+        {
+          "id": "technical_chunk_strategy_005",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "CHUNK_STRATEGY",
+            "block_aware",
+            "fixed"
+          ],
+          "trace_available": true,
+          "trace_id": 5,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 8,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/ingestion/file-processing-pipeline.md",
+            "docs/development/testing-and-smoke.md"
+          ]
+        },
+        {
+          "id": "technical_hybrid_text_006",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "HYBRID_TEXT",
+            "API paths",
+            "config keys",
+            "commands"
+          ],
+          "trace_available": true,
+          "trace_id": 6,
+          "trace_item_count": 7,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 10,
+          "answer_contains_expected": null,
+          "final_evidence_count": 7,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/product/kb-workspace.md",
+            "docs/ingestion/document-blocks.md"
+          ]
+        },
+        {
+          "id": "technical_trace_metadata_007",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "requested_mode",
+            "selected_mode",
+            "router_reason",
+            "router_type"
+          ],
+          "trace_available": true,
+          "trace_id": 7,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 8,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/retrieval-layer.md",
+            "docs/product/kb-workspace.md"
+          ]
+        },
+        {
+          "id": "technical_block_table_code_008",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.25,
+          "matched_keywords": [
+            "table"
+          ],
+          "missing_keywords": [
+            "code",
+            "heading_path",
+            "standalone"
+          ],
+          "trace_available": true,
+          "trace_id": 8,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 9,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/ingestion/document-blocks.md",
+            "docs/retrieval-and-citations.md",
+            "docs/ingestion/file-processing-pipeline.md"
+          ]
+        },
+        {
+          "id": "technical_retrieval_entrypoint_009",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.6666666666666666,
+          "matched_keywords": [
+            "app/services/retrieval",
+            "RetrievalResult"
+          ],
+          "missing_keywords": [
+            "retrieval_service.retrieve"
+          ],
+          "trace_available": true,
+          "trace_id": 9,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 9,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/development/testing-and-smoke.md",
+            "docs/rag/retrieval-layer.md"
+          ]
+        },
+        {
+          "id": "technical_index_metadata_010",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.5,
+          "matched_keywords": [
+            "provider",
+            "status"
+          ],
+          "missing_keywords": [
+            "model name",
+            "model dimension"
+          ],
+          "trace_available": true,
+          "trace_id": 10,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 8,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/index-metadata.md",
+            "docs/ingestion/file-processing-pipeline.md",
+            "docs/rag/retrieval-layer.md"
+          ]
+        },
+        {
+          "id": "relation_blocks_chunks_011",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 1.0,
+          "matched_keywords": [
+            "ParsedDocument",
+            "document_blocks",
+            "chunk strategy",
+            "chunks"
+          ],
+          "missing_keywords": [],
+          "trace_available": true,
+          "trace_id": 11,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 7,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/ingestion/file-processing-pipeline.md",
+            "docs/product/kb-workspace.md"
+          ]
+        },
+        {
+          "id": "relation_workspace_permission_012",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.25,
+          "matched_keywords": [
+            "Graph"
+          ],
+          "missing_keywords": [
+            "Permission Model",
+            "Team admin",
+            "Team member"
+          ],
+          "trace_available": true,
+          "trace_id": 12,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 8,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/product/kb-workspace.md",
+            "docs/retrieval-and-citations.md"
+          ]
+        },
+        {
+          "id": "relation_graph_citation_013",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "Relations",
+            "mentions",
+            "source document",
+            "citation-unit"
+          ],
+          "trace_available": true,
+          "trace_id": 13,
+          "trace_item_count": 7,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 7,
+          "answer_contains_expected": null,
+          "final_evidence_count": 7,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/ingestion/document-blocks.md",
+            "docs/architecture/rag-v2-architecture.md"
+          ]
+        },
+        {
+          "id": "relation_reranker_retrieval_014",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.5,
+          "matched_keywords": [
+            "rerank",
+            "evidences"
+          ],
+          "missing_keywords": [
+            "initial recall",
+            "final top_k"
+          ],
+          "trace_available": true,
+          "trace_id": 14,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 8,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/ingestion/document-blocks.md",
+            "docs/product/kb-workspace.md"
+          ]
+        },
+        {
+          "id": "relation_index_compatibility_015",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.75,
+          "matched_keywords": [
+            "provider",
+            "model",
+            "Compatibility"
+          ],
+          "missing_keywords": [
+            "dimension"
+          ],
+          "trace_available": true,
+          "trace_id": 15,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 8,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/index-metadata.md",
+            "docs/architecture/rag-v2-architecture.md"
+          ]
+        },
+        {
+          "id": "factual_modes_016",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.2,
+          "matched_keywords": [
+            "auto"
+          ],
+          "missing_keywords": [
+            "chunk_only",
+            "overview",
+            "graph_vector_mix",
+            "hybrid_text"
+          ],
+          "trace_available": true,
+          "trace_id": 16,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 9,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/retrieval-layer.md",
+            "docs/ingestion/file-processing-pipeline.md"
+          ]
+        },
+        {
+          "id": "factual_reranker_optional_017",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.25,
+          "matched_keywords": [
+            "disabled"
+          ],
+          "missing_keywords": [
+            "noop",
+            "local_rule_reranker",
+            "flagembedding"
+          ],
+          "trace_available": true,
+          "trace_id": 17,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 7,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/reranker.md",
+            "docs/ingestion/file-processing-pipeline.md"
+          ]
+        },
+        {
+          "id": "factual_eval_metrics_018",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "retrieval_hit",
+            "citation_hit",
+            "top_1_doc_hit",
+            "trace_available"
+          ],
+          "trace_available": true,
+          "trace_id": 18,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 7,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/ingestion/file-processing-pipeline.md"
+          ]
+        },
+        {
+          "id": "factual_parser_routing_019",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.25,
+          "matched_keywords": [
+            ".md"
+          ],
+          "missing_keywords": [
+            ".txt",
+            ".docx",
+            ".pdf"
+          ],
+          "trace_available": true,
+          "trace_id": 19,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 8,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/ingestion/document-blocks.md",
+            "docs/development/testing-and-smoke.md",
+            "docs/rag/index-metadata.md"
+          ]
+        },
+        {
+          "id": "factual_smoke_diagnostics_020",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "retrieve response body",
+            "kb_id",
+            "provider status"
+          ],
+          "trace_available": true,
+          "trace_id": 20,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 8,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/development/testing-and-smoke.md",
+            "docs/retrieval-and-citations.md",
+            "docs/rag/retrieval-layer.md",
+            "docs/rag/index-metadata.md"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "block_aware_chunk_only",
+      "chunk_strategy": "block_aware",
+      "mode": "chunk_only",
+      "purpose": "Isolates the effect of block-aware chunking under the default retrieval mode.",
+      "total_cases": 20,
+      "retrieval_hit_rate": 0.7,
+      "citation_hit_rate": 0.7,
+      "top_1_doc_hit_rate": 0.35,
+      "top_3_doc_hit_rate": 0.5,
+      "average_keyword_coverage": 0.27666666666666667,
+      "trace_available_rate": 1.0,
+      "trace_available_count": 20,
+      "reranker_used_count": 0,
+      "average_latency_ms": 11.05,
+      "selected_mode_counts": {
+        "chunk_only": 20
+      },
+      "cases": [
+        {
+          "id": "overview_architecture_001",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "Retrieval Layer",
+            "Provider Layer",
+            "Retrieval Trace"
+          ],
+          "trace_available": true,
+          "trace_id": 1,
+          "trace_item_count": 5,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 13,
+          "answer_contains_expected": null,
+          "final_evidence_count": 5,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/index-metadata.md",
+            "docs/rag/rag-evaluation.md",
+            "docs/ingestion/file-processing-pipeline.md",
+            "docs/development/testing-and-smoke.md"
+          ]
+        },
+        {
+          "id": "overview_workspace_002",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 1.0,
+          "matched_keywords": [
+            "Ask",
+            "Documents",
+            "Graph",
+            "Retrieval Debug"
+          ],
+          "missing_keywords": [],
+          "trace_available": true,
+          "trace_id": 2,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 11,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/retrieval-layer.md",
+            "docs/product/kb-workspace.md",
+            "docs/ingestion/file-processing-pipeline.md",
+            "docs/rag/reranker.md"
+          ]
+        },
+        {
+          "id": "overview_retrieval_layer_003",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "RetrievalRequest",
+            "RetrievedEvidence",
+            "reranking"
+          ],
+          "trace_available": true,
+          "trace_id": 3,
+          "trace_item_count": 6,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 10,
+          "answer_contains_expected": null,
+          "final_evidence_count": 6,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/retrieval-layer.md",
+            "docs/ingestion/file-processing-pipeline.md",
+            "docs/rag/rag-evaluation.md",
+            "docs/development/testing-and-smoke.md"
+          ]
+        },
+        {
+          "id": "overview_processing_pipeline_004",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "upload",
+            "ParsedDocument",
+            "document_blocks",
+            "chunks"
+          ],
+          "trace_available": true,
+          "trace_id": 4,
+          "trace_item_count": 3,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 10,
+          "answer_contains_expected": null,
+          "final_evidence_count": 3,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/rag-evaluation.md"
+          ]
+        },
+        {
+          "id": "technical_chunk_strategy_005",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.6666666666666666,
+          "matched_keywords": [
+            "CHUNK_STRATEGY",
+            "fixed"
+          ],
+          "missing_keywords": [
+            "block_aware"
+          ],
+          "trace_available": true,
+          "trace_id": 5,
+          "trace_item_count": 3,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 11,
+          "answer_contains_expected": null,
+          "final_evidence_count": 3,
+          "top_documents": [
+            "docs/ingestion/document-blocks.md",
+            "docs/retrieval-and-citations.md",
+            "docs/ingestion/file-processing-pipeline.md"
+          ]
+        },
+        {
+          "id": "technical_hybrid_text_006",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "HYBRID_TEXT",
+            "API paths",
+            "config keys",
+            "commands"
+          ],
+          "trace_available": true,
+          "trace_id": 6,
+          "trace_item_count": 3,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 11,
+          "answer_contains_expected": null,
+          "final_evidence_count": 3,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/retrieval-layer.md"
+          ]
+        },
+        {
+          "id": "technical_trace_metadata_007",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "requested_mode",
+            "selected_mode",
+            "router_reason",
+            "router_type"
+          ],
+          "trace_available": true,
+          "trace_id": 7,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 12,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/retrieval-layer.md",
+            "docs/rag/index-metadata.md",
+            "docs/product/kb-workspace.md",
+            "docs/ingestion/file-processing-pipeline.md"
+          ]
+        },
+        {
+          "id": "technical_block_table_code_008",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.5,
+          "matched_keywords": [
+            "table",
+            "code"
+          ],
+          "missing_keywords": [
+            "heading_path",
+            "standalone"
+          ],
+          "trace_available": true,
+          "trace_id": 8,
+          "trace_item_count": 7,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 10,
+          "answer_contains_expected": null,
+          "final_evidence_count": 7,
+          "top_documents": [
+            "docs/ingestion/document-blocks.md",
+            "docs/retrieval-and-citations.md",
+            "docs/ingestion/file-processing-pipeline.md",
+            "docs/rag/rag-evaluation.md"
+          ]
+        },
+        {
+          "id": "technical_retrieval_entrypoint_009",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.6666666666666666,
+          "matched_keywords": [
+            "app/services/retrieval",
+            "RetrievalResult"
+          ],
+          "missing_keywords": [
+            "retrieval_service.retrieve"
+          ],
+          "trace_available": true,
+          "trace_id": 9,
+          "trace_item_count": 4,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 12,
+          "answer_contains_expected": null,
+          "final_evidence_count": 4,
+          "top_documents": [
+            "docs/rag/retrieval-layer.md",
+            "docs/retrieval-and-citations.md",
+            "docs/development/testing-and-smoke.md"
+          ]
+        },
+        {
+          "id": "technical_index_metadata_010",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 1.0,
+          "matched_keywords": [
+            "provider",
+            "model name",
+            "model dimension",
+            "status"
+          ],
+          "missing_keywords": [],
+          "trace_available": true,
+          "trace_id": 10,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 12,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/rag/index-metadata.md",
+            "docs/retrieval-and-citations.md",
+            "docs/ingestion/file-processing-pipeline.md",
+            "docs/ingestion/document-blocks.md",
+            "docs/development/testing-and-smoke.md"
+          ]
+        },
+        {
+          "id": "relation_blocks_chunks_011",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.5,
+          "matched_keywords": [
+            "chunk strategy",
+            "chunks"
+          ],
+          "missing_keywords": [
+            "ParsedDocument",
+            "document_blocks"
+          ],
+          "trace_available": true,
+          "trace_id": 11,
+          "trace_item_count": 7,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 11,
+          "answer_contains_expected": null,
+          "final_evidence_count": 7,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/ingestion/document-blocks.md",
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/ingestion/file-processing-pipeline.md"
+          ]
+        },
+        {
+          "id": "relation_workspace_permission_012",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.25,
+          "matched_keywords": [
+            "Graph"
+          ],
+          "missing_keywords": [
+            "Permission Model",
+            "Team admin",
+            "Team member"
+          ],
+          "trace_available": true,
+          "trace_id": 12,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 12,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/product/kb-workspace.md",
+            "docs/retrieval-and-citations.md",
+            "docs/rag/retrieval-layer.md",
+            "docs/development/testing-and-smoke.md",
+            "docs/architecture/rag-v2-architecture.md"
+          ]
+        },
+        {
+          "id": "relation_graph_citation_013",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.25,
+          "matched_keywords": [
+            "citation-unit"
+          ],
+          "missing_keywords": [
+            "Relations",
+            "mentions",
+            "source document"
+          ],
+          "trace_available": true,
+          "trace_id": 13,
+          "trace_item_count": 6,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 10,
+          "answer_contains_expected": null,
+          "final_evidence_count": 6,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/ingestion/document-blocks.md",
+            "docs/development/testing-and-smoke.md"
+          ]
+        },
+        {
+          "id": "relation_reranker_retrieval_014",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.25,
+          "matched_keywords": [
+            "rerank"
+          ],
+          "missing_keywords": [
+            "initial recall",
+            "final top_k",
+            "evidences"
+          ],
+          "trace_available": true,
+          "trace_id": 14,
+          "trace_item_count": 5,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 12,
+          "answer_contains_expected": null,
+          "final_evidence_count": 5,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/rag/rag-evaluation.md",
+            "docs/rag/index-metadata.md"
+          ]
+        },
+        {
+          "id": "relation_index_compatibility_015",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "provider",
+            "model",
+            "dimension",
+            "Compatibility"
+          ],
+          "trace_available": true,
+          "trace_id": 15,
+          "trace_item_count": 3,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 10,
+          "answer_contains_expected": null,
+          "final_evidence_count": 3,
+          "top_documents": [
+            "docs/rag/index-metadata.md",
+            "docs/retrieval-and-citations.md"
+          ]
+        },
+        {
+          "id": "factual_modes_016",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.2,
+          "matched_keywords": [
+            "auto"
+          ],
+          "missing_keywords": [
+            "chunk_only",
+            "overview",
+            "graph_vector_mix",
+            "hybrid_text"
+          ],
+          "trace_available": true,
+          "trace_id": 16,
+          "trace_item_count": 5,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 12,
+          "answer_contains_expected": null,
+          "final_evidence_count": 5,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/index-metadata.md",
+            "docs/rag/retrieval-layer.md",
+            "docs/product/kb-workspace.md"
+          ]
+        },
+        {
+          "id": "factual_reranker_optional_017",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "noop",
+            "local_rule_reranker",
+            "flagembedding",
+            "disabled"
+          ],
+          "trace_available": true,
+          "trace_id": 17,
+          "trace_item_count": 1,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 10,
+          "answer_contains_expected": null,
+          "final_evidence_count": 1,
+          "top_documents": [
+            "docs/retrieval-and-citations.md"
+          ]
+        },
+        {
+          "id": "factual_eval_metrics_018",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "retrieval_hit",
+            "citation_hit",
+            "top_1_doc_hit",
+            "trace_available"
+          ],
+          "trace_available": true,
+          "trace_id": 18,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 10,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/development/testing-and-smoke.md",
+            "docs/rag/rag-evaluation.md",
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/ingestion/file-processing-pipeline.md"
+          ]
+        },
+        {
+          "id": "factual_parser_routing_019",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.25,
+          "matched_keywords": [
+            ".md"
+          ],
+          "missing_keywords": [
+            ".txt",
+            ".docx",
+            ".pdf"
+          ],
+          "trace_available": true,
+          "trace_id": 19,
+          "trace_item_count": 2,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 11,
+          "answer_contains_expected": null,
+          "final_evidence_count": 2,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/rag-evaluation.md"
+          ]
+        },
+        {
+          "id": "factual_smoke_diagnostics_020",
+          "mode": "chunk_only",
+          "requested_mode": "chunk_only",
+          "selected_mode": "chunk_only",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "retrieve response body",
+            "kb_id",
+            "provider status"
+          ],
+          "trace_available": true,
+          "trace_id": 20,
+          "trace_item_count": 7,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 11,
+          "answer_contains_expected": null,
+          "final_evidence_count": 7,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/retrieval-layer.md",
+            "docs/development/testing-and-smoke.md",
+            "docs/rag/index-metadata.md",
+            "docs/ingestion/document-blocks.md"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "block_aware_hybrid_text",
+      "chunk_strategy": "block_aware",
+      "mode": "hybrid_text",
+      "purpose": "Tests lexical recall for exact API paths, config keys, file paths, and technical tokens.",
+      "total_cases": 20,
+      "retrieval_hit_rate": 0.65,
+      "citation_hit_rate": 0.65,
+      "top_1_doc_hit_rate": 0.3,
+      "top_3_doc_hit_rate": 0.5,
+      "average_keyword_coverage": 0.25,
+      "trace_available_rate": 1.0,
+      "trace_available_count": 20,
+      "reranker_used_count": 0,
+      "average_latency_ms": 15.4,
+      "selected_mode_counts": {
+        "hybrid_text": 20
+      },
+      "cases": [
+        {
+          "id": "overview_architecture_001",
+          "mode": "hybrid_text",
+          "requested_mode": "hybrid_text",
+          "selected_mode": "hybrid_text",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "Retrieval Layer",
+            "Provider Layer",
+            "Retrieval Trace"
+          ],
+          "trace_available": true,
+          "trace_id": 1,
+          "trace_item_count": 4,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 17,
+          "answer_contains_expected": null,
+          "final_evidence_count": 4,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/index-metadata.md",
+            "docs/rag/rag-evaluation.md",
+            "docs/ingestion/file-processing-pipeline.md"
+          ]
+        },
+        {
+          "id": "overview_workspace_002",
+          "mode": "hybrid_text",
+          "requested_mode": "hybrid_text",
+          "selected_mode": "hybrid_text",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 1.0,
+          "matched_keywords": [
+            "Ask",
+            "Documents",
+            "Graph",
+            "Retrieval Debug"
+          ],
+          "missing_keywords": [],
+          "trace_available": true,
+          "trace_id": 2,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 13,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/retrieval-layer.md",
+            "docs/product/kb-workspace.md",
+            "docs/ingestion/file-processing-pipeline.md",
+            "docs/rag/reranker.md"
+          ]
+        },
+        {
+          "id": "overview_retrieval_layer_003",
+          "mode": "hybrid_text",
+          "requested_mode": "hybrid_text",
+          "selected_mode": "hybrid_text",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "RetrievalRequest",
+            "RetrievedEvidence",
+            "reranking"
+          ],
+          "trace_available": true,
+          "trace_id": 3,
+          "trace_item_count": 2,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 16,
+          "answer_contains_expected": null,
+          "final_evidence_count": 2,
+          "top_documents": [
+            "docs/rag/retrieval-layer.md",
+            "docs/retrieval-and-citations.md"
+          ]
+        },
+        {
+          "id": "overview_processing_pipeline_004",
+          "mode": "hybrid_text",
+          "requested_mode": "hybrid_text",
+          "selected_mode": "hybrid_text",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "upload",
+            "ParsedDocument",
+            "document_blocks",
+            "chunks"
+          ],
+          "trace_available": true,
+          "trace_id": 4,
+          "trace_item_count": 3,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 12,
+          "answer_contains_expected": null,
+          "final_evidence_count": 3,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/rag-evaluation.md"
+          ]
+        },
+        {
+          "id": "technical_chunk_strategy_005",
+          "mode": "hybrid_text",
+          "requested_mode": "hybrid_text",
+          "selected_mode": "hybrid_text",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.6666666666666666,
+          "matched_keywords": [
+            "CHUNK_STRATEGY",
+            "block_aware"
+          ],
+          "missing_keywords": [
+            "fixed"
+          ],
+          "trace_available": true,
+          "trace_id": 5,
+          "trace_item_count": 3,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 17,
+          "answer_contains_expected": null,
+          "final_evidence_count": 3,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/ingestion/document-blocks.md",
+            "docs/ingestion/file-processing-pipeline.md"
+          ]
+        },
+        {
+          "id": "technical_hybrid_text_006",
+          "mode": "hybrid_text",
+          "requested_mode": "hybrid_text",
+          "selected_mode": "hybrid_text",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "HYBRID_TEXT",
+            "API paths",
+            "config keys",
+            "commands"
+          ],
+          "trace_available": true,
+          "trace_id": 6,
+          "trace_item_count": 2,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 16,
+          "answer_contains_expected": null,
+          "final_evidence_count": 2,
+          "top_documents": [
+            "docs/retrieval-and-citations.md"
+          ]
+        },
+        {
+          "id": "technical_trace_metadata_007",
+          "mode": "hybrid_text",
+          "requested_mode": "hybrid_text",
+          "selected_mode": "hybrid_text",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "requested_mode",
+            "selected_mode",
+            "router_reason",
+            "router_type"
+          ],
+          "trace_available": true,
+          "trace_id": 7,
+          "trace_item_count": 4,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 16,
+          "answer_contains_expected": null,
+          "final_evidence_count": 4,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/retrieval-layer.md"
+          ]
+        },
+        {
+          "id": "technical_block_table_code_008",
+          "mode": "hybrid_text",
+          "requested_mode": "hybrid_text",
+          "selected_mode": "hybrid_text",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.5,
+          "matched_keywords": [
+            "table",
+            "code"
+          ],
+          "missing_keywords": [
+            "heading_path",
+            "standalone"
+          ],
+          "trace_available": true,
+          "trace_id": 8,
+          "trace_item_count": 7,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 15,
+          "answer_contains_expected": null,
+          "final_evidence_count": 7,
+          "top_documents": [
+            "docs/ingestion/document-blocks.md",
+            "docs/retrieval-and-citations.md",
+            "docs/ingestion/file-processing-pipeline.md",
+            "docs/architecture/rag-v2-architecture.md"
+          ]
+        },
+        {
+          "id": "technical_retrieval_entrypoint_009",
+          "mode": "hybrid_text",
+          "requested_mode": "hybrid_text",
+          "selected_mode": "hybrid_text",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.3333333333333333,
+          "matched_keywords": [
+            "RetrievalResult"
+          ],
+          "missing_keywords": [
+            "app/services/retrieval",
+            "retrieval_service.retrieve"
+          ],
+          "trace_available": true,
+          "trace_id": 9,
+          "trace_item_count": 5,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 16,
+          "answer_contains_expected": null,
+          "final_evidence_count": 5,
+          "top_documents": [
+            "docs/rag/retrieval-layer.md",
+            "docs/retrieval-and-citations.md",
+            "docs/development/testing-and-smoke.md"
+          ]
+        },
+        {
+          "id": "technical_index_metadata_010",
+          "mode": "hybrid_text",
+          "requested_mode": "hybrid_text",
+          "selected_mode": "hybrid_text",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 1.0,
+          "matched_keywords": [
+            "provider",
+            "model name",
+            "model dimension",
+            "status"
+          ],
+          "missing_keywords": [],
+          "trace_available": true,
+          "trace_id": 10,
+          "trace_item_count": 7,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 17,
+          "answer_contains_expected": null,
+          "final_evidence_count": 7,
+          "top_documents": [
+            "docs/rag/index-metadata.md",
+            "docs/ingestion/file-processing-pipeline.md",
+            "docs/retrieval-and-citations.md",
+            "docs/ingestion/document-blocks.md"
+          ]
+        },
+        {
+          "id": "relation_blocks_chunks_011",
+          "mode": "hybrid_text",
+          "requested_mode": "hybrid_text",
+          "selected_mode": "hybrid_text",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.5,
+          "matched_keywords": [
+            "chunk strategy",
+            "chunks"
+          ],
+          "missing_keywords": [
+            "ParsedDocument",
+            "document_blocks"
+          ],
+          "trace_available": true,
+          "trace_id": 11,
+          "trace_item_count": 6,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 16,
+          "answer_contains_expected": null,
+          "final_evidence_count": 6,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/ingestion/file-processing-pipeline.md"
+          ]
+        },
+        {
+          "id": "relation_workspace_permission_012",
+          "mode": "hybrid_text",
+          "requested_mode": "hybrid_text",
+          "selected_mode": "hybrid_text",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.25,
+          "matched_keywords": [
+            "Graph"
+          ],
+          "missing_keywords": [
+            "Permission Model",
+            "Team admin",
+            "Team member"
+          ],
+          "trace_available": true,
+          "trace_id": 12,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 17,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/product/kb-workspace.md",
+            "docs/retrieval-and-citations.md",
+            "docs/rag/retrieval-layer.md",
+            "docs/development/testing-and-smoke.md"
+          ]
+        },
+        {
+          "id": "relation_graph_citation_013",
+          "mode": "hybrid_text",
+          "requested_mode": "hybrid_text",
+          "selected_mode": "hybrid_text",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.25,
+          "matched_keywords": [
+            "citation-unit"
+          ],
+          "missing_keywords": [
+            "Relations",
+            "mentions",
+            "source document"
+          ],
+          "trace_available": true,
+          "trace_id": 13,
+          "trace_item_count": 2,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 16,
+          "answer_contains_expected": null,
+          "final_evidence_count": 2,
+          "top_documents": [
+            "docs/retrieval-and-citations.md"
+          ]
+        },
+        {
+          "id": "relation_reranker_retrieval_014",
+          "mode": "hybrid_text",
+          "requested_mode": "hybrid_text",
+          "selected_mode": "hybrid_text",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.25,
+          "matched_keywords": [
+            "rerank"
+          ],
+          "missing_keywords": [
+            "initial recall",
+            "final top_k",
+            "evidences"
+          ],
+          "trace_available": true,
+          "trace_id": 14,
+          "trace_item_count": 2,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 17,
+          "answer_contains_expected": null,
+          "final_evidence_count": 2,
+          "top_documents": [
+            "docs/retrieval-and-citations.md"
+          ]
+        },
+        {
+          "id": "relation_index_compatibility_015",
+          "mode": "hybrid_text",
+          "requested_mode": "hybrid_text",
+          "selected_mode": "hybrid_text",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "provider",
+            "model",
+            "dimension",
+            "Compatibility"
+          ],
+          "trace_available": true,
+          "trace_id": 15,
+          "trace_item_count": 3,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 14,
+          "answer_contains_expected": null,
+          "final_evidence_count": 3,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/index-metadata.md"
+          ]
+        },
+        {
+          "id": "factual_modes_016",
+          "mode": "hybrid_text",
+          "requested_mode": "hybrid_text",
+          "selected_mode": "hybrid_text",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "auto",
+            "chunk_only",
+            "overview",
+            "graph_vector_mix",
+            "hybrid_text"
+          ],
+          "trace_available": true,
+          "trace_id": 16,
+          "trace_item_count": 3,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 16,
+          "answer_contains_expected": null,
+          "final_evidence_count": 3,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/index-metadata.md",
+            "docs/rag/retrieval-layer.md"
+          ]
+        },
+        {
+          "id": "factual_reranker_optional_017",
+          "mode": "hybrid_text",
+          "requested_mode": "hybrid_text",
+          "selected_mode": "hybrid_text",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "noop",
+            "local_rule_reranker",
+            "flagembedding",
+            "disabled"
+          ],
+          "trace_available": true,
+          "trace_id": 17,
+          "trace_item_count": 1,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 13,
+          "answer_contains_expected": null,
+          "final_evidence_count": 1,
+          "top_documents": [
+            "docs/retrieval-and-citations.md"
+          ]
+        },
+        {
+          "id": "factual_eval_metrics_018",
+          "mode": "hybrid_text",
+          "requested_mode": "hybrid_text",
+          "selected_mode": "hybrid_text",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "retrieval_hit",
+            "citation_hit",
+            "top_1_doc_hit",
+            "trace_available"
+          ],
+          "trace_available": true,
+          "trace_id": 18,
+          "trace_item_count": 6,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 16,
+          "answer_contains_expected": null,
+          "final_evidence_count": 6,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/rag-evaluation.md",
+            "docs/architecture/rag-v2-architecture.md"
+          ]
+        },
+        {
+          "id": "factual_parser_routing_019",
+          "mode": "hybrid_text",
+          "requested_mode": "hybrid_text",
+          "selected_mode": "hybrid_text",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.25,
+          "matched_keywords": [
+            ".md"
+          ],
+          "missing_keywords": [
+            ".txt",
+            ".docx",
+            ".pdf"
+          ],
+          "trace_available": true,
+          "trace_id": 19,
+          "trace_item_count": 2,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 12,
+          "answer_contains_expected": null,
+          "final_evidence_count": 2,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/rag-evaluation.md"
+          ]
+        },
+        {
+          "id": "factual_smoke_diagnostics_020",
+          "mode": "hybrid_text",
+          "requested_mode": "hybrid_text",
+          "selected_mode": "hybrid_text",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "retrieve response body",
+            "kb_id",
+            "provider status"
+          ],
+          "trace_available": true,
+          "trace_id": 20,
+          "trace_item_count": 5,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 16,
+          "answer_contains_expected": null,
+          "final_evidence_count": 5,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/retrieval-layer.md",
+            "docs/development/testing-and-smoke.md"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "block_aware_graph_vector_mix",
+      "chunk_strategy": "block_aware",
+      "mode": "graph_vector_mix",
+      "purpose": "Tests lightweight graph candidate merge plus vector candidates.",
+      "total_cases": 20,
+      "retrieval_hit_rate": 0.45,
+      "citation_hit_rate": 0.45,
+      "top_1_doc_hit_rate": 0.25,
+      "top_3_doc_hit_rate": 0.35,
+      "average_keyword_coverage": 0.25416666666666665,
+      "trace_available_rate": 1.0,
+      "trace_available_count": 20,
+      "reranker_used_count": 0,
+      "average_latency_ms": 13.2,
+      "selected_mode_counts": {
+        "graph_vector_mix": 20
+      },
+      "cases": [
+        {
+          "id": "overview_architecture_001",
+          "mode": "graph_vector_mix",
+          "requested_mode": "graph_vector_mix",
+          "selected_mode": "graph_vector_mix",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "Retrieval Layer",
+            "Provider Layer",
+            "Retrieval Trace"
+          ],
+          "trace_available": true,
+          "trace_id": 1,
+          "trace_item_count": 5,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 17,
+          "answer_contains_expected": null,
+          "final_evidence_count": 5,
+          "top_documents": [
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/ingestion/file-processing-pipeline.md",
+            "docs/ingestion/document-blocks.md"
+          ]
+        },
+        {
+          "id": "overview_workspace_002",
+          "mode": "graph_vector_mix",
+          "requested_mode": "graph_vector_mix",
+          "selected_mode": "graph_vector_mix",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 1.0,
+          "matched_keywords": [
+            "Ask",
+            "Documents",
+            "Graph",
+            "Retrieval Debug"
+          ],
+          "missing_keywords": [],
+          "trace_available": true,
+          "trace_id": 2,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 12,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/retrieval-layer.md",
+            "docs/product/kb-workspace.md",
+            "docs/ingestion/file-processing-pipeline.md",
+            "docs/rag/reranker.md"
+          ]
+        },
+        {
+          "id": "overview_retrieval_layer_003",
+          "mode": "graph_vector_mix",
+          "requested_mode": "graph_vector_mix",
+          "selected_mode": "graph_vector_mix",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "RetrievalRequest",
+            "RetrievedEvidence",
+            "reranking"
+          ],
+          "trace_available": true,
+          "trace_id": 3,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 12,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/retrieval-and-citations.md",
+            "docs/product/kb-workspace.md",
+            "docs/rag/index-metadata.md",
+            "docs/development/testing-and-smoke.md"
+          ]
+        },
+        {
+          "id": "overview_processing_pipeline_004",
+          "mode": "graph_vector_mix",
+          "requested_mode": "graph_vector_mix",
+          "selected_mode": "graph_vector_mix",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "upload",
+            "ParsedDocument",
+            "document_blocks",
+            "chunks"
+          ],
+          "trace_available": true,
+          "trace_id": 4,
+          "trace_item_count": 2,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 11,
+          "answer_contains_expected": null,
+          "final_evidence_count": 2,
+          "top_documents": [
+            "docs/retrieval-and-citations.md"
+          ]
+        },
+        {
+          "id": "technical_chunk_strategy_005",
+          "mode": "graph_vector_mix",
+          "requested_mode": "graph_vector_mix",
+          "selected_mode": "graph_vector_mix",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "CHUNK_STRATEGY",
+            "block_aware",
+            "fixed"
+          ],
+          "trace_available": true,
+          "trace_id": 5,
+          "trace_item_count": 5,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 14,
+          "answer_contains_expected": null,
+          "final_evidence_count": 5,
+          "top_documents": [
+            "docs/product/kb-workspace.md",
+            "docs/rag/retrieval-layer.md",
+            "docs/architecture/rag-v2-architecture.md"
+          ]
+        },
+        {
+          "id": "technical_hybrid_text_006",
+          "mode": "graph_vector_mix",
+          "requested_mode": "graph_vector_mix",
+          "selected_mode": "graph_vector_mix",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.75,
+          "matched_keywords": [
+            "API paths",
+            "config keys",
+            "commands"
+          ],
+          "missing_keywords": [
+            "HYBRID_TEXT"
+          ],
+          "trace_available": true,
+          "trace_id": 6,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 13,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/product/kb-workspace.md",
+            "docs/retrieval-and-citations.md",
+            "docs/rag/index-metadata.md",
+            "docs/development/testing-and-smoke.md"
+          ]
+        },
+        {
+          "id": "technical_trace_metadata_007",
+          "mode": "graph_vector_mix",
+          "requested_mode": "graph_vector_mix",
+          "selected_mode": "graph_vector_mix",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "requested_mode",
+            "selected_mode",
+            "router_reason",
+            "router_type"
+          ],
+          "trace_available": true,
+          "trace_id": 7,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 14,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/retrieval-and-citations.md",
+            "docs/rag/index-metadata.md",
+            "docs/product/kb-workspace.md",
+            "docs/development/testing-and-smoke.md"
+          ]
+        },
+        {
+          "id": "technical_block_table_code_008",
+          "mode": "graph_vector_mix",
+          "requested_mode": "graph_vector_mix",
+          "selected_mode": "graph_vector_mix",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "table",
+            "code",
+            "heading_path",
+            "standalone"
+          ],
+          "trace_available": true,
+          "trace_id": 8,
+          "trace_item_count": 5,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 13,
+          "answer_contains_expected": null,
+          "final_evidence_count": 5,
+          "top_documents": [
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/product/kb-workspace.md",
+            "docs/rag/retrieval-layer.md"
+          ]
+        },
+        {
+          "id": "technical_retrieval_entrypoint_009",
+          "mode": "graph_vector_mix",
+          "requested_mode": "graph_vector_mix",
+          "selected_mode": "graph_vector_mix",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.3333333333333333,
+          "matched_keywords": [
+            "RetrievalResult"
+          ],
+          "missing_keywords": [
+            "app/services/retrieval",
+            "retrieval_service.retrieve"
+          ],
+          "trace_available": true,
+          "trace_id": 9,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 15,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/rag/retrieval-layer.md",
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/product/kb-workspace.md",
+            "docs/retrieval-and-citations.md",
+            "docs/rag/index-metadata.md",
+            "docs/development/testing-and-smoke.md"
+          ]
+        },
+        {
+          "id": "technical_index_metadata_010",
+          "mode": "graph_vector_mix",
+          "requested_mode": "graph_vector_mix",
+          "selected_mode": "graph_vector_mix",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 1.0,
+          "matched_keywords": [
+            "provider",
+            "model name",
+            "model dimension",
+            "status"
+          ],
+          "missing_keywords": [],
+          "trace_available": true,
+          "trace_id": 10,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 14,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/rag/index-metadata.md",
+            "docs/retrieval-and-citations.md",
+            "docs/ingestion/file-processing-pipeline.md",
+            "docs/ingestion/document-blocks.md"
+          ]
+        },
+        {
+          "id": "relation_blocks_chunks_011",
+          "mode": "graph_vector_mix",
+          "requested_mode": "graph_vector_mix",
+          "selected_mode": "graph_vector_mix",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.5,
+          "matched_keywords": [
+            "ParsedDocument",
+            "chunks"
+          ],
+          "missing_keywords": [
+            "document_blocks",
+            "chunk strategy"
+          ],
+          "trace_available": true,
+          "trace_id": 11,
+          "trace_item_count": 5,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 15,
+          "answer_contains_expected": null,
+          "final_evidence_count": 5,
+          "top_documents": [
+            "docs/product/kb-workspace.md",
+            "docs/rag/retrieval-layer.md",
+            "docs/architecture/rag-v2-architecture.md"
+          ]
+        },
+        {
+          "id": "relation_workspace_permission_012",
+          "mode": "graph_vector_mix",
+          "requested_mode": "graph_vector_mix",
+          "selected_mode": "graph_vector_mix",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.25,
+          "matched_keywords": [
+            "Graph"
+          ],
+          "missing_keywords": [
+            "Permission Model",
+            "Team admin",
+            "Team member"
+          ],
+          "trace_available": true,
+          "trace_id": 12,
+          "trace_item_count": 7,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 14,
+          "answer_contains_expected": null,
+          "final_evidence_count": 7,
+          "top_documents": [
+            "docs/product/kb-workspace.md",
+            "docs/retrieval-and-citations.md",
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/ingestion/file-processing-pipeline.md"
+          ]
+        },
+        {
+          "id": "relation_graph_citation_013",
+          "mode": "graph_vector_mix",
+          "requested_mode": "graph_vector_mix",
+          "selected_mode": "graph_vector_mix",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "Relations",
+            "mentions",
+            "source document",
+            "citation-unit"
+          ],
+          "trace_available": true,
+          "trace_id": 13,
+          "trace_item_count": 2,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 14,
+          "answer_contains_expected": null,
+          "final_evidence_count": 2,
+          "top_documents": [
+            "docs/architecture/rag-v2-architecture.md"
+          ]
+        },
+        {
+          "id": "relation_reranker_retrieval_014",
+          "mode": "graph_vector_mix",
+          "requested_mode": "graph_vector_mix",
+          "selected_mode": "graph_vector_mix",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.25,
+          "matched_keywords": [
+            "rerank"
+          ],
+          "missing_keywords": [
+            "initial recall",
+            "final top_k",
+            "evidences"
+          ],
+          "trace_available": true,
+          "trace_id": 14,
+          "trace_item_count": 5,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 13,
+          "answer_contains_expected": null,
+          "final_evidence_count": 5,
+          "top_documents": [
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/product/kb-workspace.md",
+            "docs/rag/retrieval-layer.md"
+          ]
+        },
+        {
+          "id": "relation_index_compatibility_015",
+          "mode": "graph_vector_mix",
+          "requested_mode": "graph_vector_mix",
+          "selected_mode": "graph_vector_mix",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.75,
+          "matched_keywords": [
+            "provider",
+            "model",
+            "Compatibility"
+          ],
+          "missing_keywords": [
+            "dimension"
+          ],
+          "trace_available": true,
+          "trace_id": 15,
+          "trace_item_count": 6,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 13,
+          "answer_contains_expected": null,
+          "final_evidence_count": 6,
+          "top_documents": [
+            "docs/rag/index-metadata.md",
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/retrieval-and-citations.md",
+            "docs/product/kb-workspace.md"
+          ]
+        },
+        {
+          "id": "factual_modes_016",
+          "mode": "graph_vector_mix",
+          "requested_mode": "graph_vector_mix",
+          "selected_mode": "graph_vector_mix",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "auto",
+            "chunk_only",
+            "overview",
+            "graph_vector_mix",
+            "hybrid_text"
+          ],
+          "trace_available": true,
+          "trace_id": 16,
+          "trace_item_count": 4,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 12,
+          "answer_contains_expected": null,
+          "final_evidence_count": 4,
+          "top_documents": [
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/product/kb-workspace.md"
+          ]
+        },
+        {
+          "id": "factual_reranker_optional_017",
+          "mode": "graph_vector_mix",
+          "requested_mode": "graph_vector_mix",
+          "selected_mode": "graph_vector_mix",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "noop",
+            "local_rule_reranker",
+            "flagembedding",
+            "disabled"
+          ],
+          "trace_available": true,
+          "trace_id": 17,
+          "trace_item_count": 3,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 12,
+          "answer_contains_expected": null,
+          "final_evidence_count": 3,
+          "top_documents": [
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/rag/retrieval-layer.md"
+          ]
+        },
+        {
+          "id": "factual_eval_metrics_018",
+          "mode": "graph_vector_mix",
+          "requested_mode": "graph_vector_mix",
+          "selected_mode": "graph_vector_mix",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "retrieval_hit",
+            "citation_hit",
+            "top_1_doc_hit",
+            "trace_available"
+          ],
+          "trace_available": true,
+          "trace_id": 18,
+          "trace_item_count": 3,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 12,
+          "answer_contains_expected": null,
+          "final_evidence_count": 3,
+          "top_documents": [
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/product/kb-workspace.md"
+          ]
+        },
+        {
+          "id": "factual_parser_routing_019",
+          "mode": "graph_vector_mix",
+          "requested_mode": "graph_vector_mix",
+          "selected_mode": "graph_vector_mix",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.25,
+          "matched_keywords": [
+            ".md"
+          ],
+          "missing_keywords": [
+            ".txt",
+            ".docx",
+            ".pdf"
+          ],
+          "trace_available": true,
+          "trace_id": 19,
+          "trace_item_count": 5,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 11,
+          "answer_contains_expected": null,
+          "final_evidence_count": 5,
+          "top_documents": [
+            "docs/ingestion/file-processing-pipeline.md",
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/retrieval-and-citations.md"
+          ]
+        },
+        {
+          "id": "factual_smoke_diagnostics_020",
+          "mode": "graph_vector_mix",
+          "requested_mode": "graph_vector_mix",
+          "selected_mode": "graph_vector_mix",
+          "router_reason": "manual mode specified",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "retrieve response body",
+            "kb_id",
+            "provider status"
+          ],
+          "trace_available": true,
+          "trace_id": 20,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 13,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/product/kb-workspace.md",
+            "docs/retrieval-and-citations.md",
+            "docs/rag/index-metadata.md",
+            "docs/development/testing-and-smoke.md"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "block_aware_auto",
+      "chunk_strategy": "block_aware",
+      "mode": "auto",
+      "purpose": "Tests the M16 rule-based query router over the same block-aware KB.",
+      "total_cases": 20,
+      "retrieval_hit_rate": 0.6,
+      "citation_hit_rate": 0.6,
+      "top_1_doc_hit_rate": 0.3,
+      "top_3_doc_hit_rate": 0.55,
+      "average_keyword_coverage": 0.26,
+      "trace_available_rate": 1.0,
+      "trace_available_count": 20,
+      "reranker_used_count": 0,
+      "average_latency_ms": 12.8,
+      "selected_mode_counts": {
+        "chunk_only": 7,
+        "graph_vector_mix": 5,
+        "hybrid_text": 6,
+        "overview": 2
+      },
+      "cases": [
+        {
+          "id": "overview_architecture_001",
+          "mode": "auto",
+          "requested_mode": "auto",
+          "selected_mode": "overview",
+          "router_reason": "question asks for overview or summary",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "Retrieval Layer",
+            "Provider Layer",
+            "Retrieval Trace"
+          ],
+          "trace_available": true,
+          "trace_id": 1,
+          "trace_item_count": 8,
+          "initial_candidate_count": 10,
+          "used_reranker": false,
+          "latency_ms": 10,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/rag/retrieval-layer.md",
+            "docs/product/kb-workspace.md",
+            "docs/development/testing-and-smoke.md",
+            "docs/rag/index-metadata.md",
+            "docs/rag/lightweight-graphrag.md",
+            "docs/ingestion/file-processing-pipeline.md"
+          ]
+        },
+        {
+          "id": "overview_workspace_002",
+          "mode": "auto",
+          "requested_mode": "auto",
+          "selected_mode": "overview",
+          "router_reason": "question asks for overview or summary",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.5,
+          "matched_keywords": [
+            "Graph",
+            "Retrieval Debug"
+          ],
+          "missing_keywords": [
+            "Ask",
+            "Documents"
+          ],
+          "trace_available": true,
+          "trace_id": 2,
+          "trace_item_count": 8,
+          "initial_candidate_count": 10,
+          "used_reranker": false,
+          "latency_ms": 7,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/rag/retrieval-layer.md",
+            "docs/product/kb-workspace.md",
+            "docs/development/testing-and-smoke.md",
+            "docs/rag/index-metadata.md",
+            "docs/rag/lightweight-graphrag.md",
+            "docs/ingestion/file-processing-pipeline.md"
+          ]
+        },
+        {
+          "id": "overview_retrieval_layer_003",
+          "mode": "auto",
+          "requested_mode": "auto",
+          "selected_mode": "chunk_only",
+          "router_reason": "default factual question",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "RetrievalRequest",
+            "RetrievedEvidence",
+            "reranking"
+          ],
+          "trace_available": true,
+          "trace_id": 3,
+          "trace_item_count": 6,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 11,
+          "answer_contains_expected": null,
+          "final_evidence_count": 6,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/retrieval-layer.md",
+            "docs/ingestion/file-processing-pipeline.md",
+            "docs/rag/rag-evaluation.md",
+            "docs/development/testing-and-smoke.md"
+          ]
+        },
+        {
+          "id": "overview_processing_pipeline_004",
+          "mode": "auto",
+          "requested_mode": "auto",
+          "selected_mode": "chunk_only",
+          "router_reason": "default factual question",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "upload",
+            "ParsedDocument",
+            "document_blocks",
+            "chunks"
+          ],
+          "trace_available": true,
+          "trace_id": 4,
+          "trace_item_count": 3,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 9,
+          "answer_contains_expected": null,
+          "final_evidence_count": 3,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/rag-evaluation.md"
+          ]
+        },
+        {
+          "id": "technical_chunk_strategy_005",
+          "mode": "auto",
+          "requested_mode": "auto",
+          "selected_mode": "hybrid_text",
+          "router_reason": "question contains API/path/config/code-like tokens",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.6666666666666666,
+          "matched_keywords": [
+            "CHUNK_STRATEGY",
+            "block_aware"
+          ],
+          "missing_keywords": [
+            "fixed"
+          ],
+          "trace_available": true,
+          "trace_id": 5,
+          "trace_item_count": 3,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 17,
+          "answer_contains_expected": null,
+          "final_evidence_count": 3,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/ingestion/document-blocks.md",
+            "docs/ingestion/file-processing-pipeline.md"
+          ]
+        },
+        {
+          "id": "technical_hybrid_text_006",
+          "mode": "auto",
+          "requested_mode": "auto",
+          "selected_mode": "hybrid_text",
+          "router_reason": "question contains API/path/config/code-like tokens",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "HYBRID_TEXT",
+            "API paths",
+            "config keys",
+            "commands"
+          ],
+          "trace_available": true,
+          "trace_id": 6,
+          "trace_item_count": 2,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 17,
+          "answer_contains_expected": null,
+          "final_evidence_count": 2,
+          "top_documents": [
+            "docs/retrieval-and-citations.md"
+          ]
+        },
+        {
+          "id": "technical_trace_metadata_007",
+          "mode": "auto",
+          "requested_mode": "auto",
+          "selected_mode": "chunk_only",
+          "router_reason": "default factual question",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "requested_mode",
+            "selected_mode",
+            "router_reason",
+            "router_type"
+          ],
+          "trace_available": true,
+          "trace_id": 7,
+          "trace_item_count": 8,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 13,
+          "answer_contains_expected": null,
+          "final_evidence_count": 8,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/retrieval-layer.md",
+            "docs/rag/index-metadata.md",
+            "docs/product/kb-workspace.md",
+            "docs/ingestion/file-processing-pipeline.md"
+          ]
+        },
+        {
+          "id": "technical_block_table_code_008",
+          "mode": "auto",
+          "requested_mode": "auto",
+          "selected_mode": "hybrid_text",
+          "router_reason": "question contains API/path/config/code-like tokens",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.5,
+          "matched_keywords": [
+            "table",
+            "code"
+          ],
+          "missing_keywords": [
+            "heading_path",
+            "standalone"
+          ],
+          "trace_available": true,
+          "trace_id": 8,
+          "trace_item_count": 7,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 15,
+          "answer_contains_expected": null,
+          "final_evidence_count": 7,
+          "top_documents": [
+            "docs/ingestion/document-blocks.md",
+            "docs/retrieval-and-citations.md",
+            "docs/ingestion/file-processing-pipeline.md",
+            "docs/architecture/rag-v2-architecture.md"
+          ]
+        },
+        {
+          "id": "technical_retrieval_entrypoint_009",
+          "mode": "auto",
+          "requested_mode": "auto",
+          "selected_mode": "hybrid_text",
+          "router_reason": "question contains API/path/config/code-like tokens",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.3333333333333333,
+          "matched_keywords": [
+            "RetrievalResult"
+          ],
+          "missing_keywords": [
+            "app/services/retrieval",
+            "retrieval_service.retrieve"
+          ],
+          "trace_available": true,
+          "trace_id": 9,
+          "trace_item_count": 5,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 15,
+          "answer_contains_expected": null,
+          "final_evidence_count": 5,
+          "top_documents": [
+            "docs/rag/retrieval-layer.md",
+            "docs/retrieval-and-citations.md",
+            "docs/development/testing-and-smoke.md"
+          ]
+        },
+        {
+          "id": "technical_index_metadata_010",
+          "mode": "auto",
+          "requested_mode": "auto",
+          "selected_mode": "hybrid_text",
+          "router_reason": "question contains API/path/config/code-like tokens",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 1.0,
+          "matched_keywords": [
+            "provider",
+            "model name",
+            "model dimension",
+            "status"
+          ],
+          "missing_keywords": [],
+          "trace_available": true,
+          "trace_id": 10,
+          "trace_item_count": 7,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 15,
+          "answer_contains_expected": null,
+          "final_evidence_count": 7,
+          "top_documents": [
+            "docs/rag/index-metadata.md",
+            "docs/ingestion/file-processing-pipeline.md",
+            "docs/retrieval-and-citations.md",
+            "docs/ingestion/document-blocks.md"
+          ]
+        },
+        {
+          "id": "relation_blocks_chunks_011",
+          "mode": "auto",
+          "requested_mode": "auto",
+          "selected_mode": "graph_vector_mix",
+          "router_reason": "question asks about entity relations or dependencies",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.5,
+          "matched_keywords": [
+            "ParsedDocument",
+            "chunks"
+          ],
+          "missing_keywords": [
+            "document_blocks",
+            "chunk strategy"
+          ],
+          "trace_available": true,
+          "trace_id": 11,
+          "trace_item_count": 5,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 15,
+          "answer_contains_expected": null,
+          "final_evidence_count": 5,
+          "top_documents": [
+            "docs/product/kb-workspace.md",
+            "docs/rag/retrieval-layer.md",
+            "docs/architecture/rag-v2-architecture.md"
+          ]
+        },
+        {
+          "id": "relation_workspace_permission_012",
+          "mode": "auto",
+          "requested_mode": "auto",
+          "selected_mode": "graph_vector_mix",
+          "router_reason": "question asks about entity relations or dependencies",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.25,
+          "matched_keywords": [
+            "Graph"
+          ],
+          "missing_keywords": [
+            "Permission Model",
+            "Team admin",
+            "Team member"
+          ],
+          "trace_available": true,
+          "trace_id": 12,
+          "trace_item_count": 7,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 13,
+          "answer_contains_expected": null,
+          "final_evidence_count": 7,
+          "top_documents": [
+            "docs/product/kb-workspace.md",
+            "docs/retrieval-and-citations.md",
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/ingestion/file-processing-pipeline.md"
+          ]
+        },
+        {
+          "id": "relation_graph_citation_013",
+          "mode": "auto",
+          "requested_mode": "auto",
+          "selected_mode": "graph_vector_mix",
+          "router_reason": "question asks about entity relations or dependencies",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "Relations",
+            "mentions",
+            "source document",
+            "citation-unit"
+          ],
+          "trace_available": true,
+          "trace_id": 13,
+          "trace_item_count": 2,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 14,
+          "answer_contains_expected": null,
+          "final_evidence_count": 2,
+          "top_documents": [
+            "docs/architecture/rag-v2-architecture.md"
+          ]
+        },
+        {
+          "id": "relation_reranker_retrieval_014",
+          "mode": "auto",
+          "requested_mode": "auto",
+          "selected_mode": "graph_vector_mix",
+          "router_reason": "question asks about entity relations or dependencies",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.25,
+          "matched_keywords": [
+            "rerank"
+          ],
+          "missing_keywords": [
+            "initial recall",
+            "final top_k",
+            "evidences"
+          ],
+          "trace_available": true,
+          "trace_id": 14,
+          "trace_item_count": 5,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 14,
+          "answer_contains_expected": null,
+          "final_evidence_count": 5,
+          "top_documents": [
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/product/kb-workspace.md",
+            "docs/rag/retrieval-layer.md"
+          ]
+        },
+        {
+          "id": "relation_index_compatibility_015",
+          "mode": "auto",
+          "requested_mode": "auto",
+          "selected_mode": "graph_vector_mix",
+          "router_reason": "question asks about entity relations or dependencies",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": true,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.75,
+          "matched_keywords": [
+            "provider",
+            "model",
+            "Compatibility"
+          ],
+          "missing_keywords": [
+            "dimension"
+          ],
+          "trace_available": true,
+          "trace_id": 15,
+          "trace_item_count": 6,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 13,
+          "answer_contains_expected": null,
+          "final_evidence_count": 6,
+          "top_documents": [
+            "docs/rag/index-metadata.md",
+            "docs/architecture/rag-v2-architecture.md",
+            "docs/retrieval-and-citations.md",
+            "docs/product/kb-workspace.md"
+          ]
+        },
+        {
+          "id": "factual_modes_016",
+          "mode": "auto",
+          "requested_mode": "auto",
+          "selected_mode": "chunk_only",
+          "router_reason": "default factual question",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.2,
+          "matched_keywords": [
+            "auto"
+          ],
+          "missing_keywords": [
+            "chunk_only",
+            "overview",
+            "graph_vector_mix",
+            "hybrid_text"
+          ],
+          "trace_available": true,
+          "trace_id": 16,
+          "trace_item_count": 5,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 12,
+          "answer_contains_expected": null,
+          "final_evidence_count": 5,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/index-metadata.md",
+            "docs/rag/retrieval-layer.md",
+            "docs/product/kb-workspace.md"
+          ]
+        },
+        {
+          "id": "factual_reranker_optional_017",
+          "mode": "auto",
+          "requested_mode": "auto",
+          "selected_mode": "chunk_only",
+          "router_reason": "default factual question",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "noop",
+            "local_rule_reranker",
+            "flagembedding",
+            "disabled"
+          ],
+          "trace_available": true,
+          "trace_id": 17,
+          "trace_item_count": 1,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 10,
+          "answer_contains_expected": null,
+          "final_evidence_count": 1,
+          "top_documents": [
+            "docs/retrieval-and-citations.md"
+          ]
+        },
+        {
+          "id": "factual_eval_metrics_018",
+          "mode": "auto",
+          "requested_mode": "auto",
+          "selected_mode": "hybrid_text",
+          "router_reason": "question contains API/path/config/code-like tokens",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": true,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "retrieval_hit",
+            "citation_hit",
+            "top_1_doc_hit",
+            "trace_available"
+          ],
+          "trace_available": true,
+          "trace_id": 18,
+          "trace_item_count": 6,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 15,
+          "answer_contains_expected": null,
+          "final_evidence_count": 6,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/rag-evaluation.md",
+            "docs/architecture/rag-v2-architecture.md"
+          ]
+        },
+        {
+          "id": "factual_parser_routing_019",
+          "mode": "auto",
+          "requested_mode": "auto",
+          "selected_mode": "chunk_only",
+          "router_reason": "default factual question",
+          "retrieval_hit": false,
+          "citation_hit": false,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.25,
+          "matched_keywords": [
+            ".md"
+          ],
+          "missing_keywords": [
+            ".txt",
+            ".docx",
+            ".pdf"
+          ],
+          "trace_available": true,
+          "trace_id": 19,
+          "trace_item_count": 2,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 9,
+          "answer_contains_expected": null,
+          "final_evidence_count": 2,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/rag-evaluation.md"
+          ]
+        },
+        {
+          "id": "factual_smoke_diagnostics_020",
+          "mode": "auto",
+          "requested_mode": "auto",
+          "selected_mode": "chunk_only",
+          "router_reason": "default factual question",
+          "retrieval_hit": true,
+          "citation_hit": true,
+          "top_1_doc_hit": false,
+          "top_3_doc_hit": false,
+          "keyword_coverage": 0.0,
+          "matched_keywords": [],
+          "missing_keywords": [
+            "retrieve response body",
+            "kb_id",
+            "provider status"
+          ],
+          "trace_available": true,
+          "trace_id": 20,
+          "trace_item_count": 7,
+          "initial_candidate_count": 8,
+          "used_reranker": false,
+          "latency_ms": 12,
+          "answer_contains_expected": null,
+          "final_evidence_count": 7,
+          "top_documents": [
+            "docs/retrieval-and-citations.md",
+            "docs/rag/retrieval-layer.md",
+            "docs/development/testing-and-smoke.md",
+            "docs/rag/index-metadata.md",
+            "docs/ingestion/document-blocks.md"
+          ]
+        }
+      ]
+    }
+  ]
+}

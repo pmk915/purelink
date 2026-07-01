@@ -1,0 +1,162 @@
+[
+  {
+    "id": "overview_architecture_001",
+    "question": "PureLink 的整体架构是什么？",
+    "expected_answer_contains": ["Retrieval Layer", "Provider Layer", "Retrieval Trace"],
+    "expected_source_hint": "docs/architecture/rag-v2-architecture.md",
+    "case_type": "overview",
+    "expected_mode": "overview"
+  },
+  {
+    "id": "overview_workspace_002",
+    "question": "知识库工作台主要有哪些功能？",
+    "expected_answer_contains": ["Ask", "Documents", "Graph", "Retrieval Debug"],
+    "expected_source_hint": "docs/product/kb-workspace.md",
+    "case_type": "overview",
+    "expected_mode": "overview"
+  },
+  {
+    "id": "overview_retrieval_layer_003",
+    "question": "Retrieval Layer 解决了什么问题？",
+    "expected_answer_contains": ["RetrievalRequest", "RetrievedEvidence", "reranking"],
+    "expected_source_hint": "docs/rag/retrieval-layer.md",
+    "case_type": "overview",
+    "expected_mode": "overview"
+  },
+  {
+    "id": "overview_processing_pipeline_004",
+    "question": "文档上传到可检索的处理流程是什么？",
+    "expected_answer_contains": ["upload", "ParsedDocument", "document_blocks", "chunks"],
+    "expected_source_hint": "docs/ingestion/file-processing-pipeline.md",
+    "case_type": "overview",
+    "expected_mode": "overview"
+  },
+  {
+    "id": "technical_chunk_strategy_005",
+    "question": "CHUNK_STRATEGY 在哪里配置，支持哪些值？",
+    "expected_answer_contains": ["CHUNK_STRATEGY", "block_aware", "fixed"],
+    "expected_source_hint": "docs/ingestion/document-blocks.md",
+    "case_type": "technical",
+    "expected_mode": "hybrid_text"
+  },
+  {
+    "id": "technical_hybrid_text_006",
+    "question": "hybrid_text retrieval 的作用是什么，适合哪些技术 token？",
+    "expected_answer_contains": ["HYBRID_TEXT", "API paths", "config keys", "commands"],
+    "expected_source_hint": "docs/rag/retrieval-layer.md",
+    "case_type": "technical",
+    "expected_mode": "hybrid_text"
+  },
+  {
+    "id": "technical_trace_metadata_007",
+    "question": "retrieval trace metadata 记录了哪些 router 字段？",
+    "expected_answer_contains": ["requested_mode", "selected_mode", "router_reason", "router_type"],
+    "expected_source_hint": "docs/retrieval-and-citations.md",
+    "case_type": "technical",
+    "expected_mode": "hybrid_text"
+  },
+  {
+    "id": "technical_block_table_code_008",
+    "question": "block-aware chunking 如何处理 table 和 code blocks？",
+    "expected_answer_contains": ["table", "code", "heading_path", "standalone"],
+    "expected_source_hint": "docs/ingestion/document-blocks.md",
+    "case_type": "technical",
+    "expected_mode": "hybrid_text"
+  },
+  {
+    "id": "technical_retrieval_entrypoint_009",
+    "question": "retrieval_service.retrieve() 的入口定义在哪里？",
+    "expected_answer_contains": ["app/services/retrieval", "retrieval_service.retrieve", "RetrievalResult"],
+    "expected_source_hint": "docs/rag/retrieval-layer.md",
+    "case_type": "technical",
+    "expected_mode": "hybrid_text"
+  },
+  {
+    "id": "technical_index_metadata_010",
+    "question": "document_indexes 记录哪些 vector index metadata 字段？",
+    "expected_answer_contains": ["provider", "model name", "model dimension", "status"],
+    "expected_source_hint": "docs/rag/index-metadata.md",
+    "case_type": "technical",
+    "expected_mode": "hybrid_text"
+  },
+  {
+    "id": "relation_blocks_chunks_011",
+    "question": "DocumentBlock 和 chunk 之间是什么关系？",
+    "expected_answer_contains": ["ParsedDocument", "document_blocks", "chunk strategy", "chunks"],
+    "expected_source_hint": "docs/ingestion/file-processing-pipeline.md",
+    "case_type": "relation",
+    "expected_mode": "graph_vector_mix"
+  },
+  {
+    "id": "relation_workspace_permission_012",
+    "question": "知识库工作台的权限和 Graph、Retrieval Debug 有什么关系？",
+    "expected_answer_contains": ["Permission Model", "Team admin", "Team member", "Graph"],
+    "expected_source_hint": "docs/product/kb-workspace.md",
+    "case_type": "relation",
+    "expected_mode": "graph_vector_mix"
+  },
+  {
+    "id": "relation_graph_citation_013",
+    "question": "GraphRAG 和 citation grounding 如何关联？",
+    "expected_answer_contains": ["Relations", "mentions", "source document", "citation-unit"],
+    "expected_source_hint": "docs/rag/lightweight-graphrag.md",
+    "case_type": "relation",
+    "expected_mode": "graph_vector_mix"
+  },
+  {
+    "id": "relation_reranker_retrieval_014",
+    "question": "reranker 和 embedding retrieval 在调用链上是什么关系？",
+    "expected_answer_contains": ["initial recall", "rerank", "final top_k", "evidences"],
+    "expected_source_hint": "docs/rag/reranker.md",
+    "case_type": "relation",
+    "expected_mode": "graph_vector_mix"
+  },
+  {
+    "id": "relation_index_compatibility_015",
+    "question": "索引 metadata 和 retrieval compatibility 有什么关系？",
+    "expected_answer_contains": ["provider", "model", "dimension", "Compatibility"],
+    "expected_source_hint": "docs/rag/index-metadata.md",
+    "case_type": "relation",
+    "expected_mode": "graph_vector_mix"
+  },
+  {
+    "id": "factual_modes_016",
+    "question": "PureLink 支持哪些 retrieval mode？",
+    "expected_answer_contains": ["auto", "chunk_only", "overview", "graph_vector_mix", "hybrid_text"],
+    "expected_source_hint": "docs/rag/retrieval-layer.md",
+    "case_type": "factual",
+    "expected_mode": "chunk_only"
+  },
+  {
+    "id": "factual_reranker_optional_017",
+    "question": "Reranker 是可选的吗？",
+    "expected_answer_contains": ["noop", "local_rule_reranker", "flagembedding", "disabled"],
+    "expected_source_hint": "docs/rag/reranker.md",
+    "case_type": "factual",
+    "expected_mode": "chunk_only"
+  },
+  {
+    "id": "factual_eval_metrics_018",
+    "question": "RAG eval harness 评估哪些指标？",
+    "expected_answer_contains": ["retrieval_hit", "citation_hit", "top_1_doc_hit", "trace_available"],
+    "expected_source_hint": "docs/rag/rag-evaluation.md",
+    "case_type": "factual",
+    "expected_mode": "chunk_only"
+  },
+  {
+    "id": "factual_parser_routing_019",
+    "question": "Parser routing 支持哪些文件类型？",
+    "expected_answer_contains": [".txt", ".md", ".docx", ".pdf"],
+    "expected_source_hint": "docs/ingestion/file-processing-pipeline.md",
+    "case_type": "factual",
+    "expected_mode": "chunk_only"
+  },
+  {
+    "id": "factual_smoke_diagnostics_020",
+    "question": "Smoke retrieval 失败时会打印哪些诊断信息？",
+    "expected_answer_contains": ["retrieve response body", "kb_id", "provider status"],
+    "expected_source_hint": "docs/development/testing-and-smoke.md",
+    "case_type": "factual",
+    "expected_mode": "chunk_only"
+  }
+]

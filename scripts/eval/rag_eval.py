@@ -50,6 +50,11 @@ class RagEvalCaseResult:
     top_3_doc_hit: bool
     trace_item_count: int | None = None
     initial_candidate_count: int | None = None
+    requested_mode: str | None = None
+    selected_mode: str | None = None
+    router_reason: str | None = None
+    latency_ms: int | None = None
+    answer_contains_expected: bool | None = None
     error: str | None = None
 
 
@@ -61,6 +66,9 @@ class RagEvalSummary:
     average_keyword_coverage: float
     reranker_used_count: int
     trace_available_count: int
+    top_1_doc_hit_rate: float
+    top_3_doc_hit_rate: float
+    average_latency_ms: float | None
     cases: tuple[RagEvalCaseResult, ...] = field(default_factory=tuple)
 
 
@@ -107,6 +115,7 @@ def evaluate_retrieval_result(
     *,
     trace_item_count: int | None = None,
     initial_candidate_count: int | None = None,
+    latency_ms: int | None = None,
 ) -> RagEvalCaseResult:
     evidences = tuple(result.evidences)
     keyword_result = calculate_keyword_coverage(
@@ -150,6 +159,10 @@ def evaluate_retrieval_result(
         ),
         trace_item_count=trace_item_count,
         initial_candidate_count=initial_candidate_count,
+        requested_mode=result.requested_mode.value if result.requested_mode else result.mode.value,
+        selected_mode=result.selected_mode.value if result.selected_mode else result.mode.value,
+        router_reason=result.router_reason,
+        latency_ms=latency_ms,
     )
 
 
@@ -179,6 +192,11 @@ def failed_case_result(case: RagEvalCase, *, error: str) -> RagEvalCaseResult:
 
 def summarize_results(results: list[RagEvalCaseResult]) -> RagEvalSummary:
     total = len(results)
+    latencies = [
+        item.latency_ms
+        for item in results
+        if item.latency_ms is not None
+    ]
     return RagEvalSummary(
         total_cases=total,
         retrieval_hit_rate=_rate(sum(1 for item in results if item.retrieval_hit), total),
@@ -190,6 +208,9 @@ def summarize_results(results: list[RagEvalCaseResult]) -> RagEvalSummary:
         ),
         reranker_used_count=sum(1 for item in results if item.used_reranker),
         trace_available_count=sum(1 for item in results if item.trace_available),
+        top_1_doc_hit_rate=_rate(sum(1 for item in results if item.top_1_doc_hit), total),
+        top_3_doc_hit_rate=_rate(sum(1 for item in results if item.top_3_doc_hit), total),
+        average_latency_ms=sum(latencies) / len(latencies) if latencies else None,
         cases=tuple(results),
     )
 
@@ -278,6 +299,9 @@ def summary_to_dict(summary: RagEvalSummary) -> dict[str, Any]:
         "average_keyword_coverage": summary.average_keyword_coverage,
         "reranker_used_count": summary.reranker_used_count,
         "trace_available_count": summary.trace_available_count,
+        "top_1_doc_hit_rate": summary.top_1_doc_hit_rate,
+        "top_3_doc_hit_rate": summary.top_3_doc_hit_rate,
+        "average_latency_ms": summary.average_latency_ms,
         "cases": [case_result_to_dict(item) for item in summary.cases],
     }
 
@@ -300,6 +324,11 @@ def case_result_to_dict(result: RagEvalCaseResult) -> dict[str, Any]:
         "top_3_doc_hit": result.top_3_doc_hit,
         "trace_item_count": result.trace_item_count,
         "initial_candidate_count": result.initial_candidate_count,
+        "requested_mode": result.requested_mode,
+        "selected_mode": result.selected_mode,
+        "router_reason": result.router_reason,
+        "latency_ms": result.latency_ms,
+        "answer_contains_expected": result.answer_contains_expected,
     }
     if result.error:
         payload["error"] = result.error

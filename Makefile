@@ -5,6 +5,9 @@ GO ?= go
 KEEP_STACK_UP ?= 0
 EVAL_CASES ?= tests/eval/purelink_rag_cases.jsonl
 EVAL_OUTPUT ?= tests/eval/reports/latest.json
+BASELINE_EVAL_CASES ?= docs/interview/rag-eval-cases.json
+BASELINE_EVAL_OUTPUT ?= docs/interview/rag-eval-baseline-results.json
+BASELINE_EVAL_SUMMARY ?= docs/interview/rag-eval-baseline-summary.md
 
 ifneq ("$(wildcard .venv/bin/python)","")
 PYTHON ?= .venv/bin/python
@@ -12,7 +15,7 @@ else
 PYTHON ?= python3
 endif
 
-.PHONY: up down logs ps build restart test test-python test-go check smoke smoke-docx-rag e2e eval-rag
+.PHONY: up down logs ps build restart test test-python test-go check smoke smoke-docx-rag e2e eval-rag eval-rag-baseline
 
 up:
 	$(COMPOSE) up --build -d
@@ -54,6 +57,9 @@ smoke-docx-rag:
 
 eval-rag:
 	$(PYTHON) scripts/eval/run_rag_eval.py --cases $(EVAL_CASES) --output $(EVAL_OUTPUT)
+
+eval-rag-baseline:
+	$(PYTHON) scripts/eval/run_rag_eval_baseline.py --cases $(BASELINE_EVAL_CASES) --output $(BASELINE_EVAL_OUTPUT) --summary $(BASELINE_EVAL_SUMMARY)
 
 e2e:
 	@set -euo pipefail; \
