@@ -44,6 +44,7 @@ This page is the main map for PureLink's product, RAG architecture, ingestion, G
 - [Development Commands](development/dev-commands.md): common local commands.
 - [Docker Deployment](development/docker-deployment.md): local and production-like Docker Compose, env files, backup/restore, and troubleshooting.
 - [Error Handling](development/error-handling.md): API error envelope, request ids, frontend error states, and troubleshooting.
+- [Release Checklist](development/release-checklist.md): final verification, docs checks, data hygiene, and optional tag commands.
 - [Frontend-Backend Integration Test](development/frontend-backend-integration-test.md): local integration checks.
 - [Troubleshooting](troubleshooting.md): operational and debugging notes.
 - [Environment Variables](../.env.example): local configuration template.
@@ -59,6 +60,9 @@ This page is the main map for PureLink's product, RAG architecture, ingestion, G
 - [RAG v2 Demo Guide](interview/rag-v2-demo-guide.md): older RAG v2 focused demo flow.
 
 ## Roadmap and Historical Notes
+
+Roadmap files are historical implementation notes. The current project entry
+points are [README](../README.md), this docs index, and the interview docs above.
 
 - [PLAN](../PLAN.md)
 - [Development Log](../DEVELOPMENT_LOG.md)

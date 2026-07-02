@@ -9,6 +9,7 @@ Show PureLink as an engineering-focused RAG knowledge base system, not a one-off
 - citations are grounded in backend evidence
 - retrieval traces and document status make failures diagnosable
 - lightweight GraphRAG is source-grounded and maintainable
+- processing jobs expose failures and retry without backend logs
 - eval results are reproducible and honestly reported
 
 ## 2. Local Setup
@@ -128,7 +129,20 @@ From the Documents tab, open document status. Highlight:
 - warnings/errors
 - copyable debug JSON
 
-### Step 8: Show Graph Explorer
+### Step 8: Show Processing Jobs
+
+Open the Processing Jobs panel in the Documents tab. Highlight:
+
+- running, failed, and completed job counts
+- status filter and document search
+- current step and attempt count
+- error code/message for failed jobs
+- retry behavior for owner/admin users
+
+Frame retry honestly: it creates a new queued worker job. It does not run parsing
+synchronously in the browser or API request.
+
+### Step 9: Show Graph Explorer
 
 Open the Graph tab. Demonstrate:
 
@@ -141,7 +155,7 @@ Open the Graph tab. Demonstrate:
 
 Keep the framing honest: this is a lightweight source-grounded graph explorer, not a Neo4j-style graph canvas.
 
-### Step 9: Show RAG Eval Baseline
+### Step 10: Show RAG Eval Baseline
 
 Open [rag-eval-baseline-summary.md](rag-eval-baseline-summary.md), then run:
 
@@ -184,12 +198,34 @@ Is the reranker required?
 What does the RAG eval baseline compare?
 ```
 
+Citation/debug:
+
+```text
+Which sources support this answer?
+What selected retrieval mode and trace id did this answer use?
+```
+
+Document processing:
+
+```text
+Is this document RAG-ready?
+Which processing step failed?
+Can this failed document be retried?
+```
+
+Graph explorer:
+
+```text
+Show entities related to DocumentBlock.
+Which source snippets support this relation?
+```
+
 ## 6. What to Say in Interviews
 
 Short version:
 
 ```text
-PureLink is an engineering-focused RAG knowledge base system. I built the parts that are usually hidden in demos: structured ingestion, retrieval modes, citation grounding, traceability, document diagnostics, lightweight GraphRAG lifecycle, and a reproducible eval baseline.
+PureLink is a personal and team knowledge-base RAG system focused on engineering reliability. I built ingestion, block-aware chunking, multiple retrieval modes, query routing, citation grounding, retrieval traces, lightweight GraphRAG, eval baselines, and product-facing debugging tools such as the Document Inspector, Graph Explorer, and Processing Job Dashboard.
 ```
 
 When showing Ask:
@@ -213,11 +249,16 @@ The eval is a small regression baseline over repository docs. It is useful becau
 ## 7. Known Limitations
 
 - The current GraphRAG is lightweight and rule-based.
+- GraphRAG is lightweight, not Neo4j-scale.
 - There is no external graph database.
 - There is no graph canvas visualization.
+- Auto router is rule-based, not LLM planning.
+- Reranker is optional.
+- Local hashed embedding is for deterministic tests, not production quality.
 - The default local LLM provider can be heuristic for offline demos.
-- The eval dataset is intentionally small.
+- The eval baseline is small and docs-based.
 - `answer_contains_expected` is not calculated in the current baseline because the baseline evaluates retrieval and citation evidence, not generated answers.
+- Production deployment still needs HTTPS, reverse proxy hardening, secret management, monitoring, and backup operations.
 - OCR, ASR, and multimodal RAG are not part of the default Core path.
 
 ## 8. Troubleshooting

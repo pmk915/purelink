@@ -23,6 +23,8 @@ PureLink turns those concerns into visible engineering surfaces:
 - Retrieval trace metadata for debugging recall, reranking, router decisions, and final evidence.
 - Document Processing Inspector for RAG readiness checks.
 - Graph Explorer for entity search, relation filters, one-hop neighborhoods, and source provenance.
+- Processing Job Dashboard and retry for failed document preparation jobs.
+- Upload validation and unified API error envelopes.
 - A reproducible RAG eval baseline over repository docs.
 
 ## Architecture Overview
@@ -135,11 +137,13 @@ Current results are recorded in [docs/interview/rag-eval-baseline-summary.md](do
 make test
 cd frontend && npm run lint
 cd frontend && npm run build
+make docs-check
 make smoke
 make eval-rag-baseline
 ```
 
 For a demo-readiness checklist, see [docs/development/testing-and-smoke.md](docs/development/testing-and-smoke.md).
+For a final release checklist, see [docs/development/release-checklist.md](docs/development/release-checklist.md).
 
 ## Interview Demo
 
@@ -156,8 +160,9 @@ Recommended demo surfaces:
 2. Ask normal factual, technical/API/config, relation/dependency, and overview questions.
 3. Show Retrieval Details, selected retrieval mode, trace id, and citations.
 4. Open Document Processing Inspector from a document row.
-5. Open Graph Explorer, filter relations, inspect source snippets, and jump to document status.
-6. Show the eval baseline report and explain the honest findings.
+5. Open Processing Jobs, filter failed jobs, and explain retry behavior.
+6. Open Graph Explorer, filter relations, inspect source snippets, and jump to document status.
+7. Show the eval baseline report and explain the honest findings.
 
 ## Key Docs Index
 
@@ -174,6 +179,15 @@ High-value entries:
 - [Lightweight GraphRAG](docs/rag/lightweight-graphrag.md)
 - [RAG Evaluation](docs/rag/rag-evaluation.md)
 - [Testing and Smoke](docs/development/testing-and-smoke.md)
+- [Release Checklist](docs/development/release-checklist.md)
+
+## Scope / Not Included
+
+- Not a complete production SaaS: billing, enterprise admin, and full operations playbooks are out of scope.
+- Not a full LightRAG clone: GraphRAG is lightweight, source-grounded, and PostgreSQL-backed.
+- Not a graph database product: there is no Neo4j/Memgraph dependency.
+- Not a multimodal agent platform: the default Core path focuses on text KBs.
+- Not an LLM router or agent planner: `auto` retrieval uses transparent rules.
 
 ## License
 

@@ -101,7 +101,21 @@ Trace availability is stable:
 - All current baselines report 100.0% trace availability.
 - This is important for debugging because every eval case can be inspected through trace metadata.
 
-## 7. How This Guides Next Iteration
+## 7. What Not to Overclaim
+
+- The eval baseline is small and docs-based. It is a regression and interview
+  demonstration baseline, not a statistically broad benchmark.
+- GraphRAG is lightweight and PostgreSQL-backed. It is not a Neo4j-scale graph
+  platform and should not be described as full graph reasoning.
+- The `auto` router is rule-based. It improves ergonomics and observability, but
+  it is not LLM planning and does not guarantee the best mode for every query.
+- The reranker is optional. Some local demos may run without a learned reranker.
+- Local hashed embedding exists for deterministic tests and fixture execution;
+  it is not a production-quality embedding model.
+- Production deployment still needs HTTPS/reverse proxy hardening, secret
+  management, monitoring, backups, and environment-specific operations.
+
+## 8. How This Guides Next Iteration
 
 The eval points to specific next work:
 
@@ -111,7 +125,7 @@ The eval points to specific next work:
 - Add answer-level evaluation only after retrieval/citation metrics are stable.
 - Keep `auto` explanations visible so routing mistakes can become test cases.
 
-## 8. Reproduction Command
+## 9. Reproduction Command
 
 ```bash
 make eval-rag-baseline

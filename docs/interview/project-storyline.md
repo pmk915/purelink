@@ -31,6 +31,9 @@ Key pieces:
 - Graph lifecycle cleanup handles document deletion, rebuild, orphan cleanup, deduplication, and export.
 - Document Processing Inspector shows RAG readiness without backend logs.
 - Graph Explorer exposes source-grounded entity and relation inspection.
+- Processing Job Dashboard exposes running/failed/completed jobs and retryable failures.
+- Upload validation and unified error envelopes make edge cases visible to users.
+- Docker/deployment docs and release checks make the project repeatable for reviewers.
 - RAG eval baseline compares chunking and retrieval modes with deterministic metrics.
 
 ## 3. Engineering Decisions
@@ -80,7 +83,12 @@ No default multimodal RAG:
 - M18: real RAG eval baseline.
 - M19: Document Processing Inspector UI.
 - M20: Graph Explorer enhancement.
+- M21.1: unified error envelope and frontend error states.
+- M21.2: Processing Job Dashboard and retry.
+- M21.3: upload limits and validation.
+- M21.4: Docker deployment hardening.
 - M21.5: interview demo packaging and docs index.
+- M21.6: final polish, release checklist, and docs link checks.
 
 ## 5. Interview Summary
 
@@ -94,7 +102,7 @@ I built PureLink around the problems I saw in typical RAG demos. They often flat
 
 The ingestion pipeline persists `DocumentBlock` records and can use block-aware chunking so headings, tables, and code blocks are not treated as arbitrary text. The Retrieval Layer supports multiple modes: normal chunk retrieval, overview retrieval, graph-vector mixed retrieval, hybrid keyword/vector retrieval, and an `auto` router. The system records requested and selected modes, router reason, trace id, retrieved evidence, and citation-ready context.
 
-On the product side, the KB workspace includes Ask, Documents, Graph, Retrieval Debug, Health, and Settings. M19 added a Document Processing Inspector so users can see whether a document is RAG-ready. M20 added a list-based Graph Explorer for entity search, relation filtering, one-hop neighborhoods, source inspection, and graph export.
+On the product side, the KB workspace includes Ask, Documents, Graph, Retrieval Debug, Health, and Settings. M19 added a Document Processing Inspector so users can see whether a document is RAG-ready. M20 added a list-based Graph Explorer for entity search, relation filtering, one-hop neighborhoods, source inspection, and graph export. M21 added product polish around upload validation, consistent error states, processing job retry, Docker deployment, and release readiness.
 
 The eval baseline compares fixed chunking, block-aware chunking, hybrid text, graph-vector mix, and auto mode across 20 repository-doc cases. The important point is not that every mode wins. The important point is that the tradeoffs are visible and reproducible.
 

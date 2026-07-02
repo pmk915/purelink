@@ -15,7 +15,7 @@ else
 PYTHON ?= python3
 endif
 
-.PHONY: up down logs ps build restart docker-up docker-down docker-logs docker-ps docker-smoke docker-prod-up docker-prod-down test test-python test-go check smoke smoke-docx-rag e2e eval-rag eval-rag-baseline
+.PHONY: up down logs ps build restart docker-up docker-down docker-logs docker-ps docker-smoke docker-prod-up docker-prod-down test test-python test-go check docs-check release-check smoke smoke-docx-rag e2e eval-rag eval-rag-baseline
 
 up:
 	$(COMPOSE) up --build -d
@@ -65,6 +65,15 @@ test: test-python test-go
 
 check:
 	scripts/check_stack.sh
+
+docs-check:
+	$(PYTHON) scripts/check_docs_links.py
+
+release-check:
+	$(MAKE) test
+	cd frontend && npm run lint
+	cd frontend && npm run build
+	$(MAKE) docs-check
 
 smoke:
 	@set -euo pipefail; \
