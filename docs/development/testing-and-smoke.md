@@ -15,6 +15,7 @@ Focused examples:
 .venv/bin/python -m pytest tests/services/document_parsing tests/services/indexing
 .venv/bin/python -m pytest tests/services/knowledge_graph tests/test_graph_maintenance.py
 .venv/bin/python -m pytest tests/test_document_status.py
+.venv/bin/python -m pytest tests/test_processing_jobs.py
 ```
 
 ## Recommended Verification Before Demo
@@ -35,6 +36,7 @@ What each command proves:
 - `npm run lint`: frontend code style and static checks pass.
 - `npm run build`: Next.js production build and TypeScript checks pass.
 - `make smoke`: Docker personal flow can register, create a KB, upload/process a document, retrieve, ask, and persist a conversation.
+- `make smoke`: also checks upload validation failures and the KB processing jobs list endpoint after document processing is submitted.
 - `make eval-rag-baseline`: the reproducible retrieval/citation baseline still runs.
 
 If `make smoke` fails with Docker socket permissions, the issue is local Docker
@@ -138,6 +140,26 @@ Document status coverage should include:
 
 - indexed documents with chunks, citation units, and vector index return `rag_ready=true`
 - missing chunks, citation units, or vector index return `rag_ready=false`
+
+## Processing Job Dashboard Checks
+
+Processing job dashboard coverage should include:
+
+- personal owner can list KB processing jobs
+- team member can list KB processing jobs
+- users outside the KB cannot list jobs
+- failed jobs expose `can_retry=true` when no active job exists and the source file is present
+- running jobs expose `can_retry=false`
+- personal owner can retry failed processing
+- team admin can retry failed processing
+- team member cannot retry failed processing
+- retry creates a new queued `document_process` job
+- retry is blocked with `PROCESSING_JOB_ALREADY_RUNNING` when an active job already exists
+- missing source files return `PROCESSING_SOURCE_MISSING`
+
+Frontend validation for the dashboard is lint/build based. Manual checks should
+cover empty, loading, error, failed-job, retry-success, and permission-denied
+states.
 - missing graph index is reported as optional and does not block base RAG readiness
 - failed processing status exposes error code/message and latest processing step
 - personal KB owner can read status

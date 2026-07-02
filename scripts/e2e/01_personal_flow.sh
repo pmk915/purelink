@@ -55,6 +55,15 @@ process_personal_document "$TOKEN" "$KB_ID" "$DOC_ID"
 assert_code 200
 PROCESS_JOB_ID="$(echo "$HTTP_BODY" | json_get job_id)"
 [[ -n "$PROCESS_JOB_ID" ]] || fail "empty processing job id"
+
+log "processing jobs list"
+http_json GET "/api/v1/knowledge-bases/$KB_ID/processing-jobs" "" "$TOKEN"
+assert_code 200
+JOB_TOTAL="$(echo "$HTTP_BODY" | json_get total)"
+JOB_RUNNING="$(echo "$HTTP_BODY" | json_get running_count)"
+[[ "$JOB_TOTAL" -ge 1 ]] || fail "expected at least one processing job"
+[[ "$JOB_RUNNING" -ge 1 ]] || fail "expected at least one running processing job"
+
 wait_processing_job_terminal "$TOKEN" "$PROCESS_JOB_ID"
 wait_personal_document_rag_ready "$TOKEN" "$KB_ID" "$DOC_ID"
 

@@ -40,6 +40,9 @@ Stable codes include:
 - `GRAPH_INDEX_NOT_READY`
 - `RETRIEVAL_FAILED`
 - `GRAPH_EXPORT_FAILED`
+- `PROCESSING_JOB_ALREADY_RUNNING`
+- `PROCESSING_RETRY_NOT_ALLOWED`
+- `PROCESSING_SOURCE_MISSING`
 - `BAD_REQUEST`
 - `INTERNAL_ERROR`
 
@@ -48,6 +51,12 @@ Upload-specific usage:
 - `UPLOAD_TOO_LARGE`: file exceeds `MAX_UPLOAD_SIZE_MB`; details include max size in MB and bytes.
 - `UNSUPPORTED_FILE_TYPE`: extension or explicit MIME type is outside the upload allowlist.
 - `VALIDATION_ERROR`: empty file, invalid filename, or request validation failure.
+
+Processing retry usage:
+
+- `PROCESSING_JOB_ALREADY_RUNNING`: retry was requested while a queued/processing/retrying job already exists for the document.
+- `PROCESSING_RETRY_NOT_ALLOWED`: the latest document processing job or document state is not retryable.
+- `PROCESSING_SOURCE_MISSING`: the original uploaded file needed by the worker is missing.
 
 Legacy FastAPI `detail` payloads remain supported. A `detail` string becomes the
 message. A `detail` object with `code`/`error_code` and `message` preserves those

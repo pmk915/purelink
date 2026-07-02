@@ -166,6 +166,38 @@ export interface ProcessingJobSubmission {
   attempt_number: number;
 }
 
+export interface ProcessingJobSummary {
+  id: number;
+  job_id: number;
+  document_id: number;
+  document_status: DocumentProcessingStatus;
+  filename: string;
+  status: ProcessingJobStatus;
+  job_status: ProcessingJobStatus;
+  current_step: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  attempt_count: number;
+  max_attempts: number;
+  retry_count: number;
+  max_retries: number;
+  can_retry: boolean;
+  job_type: ProcessingJobType;
+  trigger_type: ProcessingJobTrigger;
+  created_at: string;
+  updated_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface ProcessingJobList {
+  items: ProcessingJobSummary[];
+  total: number;
+  failed_count: number;
+  running_count: number;
+  completed_count: number;
+}
+
 export interface DocumentTask {
   id: number;
   document_id: number;
@@ -234,6 +266,12 @@ export interface DocumentStatus {
   relation_count: number;
   latest_processing_job_step: string | null;
   latest_processing_job_status: ProcessingJobStatus | null;
+  latest_processing_job_id: number | null;
+  latest_processing_job_attempt_count: number | null;
+  latest_processing_job_max_attempts: number | null;
+  latest_processing_job_can_retry: boolean;
+  latest_processing_job_error_code: string | null;
+  latest_processing_job_error_message: string | null;
   error_code: string | null;
   error_message: string | null;
   created_at: string;

@@ -350,6 +350,46 @@ export const zh: Messages = {
         indexed: "已索引"
       })[status] ?? status
   },
+  processingJobs: {
+    title: "处理任务",
+    description:
+      "查看文档准备任务、失败原因，并对可重试文档重新入队。",
+    refresh: "刷新",
+    loading: "正在加载处理任务...",
+    loadError: "处理任务加载失败。",
+    emptyTitle: "暂无处理任务",
+    emptyDescription: "上传文档后会创建后台准备任务。",
+    all: "全部",
+    running: "运行中",
+    runningHint: "排队或正在执行的任务",
+    failed: "失败",
+    failedHint: "需要处理的任务",
+    completed: "已完成",
+    completedHint: "已经结束的任务",
+    searchPlaceholder: "搜索文档...",
+    currentStep: "步骤",
+    latestJob: "最近处理任务",
+    retry: "重试",
+    retrySubmitted: (filename: string) =>
+      `${filename} 已重新加入处理队列。`,
+    retryFailed: "重试失败，请检查权限或任务状态。",
+    adminOnly: "仅管理员",
+    attemptCount: (attempt: number, max: number) => `第 ${attempt}/${max} 次`,
+    statusLabel: (status: string) =>
+      ({
+        queued: "排队中",
+        processing: "处理中",
+        retrying: "重试中",
+        succeeded: "成功",
+        failed: "失败",
+        cancelled: "已取消"
+      })[status] ?? status,
+    jobTypeLabel: (jobType: string) =>
+      ({
+        document_process: "文档处理",
+        document_index: "文档索引"
+      })[jobType] ?? jobType
+  },
   qa: {
     askTitle: "向 PureLink 提问",
     askDescription:

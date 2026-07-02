@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Circle, Copy, TriangleAlert, X } from "lucide-react";
+import { CheckCircle2, Circle, Copy, LoaderCircle, RotateCcw, TriangleAlert, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { EmptyState } from "@/components/common/empty-state";
@@ -18,6 +18,9 @@ type DocumentStatusDialogProps = {
   loading?: boolean;
   error?: unknown;
   onRetry?: () => void;
+  onRetryProcessing?: () => void;
+  retryProcessingLoading?: boolean;
+  canRetryProcessing?: boolean;
   onClose: () => void;
 };
 
@@ -104,6 +107,9 @@ export function DocumentStatusDialog({
   loading = false,
   error,
   onRetry,
+  onRetryProcessing,
+  retryProcessingLoading = false,
+  canRetryProcessing = false,
   onClose
 }: DocumentStatusDialogProps) {
   const { messages } = useI18n();
@@ -127,6 +133,12 @@ export function DocumentStatusDialog({
             relation_count: status.relation_count,
             latest_processing_job_step: status.latest_processing_job_step,
             latest_processing_job_status: status.latest_processing_job_status,
+            latest_processing_job_id: status.latest_processing_job_id,
+            latest_processing_job_attempt_count: status.latest_processing_job_attempt_count,
+            latest_processing_job_max_attempts: status.latest_processing_job_max_attempts,
+            latest_processing_job_can_retry: status.latest_processing_job_can_retry,
+            latest_processing_job_error_code: status.latest_processing_job_error_code,
+            latest_processing_job_error_message: status.latest_processing_job_error_message,
             error_code: status.error_code,
             error_message: status.error_message,
             warnings: status.warnings,
@@ -267,6 +279,47 @@ export function DocumentStatusDialog({
                 <h3 className="text-sm font-semibold text-foreground">
                   {messages.documents.warningsAndErrors}
                 </h3>
+                {status.latest_processing_job_id ? (
+                  <div className="rounded-2xl border border-border/70 bg-white/80 px-4 py-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground">
+                          {messages.processingJobs.latestJob}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          #{status.latest_processing_job_id} ·{" "}
+                          {status.latest_processing_job_status
+                            ? messages.processingJobs.statusLabel(status.latest_processing_job_status)
+                            : "-"}{" "}
+                          · {messages.processingJobs.currentStep}:{" "}
+                          {status.latest_processing_job_step ?? "-"}
+                          {status.latest_processing_job_attempt_count
+                            ? ` · ${messages.processingJobs.attemptCount(
+                                status.latest_processing_job_attempt_count,
+                                status.latest_processing_job_max_attempts ??
+                                  status.latest_processing_job_attempt_count
+                              )}`
+                            : ""}
+                        </p>
+                      </div>
+                      {status.latest_processing_job_can_retry && canRetryProcessing ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={retryProcessingLoading}
+                          onClick={onRetryProcessing}
+                        >
+                          {retryProcessingLoading ? (
+                            <LoaderCircle className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <RotateCcw className="h-4 w-4" />
+                          )}
+                          {messages.processingJobs.retry}
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
                 {status.error_code || status.error_message ? (
                   <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
                     {status.error_code ? (

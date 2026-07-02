@@ -1,10 +1,12 @@
 import { apiClient } from "@/lib/api-client";
-import { documentStatusSchema } from "@/schemas/documents";
+import { documentStatusSchema, processingJobListSchema, processingJobSummarySchema } from "@/schemas/documents";
 import type {
   Document,
   DocumentPreview,
   DocumentStatus,
   DocumentTask,
+  ProcessingJobList,
+  ProcessingJobSummary,
   ProcessingJobSubmission,
   UploadConstraints
 } from "@/types";
@@ -40,6 +42,39 @@ export async function getPersonalDocumentStatus(
     token
   );
   return documentStatusSchema.parse(payload);
+}
+
+export async function listPersonalProcessingJobs(
+  token: string,
+  kbId: number,
+  params?: { status?: string; search?: string }
+) {
+  const query = new URLSearchParams();
+  if (params?.status && params.status !== "all") {
+    query.set("status", params.status);
+  }
+  if (params?.search?.trim()) {
+    query.set("search", params.search.trim());
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  const payload = await apiClient.get<ProcessingJobList>(
+    `/knowledge-bases/${kbId}/processing-jobs${suffix}`,
+    token
+  );
+  return processingJobListSchema.parse(payload);
+}
+
+export async function retryPersonalDocumentProcessing(
+  token: string,
+  kbId: number,
+  documentId: number
+) {
+  const payload = await apiClient.post<ProcessingJobSummary>(
+    `/knowledge-bases/${kbId}/documents/${documentId}/retry-processing`,
+    {},
+    token
+  );
+  return processingJobSummarySchema.parse(payload);
 }
 
 export function getPersonalDocumentFile(
@@ -88,6 +123,41 @@ export async function getTeamDocumentStatus(
     token
   );
   return documentStatusSchema.parse(payload);
+}
+
+export async function listTeamProcessingJobs(
+  token: string,
+  teamId: number,
+  kbId: number,
+  params?: { status?: string; search?: string }
+) {
+  const query = new URLSearchParams();
+  if (params?.status && params.status !== "all") {
+    query.set("status", params.status);
+  }
+  if (params?.search?.trim()) {
+    query.set("search", params.search.trim());
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  const payload = await apiClient.get<ProcessingJobList>(
+    `/teams/${teamId}/knowledge-bases/${kbId}/processing-jobs${suffix}`,
+    token
+  );
+  return processingJobListSchema.parse(payload);
+}
+
+export async function retryTeamDocumentProcessing(
+  token: string,
+  teamId: number,
+  kbId: number,
+  documentId: number
+) {
+  const payload = await apiClient.post<ProcessingJobSummary>(
+    `/teams/${teamId}/knowledge-bases/${kbId}/documents/${documentId}/retry-processing`,
+    {},
+    token
+  );
+  return processingJobSummarySchema.parse(payload);
 }
 
 export function getTeamDocumentFile(

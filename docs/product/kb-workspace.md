@@ -35,6 +35,28 @@ If status loading fails, the dialog uses the shared error state and displays the
 backend error message, code, and request id when available. The request id is the
 safe handoff value for backend log lookup.
 
+The inspector also shows the latest processing job id/status/step and attempt
+count. If the latest job is retryable and the current user can perform
+maintenance, the dialog shows a Retry action that submits a new queued job and
+refreshes document status.
+
+## Processing Job Dashboard
+
+M21.2 adds a compact Processing Jobs panel at the top of the Documents tab. It
+is designed for operational diagnosis without reading backend logs.
+
+The panel shows:
+
+- summary counts for running, failed, and completed jobs
+- status filters and document filename search
+- filename, job type, status, current step, attempt count, and updated time
+- error code/message for failed jobs
+- Retry for backend-approved retryable jobs
+
+Retry submits `POST .../retry-processing` and refreshes jobs, documents, and the
+Document Processing Inspector state. It does not perform synchronous parsing in
+the browser or API request; the existing worker consumes the queued job.
+
 ## Upload Limits and Validation
 
 The Documents tab upload card shows the active upload policy from
@@ -103,9 +125,13 @@ reasoning system.
 
 - Personal KB owner can access all tabs.
 - Personal KB owner can view document status/debug.
+- Personal KB owner can view processing jobs and retry failed processing.
 - Personal KB owner can run graph maintenance.
 - Team admin can access all tabs and run graph maintenance.
+- Team admin can retry failed processing jobs.
 - Team member can access Ask, Documents, Graph, and Health, export/view graph data, inspect relation sources, and view document status/debug.
+- Team member can view processing jobs.
+- Team member cannot retry processing jobs.
 - Team member cannot rebuild graph, cleanup orphan entities, or deduplicate relations.
 - Backend permission checks remain authoritative.
 
@@ -130,6 +156,7 @@ Use `auto` to inspect the backend-selected retrieval mode and router reason with
 
 - Ask tab: show citations, Retrieval Details, selected mode, and trace id.
 - Documents tab: open Document Processing Inspector and copy debug info.
+- Documents tab: open Processing Jobs, filter failed jobs, and retry a failed document as owner/admin.
 - Graph tab: inspect relation sources and export graph JSON/CSV.
 - Retrieval Debug tab: compare `chunk_only`, `hybrid_text`, `graph_vector_mix`, and `auto`.
 - Health tab: verify document, vector index, and graph index readiness.

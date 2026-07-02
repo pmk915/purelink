@@ -41,6 +41,11 @@ queued -> processing
 
 如果文本质量过低，chunk 不会入库，任务会带明确 `error_code` 失败。
 
+失败的文档可以通过 processing job retry 重新进入队列。Retry 只创建新的
+`ProcessingJob(status=queued, trigger_type=retry)`，不在 API 请求内同步解析，
+也不删除已有 chunk、citation、vector 或 graph artifacts。Worker 仍然是唯一
+执行处理流水线的入口。
+
 ## 3. Index 阶段
 
 在 chunk 已经存在的前提下，系统会：
@@ -86,3 +91,22 @@ flowchart TD
   K --> L[Document indexed]
   L --> M[Ask with citations]
 ```
+
+## 6. Dashboard and Retry API
+
+M21.2 adds a workspace-facing processing job dashboard:
+
+- Personal KB owners can list jobs and retry failed personal documents.
+- Team members can list jobs.
+- Team admins can retry failed team documents.
+
+The dashboard reads `GET .../processing-jobs` and displays counts for running,
+failed, and completed jobs. It also shows filename, current step, error
+code/message, attempt count, timestamps, and whether the backend considers the
+job retryable.
+
+Retry failures use the standard M21.1 error envelope. Common retry errors:
+
+- `PROCESSING_JOB_ALREADY_RUNNING`: an active job already exists for the document.
+- `PROCESSING_RETRY_NOT_ALLOWED`: the document/job state is not retryable.
+- `PROCESSING_SOURCE_MISSING`: the original uploaded file is no longer present.

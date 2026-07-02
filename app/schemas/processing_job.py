@@ -47,3 +47,36 @@ class ProcessingJobRead(BaseModel):
     finished_at: datetime | None
     locked_at: datetime | None
     timeout_at: datetime | None
+
+
+class ProcessingJobSummaryRead(BaseModel):
+    id: int
+    job_id: int
+    document_id: int
+    document_status: DocumentProcessingStatus
+    filename: str
+    status: ProcessingJobStatus
+    job_status: ProcessingJobStatus
+    current_step: str | None
+    error_code: str | None
+    error_message: str | None
+    attempt_count: int
+    attempt_number: int
+    max_attempts: int
+    retry_count: int
+    max_retries: int
+    can_retry: bool
+    job_type: ProcessingJobType
+    trigger_type: ProcessingJobTrigger
+    created_at: datetime
+    updated_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
+class ProcessingJobListRead(BaseModel):
+    items: list[ProcessingJobSummaryRead]
+    total: int
+    failed_count: int
+    running_count: int
+    completed_count: int

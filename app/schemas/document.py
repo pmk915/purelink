@@ -145,6 +145,12 @@ class DocumentStatusRead(BaseModel):
     relation_count: int
     latest_processing_job_step: str | None = None
     latest_processing_job_status: ProcessingJobStatus | None = None
+    latest_processing_job_id: int | None = None
+    latest_processing_job_attempt_count: int | None = None
+    latest_processing_job_max_attempts: int | None = None
+    latest_processing_job_can_retry: bool = False
+    latest_processing_job_error_code: str | None = None
+    latest_processing_job_error_message: str | None = None
     error_code: str | None = None
     error_message: str | None = None
     created_at: datetime

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+from pathlib import Path
+
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
@@ -58,6 +60,10 @@ class ActiveProcessingJobExistsError(ValueError):
 
 
 class ProcessingJobEligibilityError(ValueError):
+    pass
+
+
+class ProcessingJobSourceMissingError(ValueError):
     pass
 
 
@@ -141,6 +147,66 @@ def list_processing_jobs_for_document(
         .order_by(ProcessingJob.id.desc())
     )
     return list(db.scalars(statement))
+
+
+def list_processing_jobs_for_knowledge_base(
+    db: Session,
+    *,
+    knowledge_base_id: int,
+    status_filter: ProcessingJobStatus | None = None,
+    search: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[ProcessingJob]:
+    statement = (
+        select(ProcessingJob)
+        .join(Document, Document.id == ProcessingJob.document_id)
+        .options(selectinload(ProcessingJob.document))
+        .where(Document.knowledge_base_id == knowledge_base_id)
+        .order_by(ProcessingJob.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    if status_filter is not None:
+        statement = statement.where(ProcessingJob.status == status_filter)
+    normalized_search = (search or "").strip()
+    if normalized_search:
+        statement = statement.where(Document.original_filename.ilike(f"%{normalized_search}%"))
+    return list(db.scalars(statement))
+
+
+def count_processing_jobs_for_knowledge_base(
+    db: Session,
+    *,
+    knowledge_base_id: int,
+    status_filter: ProcessingJobStatus | None = None,
+    search: str | None = None,
+) -> int:
+    statement = (
+        select(func.count(ProcessingJob.id))
+        .join(Document, Document.id == ProcessingJob.document_id)
+        .where(Document.knowledge_base_id == knowledge_base_id)
+    )
+    if status_filter is not None:
+        statement = statement.where(ProcessingJob.status == status_filter)
+    normalized_search = (search or "").strip()
+    if normalized_search:
+        statement = statement.where(Document.original_filename.ilike(f"%{normalized_search}%"))
+    return int(db.scalar(statement) or 0)
+
+
+def count_processing_jobs_by_status_for_knowledge_base(
+    db: Session,
+    *,
+    knowledge_base_id: int,
+) -> dict[ProcessingJobStatus, int]:
+    statement = (
+        select(ProcessingJob.status, func.count(ProcessingJob.id))
+        .join(Document, Document.id == ProcessingJob.document_id)
+        .where(Document.knowledge_base_id == knowledge_base_id)
+        .group_by(ProcessingJob.status)
+    )
+    return {status: int(count) for status, count in db.execute(statement)}
 
 
 def get_active_processing_job_for_document(
@@ -416,6 +482,74 @@ def can_retry_processing_job(
     error_code: str | None,
 ) -> bool:
     return job.retry_count < job.max_retries and is_retryable_processing_error(error_code)
+
+
+def can_retry_document_processing_job(
+    db: Session,
+    *,
+    job: ProcessingJob,
+    upload_root: Path | None = None,
+) -> bool:
+    if job.job_type != ProcessingJobType.DOCUMENT_PROCESS:
+        return False
+    if job.status not in {ProcessingJobStatus.FAILED, ProcessingJobStatus.CANCELLED}:
+        return False
+    if job.document is None:
+        return False
+    if job.document.processing_status != DocumentProcessingStatus.FAILED:
+        return False
+    active_job = get_active_processing_job_for_document(
+        db,
+        document_id=job.document_id,
+        job_type=ProcessingJobType.DOCUMENT_PROCESS,
+    )
+    if active_job is not None:
+        return False
+    if upload_root is not None and not (upload_root / job.document.storage_path).exists():
+        return False
+    return True
+
+
+def retry_document_processing_job(
+    db: Session,
+    *,
+    document: Document,
+    triggered_by_id: int,
+    upload_root: Path,
+) -> ProcessingJob:
+    active_job = get_active_processing_job_for_document(
+        db,
+        document_id=document.id,
+        job_type=ProcessingJobType.DOCUMENT_PROCESS,
+    )
+    if active_job is not None:
+        raise ActiveProcessingJobExistsError(
+            "An active processing job already exists for this document.",
+        )
+
+    latest_job = get_latest_processing_job_for_document(
+        db,
+        document_id=document.id,
+        job_type=ProcessingJobType.DOCUMENT_PROCESS,
+    )
+    if latest_job is None or latest_job.status not in {
+        ProcessingJobStatus.FAILED,
+        ProcessingJobStatus.CANCELLED,
+    }:
+        raise ProcessingJobEligibilityError(
+            "Only failed or cancelled document processing jobs can be retried.",
+        )
+    source_path = upload_root / document.storage_path
+    if not source_path.exists():
+        raise ProcessingJobSourceMissingError("Original uploaded file is missing.")
+
+    return create_processing_job_for_document(
+        db,
+        document=document,
+        triggered_by_id=triggered_by_id,
+        trigger_type=ProcessingJobTrigger.RETRY,
+        job_type=ProcessingJobType.DOCUMENT_PROCESS,
+    )
 
 
 def mark_processing_job_for_retry(

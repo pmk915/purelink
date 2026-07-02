@@ -373,6 +373,47 @@ export const en = {
         indexed: "Indexed"
       })[status] ?? status
   },
+  processingJobs: {
+    title: "Processing jobs",
+    description:
+      "Inspect document preparation jobs, failure details, and retry eligible documents.",
+    refresh: "Refresh",
+    loading: "Loading processing jobs...",
+    loadError: "Unable to load processing jobs.",
+    emptyTitle: "No processing jobs yet",
+    emptyDescription:
+      "Upload a document to create the first background preparation job.",
+    all: "All",
+    running: "Running",
+    runningHint: "Queued or active jobs",
+    failed: "Failed",
+    failedHint: "Jobs that need attention",
+    completed: "Completed",
+    completedHint: "Finished jobs",
+    searchPlaceholder: "Search documents...",
+    currentStep: "Step",
+    latestJob: "Latest processing job",
+    retry: "Retry",
+    retrySubmitted: (filename: string) =>
+      `${filename} was queued for processing retry.`,
+    retryFailed: "Retry failed. Check permissions or job state.",
+    adminOnly: "Admin only",
+    attemptCount: (attempt: number, max: number) => `Attempt ${attempt}/${max}`,
+    statusLabel: (status: string) =>
+      ({
+        queued: "Queued",
+        processing: "Processing",
+        retrying: "Retrying",
+        succeeded: "Succeeded",
+        failed: "Failed",
+        cancelled: "Cancelled"
+      })[status] ?? status,
+    jobTypeLabel: (jobType: string) =>
+      ({
+        document_process: "Document process",
+        document_index: "Document index"
+      })[jobType] ?? jobType
+  },
   qa: {
     askTitle: "Ask PureLink",
     askDescription:

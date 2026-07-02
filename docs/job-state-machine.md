@@ -73,6 +73,46 @@ job 成功或失败结束的时间。
 
 面向管理员或排障的错误说明。
 
+## Processing Job Dashboard
+
+M21.2 exposes knowledge-base scoped job lists for the Documents tab:
+
+- `GET /api/v1/knowledge-bases/{kb_id}/processing-jobs`
+- `GET /api/v1/teams/{team_id}/knowledge-bases/{kb_id}/processing-jobs`
+
+The list response includes `total`, `running_count`, `failed_count`,
+`completed_count`, and per-job fields such as filename, status, current step,
+error code/message, attempt count, timestamps, and `can_retry`.
+
+`running_count` includes `queued`, `processing`, and `retrying`.
+`failed_count` includes `failed` and `cancelled`.
+`completed_count` includes `succeeded`.
+
+## Manual Retry
+
+Manual retry creates a new queued `document_process` job. It does not parse or
+index synchronously in the API request, and it does not delete existing chunks,
+citations, vector data, graph data, or the original uploaded file.
+
+Retry is allowed only when:
+
+- the document belongs to the requested KB
+- the latest document processing job is `failed` or `cancelled`
+- no active `document_process` job already exists for the document
+- the document is currently `failed`
+- the original uploaded source file still exists
+
+Retry endpoints:
+
+- `POST /api/v1/knowledge-bases/{kb_id}/documents/{document_id}/retry-processing`
+- `POST /api/v1/teams/{team_id}/knowledge-bases/{kb_id}/documents/{document_id}/retry-processing`
+
+The older `/retry-process` route remains available for compatibility and returns
+the same job summary shape.
+
+Team members can view processing jobs. Team retry is an admin-only maintenance
+operation.
+
 ## 为什么需要 ProcessingJob
 
 `Document` 和 `ProcessingJob` 解决的是两个不同问题：

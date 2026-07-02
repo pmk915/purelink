@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import * as documentApi from "@/api/documents";
-import type { DocumentTaskType } from "@/types";
+import type { DocumentTaskType, KnowledgeBaseScope } from "@/types";
 
 
 function hasActiveProcessingJob(document: {
@@ -15,6 +15,17 @@ function hasActiveProcessingJob(document: {
     document.latest_processing_job_status === "queued" ||
     document.latest_processing_job_status === "processing" ||
     document.latest_processing_job_status === "retrying"
+  );
+}
+
+function hasActiveDashboardJob(jobList: { items: Array<{ status: string }> } | undefined) {
+  return Boolean(
+    jobList?.items.some(
+      (job) =>
+        job.status === "queued" ||
+        job.status === "processing" ||
+        job.status === "retrying"
+    )
   );
 }
 
@@ -84,6 +95,91 @@ export function useTeamDocumentPreview(
       Number.isFinite(teamId) &&
       Number.isFinite(kbId) &&
       Number.isFinite(documentId)
+  });
+}
+
+export function useProcessingJobs({
+  token,
+  scope,
+  knowledgeBaseId,
+  teamId,
+  status,
+  search,
+  enabled = true
+}: {
+  token: string | null;
+  scope: KnowledgeBaseScope;
+  knowledgeBaseId: number;
+  teamId?: number;
+  status?: string;
+  search?: string;
+  enabled?: boolean;
+}) {
+  return useQuery({
+    queryKey: ["processing-jobs", scope, teamId ?? null, knowledgeBaseId, status ?? "all", search ?? ""],
+    queryFn: () =>
+      scope === "personal"
+        ? documentApi.listPersonalProcessingJobs(token as string, knowledgeBaseId, {
+            status,
+            search
+          })
+        : documentApi.listTeamProcessingJobs(
+            token as string,
+            teamId as number,
+            knowledgeBaseId,
+            { status, search }
+          ),
+    enabled:
+      enabled &&
+      Boolean(token) &&
+      Number.isFinite(knowledgeBaseId) &&
+      (scope === "personal" || Number.isFinite(teamId)),
+    refetchInterval: (query) => (hasActiveDashboardJob(query.state.data) ? 2500 : false)
+  });
+}
+
+export function useRetryDocumentProcessing({
+  token,
+  scope,
+  knowledgeBaseId,
+  teamId
+}: {
+  token: string | null;
+  scope: KnowledgeBaseScope;
+  knowledgeBaseId: number;
+  teamId?: number;
+}) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (documentId: number) =>
+      scope === "personal"
+        ? documentApi.retryPersonalDocumentProcessing(
+            token as string,
+            knowledgeBaseId,
+            documentId
+          )
+        : documentApi.retryTeamDocumentProcessing(
+            token as string,
+            teamId as number,
+            knowledgeBaseId,
+            documentId
+          ),
+    onSuccess: async (_job, documentId) => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["processing-jobs", scope, teamId ?? null, knowledgeBaseId]
+        }),
+        queryClient.invalidateQueries({
+          queryKey:
+            scope === "personal"
+              ? ["documents", "personal", knowledgeBaseId]
+              : ["documents", "team", teamId, knowledgeBaseId]
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["document-status", scope, teamId ?? null, knowledgeBaseId, documentId]
+        })
+      ]);
+    }
   });
 }
 

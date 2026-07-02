@@ -6,13 +6,13 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import * as documentApi from "@/api/documents";
 import { EmptyState } from "@/components/common/empty-state";
 import { ErrorState } from "@/components/common/error-state";
 import { LoadingState } from "@/components/common/loading-state";
 import { DocumentListItem } from "@/components/documents/document-list-item";
 import { DocumentStatusDialog } from "@/components/documents/document-status-dialog";
 import { DocumentUploadCard } from "@/components/documents/document-upload-card";
+import { ProcessingJobDashboard } from "@/components/documents/processing-job-dashboard";
 import { GraphExplorer } from "@/components/graph/graph-explorer";
 import { AskWorkspace, type QaAvailability } from "@/components/qa/ask-workspace";
 import { RetrievalDebugPanel } from "@/components/retrieval/retrieval-debug-panel";
@@ -28,6 +28,8 @@ import {
   useDeletePersonalDocument,
   useDeleteTeamDocument,
   usePersonalDocuments,
+  useProcessingJobs,
+  useRetryDocumentProcessing,
   useTeamDocuments,
   useUploadConstraints,
   useUploadPersonalDocument,
@@ -45,16 +47,6 @@ import { useTeam } from "@/hooks/use-teams";
 import { useAskPersonal, useAskTeam, useRetrievePersonal, useRetrieveTeam } from "@/hooks/use-qa";
 import { formatDate } from "@/lib/utils";
 import type { Document, KnowledgeBaseScope, RetrievalResponse } from "@/types";
-
-function supportsDocumentPreparation(filename: string) {
-  const normalized = filename.toLowerCase();
-  return (
-    normalized.endsWith(".txt") ||
-    normalized.endsWith(".md") ||
-    normalized.endsWith(".docx") ||
-    normalized.endsWith(".pdf")
-  );
-}
 
 type FeedbackState = {
   tone: "info" | "success" | "error";
@@ -135,10 +127,11 @@ export function KnowledgeBaseWorkspace({
   const router = useRouter();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("qa");
-  const [processingDocumentIds, setProcessingDocumentIds] = useState<number[]>([]);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const [pendingDeleteDocument, setPendingDeleteDocument] = useState<Document | null>(null);
   const [statusDocument, setStatusDocument] = useState<Document | null>(null);
+  const [processingJobStatusFilter, setProcessingJobStatusFilter] = useState("all");
+  const [processingJobSearch, setProcessingJobSearch] = useState("");
   const [deleteKnowledgeBaseDialogOpen, setDeleteKnowledgeBaseDialogOpen] = useState(false);
 
   const personalKbQuery = usePersonalKnowledgeBase(
@@ -185,6 +178,21 @@ export function KnowledgeBaseWorkspace({
   const askTeam = useAskTeam(accessToken, teamId ?? Number.NaN, knowledgeBaseId);
   const retrievePersonal = useRetrievePersonal(accessToken, knowledgeBaseId);
   const retrieveTeam = useRetrieveTeam(accessToken, teamId ?? Number.NaN, knowledgeBaseId);
+  const processingJobsQuery = useProcessingJobs({
+    token: accessToken,
+    scope,
+    knowledgeBaseId,
+    teamId,
+    status: processingJobStatusFilter,
+    search: processingJobSearch,
+    enabled: activeTab === "documents"
+  });
+  const retryProcessing = useRetryDocumentProcessing({
+    token: accessToken,
+    scope,
+    knowledgeBaseId,
+    teamId
+  });
   const [retrievalDebugResult, setRetrievalDebugResult] = useState<RetrievalResponse | null>(null);
   const documentStatusQuery = useDocumentStatus({
     token: accessToken,
@@ -265,10 +273,7 @@ export function KnowledgeBaseWorkspace({
   const deleteDisabledReason =
     scope === "team" ? messages.documents.onlyTeamAdminsOrOwnersCanDelete : null;
 
-  const runProcessingPipeline = async (
-    document: Document,
-    options?: { triggeredByUpload?: boolean }
-  ) => {
+  const retryDocumentProcessing = async (documentId: number, filename: string) => {
     if (!accessToken) {
       setFeedback({
         tone: "error",
@@ -277,63 +282,29 @@ export function KnowledgeBaseWorkspace({
       return;
     }
 
-    if (!supportsDocumentPreparation(document.original_filename)) {
-      setFeedback({
-        tone: "error",
-        message: messages.documents.unsupportedFileType
-      });
-      return;
-    }
-
-    setProcessingDocumentIds((current) =>
-      current.includes(document.id) ? current : [...current, document.id]
-    );
-    setFeedback({
-      tone: "info",
-      message: options?.triggeredByUpload
-        ? messages.documents.uploadProcessingStarted(document.original_filename)
-        : messages.documents.statusProcessingHint
-    });
-
     try {
-      if (scope === "personal") {
-        await documentApi.processPersonalDocument(accessToken, knowledgeBaseId, document.id);
-      } else {
-        if (!teamId) {
-          throw new Error(messages.documents.processingFailed);
-        }
-
-        await documentApi.processTeamDocument(
-          accessToken,
-          teamId,
-          knowledgeBaseId,
-          document.id
-        );
-      }
-
-      await invalidateDocuments();
+      await retryProcessing.mutateAsync(documentId);
+      await Promise.all([
+        invalidateDocuments(),
+        processingJobsQuery.refetch(),
+        documentStatusQuery.refetch()
+      ]);
       setFeedback({
-        tone: "info",
-        message: messages.documents.processingSubmitted(document.original_filename)
+        tone: "success",
+        message: messages.processingJobs.retrySubmitted(filename)
       });
     } catch (error) {
-      console.error("document processing failed", {
+      console.error("document processing retry failed", {
         error,
-        documentId: document.id,
+        documentId,
         knowledgeBaseId,
         scope,
         teamId: teamId ?? null
       });
-
-      await invalidateDocuments();
       setFeedback({
         tone: "error",
-        message: messages.documents.processingFailedHelp
+        message: messages.processingJobs.retryFailed
       });
-    } finally {
-      setProcessingDocumentIds((current) =>
-        current.filter((documentId) => documentId !== document.id)
-      );
     }
   };
 
@@ -488,6 +459,20 @@ export function KnowledgeBaseWorkspace({
         loading={documentStatusQuery.isLoading || documentStatusQuery.isFetching}
         error={documentStatusQuery.error}
         onRetry={() => documentStatusQuery.refetch()}
+        canRetryProcessing={canManageKnowledgeBase}
+        retryProcessingLoading={
+          retryProcessing.isPending &&
+          retryProcessing.variables === statusDocument?.id
+        }
+        onRetryProcessing={
+          statusDocument
+            ? () =>
+                retryDocumentProcessing(
+                  statusDocument.id,
+                  statusDocument.original_filename
+                )
+            : undefined
+        }
         onClose={() => setStatusDocument(null)}
       />
 
@@ -721,62 +706,89 @@ export function KnowledgeBaseWorkspace({
             ) : null}
           </div>
 
-          <Card className="border-border/70 shadow-card">
-            <CardHeader>
-              <CardTitle>{messages.knowledgeBases.documentsTitle}</CardTitle>
-              <CardDescription>{messages.knowledgeBases.documentsDescription}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {documentsQuery.error ? (
-                <ErrorState
-                  title={messages.common.somethingWentWrong}
-                  error={documentsQuery.error}
-                  actionLabel={messages.common.tryAgain}
-                  onAction={() => documentsQuery.refetch()}
-                  requestIdLabel={messages.common.requestId}
-                />
-              ) : documents.length === 0 ? (
-                <EmptyState
-                  title={messages.common.noDocumentsYet}
-                  message={messages.knowledgeBases.noDocuments}
-                />
-              ) : (
-                <div className="max-h-[520px] space-y-3 overflow-y-auto pr-1">
-                  {documents.map((document) => (
-                    <DocumentListItem
-                      key={document.id}
-                      document={document}
-                      scope={scope}
-                      knowledgeBaseId={knowledgeBaseId}
-                      teamId={teamId}
-                      isProcessing={processingDocumentIds.includes(document.id)}
-                      onProcess={
-                        document.processing_status === "failed"
-                          ? async () => {
-                              await runProcessingPipeline(document);
-                            }
-                          : null
-                      }
-                      canDelete={
-                        scope === "personal"
-                          ? true
-                          : Boolean(isTeamAdmin || document.owner_id === currentUser?.id)
-                      }
-                      deleteDisabledReason={
-                        scope === "team" &&
-                        !isTeamAdmin &&
-                        document.owner_id !== currentUser?.id
-                          ? deleteDisabledReason
-                          : null
-                      }
-                      onDelete={() => setPendingDeleteDocument(document)}
-                      onViewStatus={() => setStatusDocument(document)}
-                    />
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <div className="space-y-6">
+            <ProcessingJobDashboard
+              data={processingJobsQuery.data}
+              loading={processingJobsQuery.isLoading}
+              error={processingJobsQuery.error}
+              refreshing={processingJobsQuery.isFetching}
+              retryingDocumentId={
+                retryProcessing.isPending && typeof retryProcessing.variables === "number"
+                  ? retryProcessing.variables
+                  : null
+              }
+              canRetry={canManageKnowledgeBase}
+              onRefresh={() => processingJobsQuery.refetch()}
+              onRetry={(job) => retryDocumentProcessing(job.document_id, job.filename)}
+              onFilterChange={({ status, search }) => {
+                setProcessingJobStatusFilter(status);
+                setProcessingJobSearch(search);
+              }}
+            />
+
+            <Card className="border-border/70 shadow-card">
+              <CardHeader>
+                <CardTitle>{messages.knowledgeBases.documentsTitle}</CardTitle>
+                <CardDescription>{messages.knowledgeBases.documentsDescription}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {documentsQuery.error ? (
+                  <ErrorState
+                    title={messages.common.somethingWentWrong}
+                    error={documentsQuery.error}
+                    actionLabel={messages.common.tryAgain}
+                    onAction={() => documentsQuery.refetch()}
+                    requestIdLabel={messages.common.requestId}
+                  />
+                ) : documents.length === 0 ? (
+                  <EmptyState
+                    title={messages.common.noDocumentsYet}
+                    message={messages.knowledgeBases.noDocuments}
+                  />
+                ) : (
+                  <div className="max-h-[520px] space-y-3 overflow-y-auto pr-1">
+                    {documents.map((document) => (
+                      <DocumentListItem
+                        key={document.id}
+                        document={document}
+                        scope={scope}
+                        knowledgeBaseId={knowledgeBaseId}
+                        teamId={teamId}
+                        isProcessing={
+                          retryProcessing.isPending &&
+                          retryProcessing.variables === document.id
+                        }
+                        onProcess={
+                          document.processing_status === "failed" && canManageKnowledgeBase
+                            ? async () => {
+                                await retryDocumentProcessing(
+                                  document.id,
+                                  document.original_filename
+                                );
+                              }
+                            : null
+                        }
+                        canDelete={
+                          scope === "personal"
+                            ? true
+                            : Boolean(isTeamAdmin || document.owner_id === currentUser?.id)
+                        }
+                        deleteDisabledReason={
+                          scope === "team" &&
+                          !isTeamAdmin &&
+                          document.owner_id !== currentUser?.id
+                            ? deleteDisabledReason
+                            : null
+                        }
+                        onDelete={() => setPendingDeleteDocument(document)}
+                        onViewStatus={() => setStatusDocument(document)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       ) : activeTab === "graph" ? (
         <GraphExplorer

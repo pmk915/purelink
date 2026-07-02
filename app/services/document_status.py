@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
+from app.core.config import BASE_DIR, get_settings
 from app.models.document import Document
 from app.models.document_block import DocumentBlock
 from app.models.document_citation_unit import DocumentCitationUnit
@@ -19,6 +19,7 @@ from app.models.enums import (
 )
 from app.models.knowledge_graph import EntityMention, KnowledgeRelation
 from app.models.processing_job import ProcessingJob
+from app.services.document import resolve_upload_root
 from app.services.embedding_provider import EmbeddingProviderError
 from app.services.indexing.index_metadata_service import (
     check_vector_index_compatibility,
@@ -51,6 +52,13 @@ def build_document_status(db: Session, *, document: Document) -> dict[str, Any]:
         index_type=DocumentIndexType.GRAPH,
     )
     latest_job = _get_latest_processing_job(db, document_id=document.id)
+    settings = get_settings()
+    upload_root = resolve_upload_root(settings.upload_dir, base_dir=BASE_DIR)
+    latest_job_can_retry = (
+        _can_retry_latest_job(db, latest_job=latest_job, upload_root=upload_root)
+        if latest_job is not None
+        else False
+    )
     vector_index_status, vector_compatible, vector_warning = _resolve_vector_index_status(vector_index)
     graph_index_status = _resolve_graph_index_status(graph_index)
     vector_index_count = chunk_count if vector_index_status == READY else 0
@@ -156,6 +164,16 @@ def build_document_status(db: Session, *, document: Document) -> dict[str, Any]:
         "relation_count": relation_count,
         "latest_processing_job_step": latest_job.current_step if latest_job is not None else None,
         "latest_processing_job_status": latest_job.status if latest_job is not None else None,
+        "latest_processing_job_id": latest_job.id if latest_job is not None else None,
+        "latest_processing_job_attempt_count": latest_job.attempt_number if latest_job is not None else None,
+        "latest_processing_job_max_attempts": (
+            latest_job.max_retries + 1 if latest_job is not None else None
+        ),
+        "latest_processing_job_can_retry": latest_job_can_retry,
+        "latest_processing_job_error_code": latest_job.error_code if latest_job is not None else None,
+        "latest_processing_job_error_message": (
+            latest_job.error_message if latest_job is not None else None
+        ),
         "error_code": error_code,
         "error_message": error_message,
         "created_at": document.created_at,
@@ -221,6 +239,21 @@ def _get_latest_processing_job(
         .where(ProcessingJob.document_id == document_id)
         .order_by(ProcessingJob.id.desc())
         .limit(1)
+    )
+
+
+def _can_retry_latest_job(
+    db: Session,
+    *,
+    latest_job: ProcessingJob,
+    upload_root,
+) -> bool:
+    from app.services.processing_job import can_retry_document_processing_job
+
+    return can_retry_document_processing_job(
+        db,
+        job=latest_job,
+        upload_root=upload_root,
     )
 
 

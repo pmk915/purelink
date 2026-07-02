@@ -14,6 +14,7 @@ from app.models.enums import (
     DocumentReviewStatus,
     DocumentTaskType,
     KnowledgeBaseScope,
+    ProcessingJobStatus,
     ProcessingJobTrigger,
     ProcessingJobType,
     TeamMemberRole,
@@ -31,7 +32,12 @@ from app.schemas.document import (
 )
 from app.schemas.qa import QuestionAnswerRequest, QuestionAnswerResponse
 from app.schemas.document_task import DocumentTaskRead
-from app.schemas.processing_job import ProcessingJobRead, ProcessingJobSubmissionRead
+from app.schemas.processing_job import (
+    ProcessingJobListRead,
+    ProcessingJobRead,
+    ProcessingJobSubmissionRead,
+    ProcessingJobSummaryRead,
+)
 from app.schemas.knowledge_base import (
     KnowledgeBaseRagHealthRead,
     KnowledgeBaseRead,
@@ -104,10 +110,16 @@ from app.services.document_task import (
 from app.services.processing_job import (
     ActiveProcessingJobExistsError,
     ProcessingJobEligibilityError,
+    ProcessingJobSourceMissingError,
+    can_retry_document_processing_job,
     count_active_processing_jobs_for_knowledge_base,
     count_active_processing_jobs_for_user,
+    count_processing_jobs_by_status_for_knowledge_base,
+    count_processing_jobs_for_knowledge_base,
     get_active_processing_job_for_document,
+    list_processing_jobs_for_knowledge_base,
     list_processing_jobs_for_document,
+    retry_document_processing_job,
 )
 from app.services import processing_worker
 from app.services.upload_guard import (
@@ -153,6 +165,89 @@ def _build_processing_job_submission(job) -> ProcessingJobSubmissionRead:
         trigger_type=job.trigger_type,
         attempt_number=job.attempt_number,
     )
+
+
+def _build_processing_job_summary(db: DBSession, job, *, upload_root) -> ProcessingJobSummaryRead:
+    filename = job.document.original_filename if job.document is not None else ""
+    return ProcessingJobSummaryRead(
+        id=job.id,
+        job_id=job.id,
+        document_id=job.document_id,
+        document_status=job.document.processing_status,
+        filename=filename,
+        status=job.status,
+        job_status=job.status,
+        current_step=job.current_step,
+        error_code=job.error_code,
+        error_message=job.error_message,
+        attempt_count=job.attempt_number,
+        attempt_number=job.attempt_number,
+        max_attempts=job.max_retries + 1,
+        retry_count=job.retry_count,
+        max_retries=job.max_retries,
+        can_retry=can_retry_document_processing_job(db, job=job, upload_root=upload_root),
+        job_type=job.job_type,
+        trigger_type=job.trigger_type,
+        created_at=job.created_at,
+        updated_at=job.updated_at,
+        started_at=job.started_at,
+        finished_at=job.finished_at,
+    )
+
+
+def _build_processing_job_list(
+    db: DBSession,
+    *,
+    knowledge_base_id: int,
+    jobs: list,
+    total: int,
+    upload_root,
+) -> ProcessingJobListRead:
+    counts = count_processing_jobs_by_status_for_knowledge_base(
+        db,
+        knowledge_base_id=knowledge_base_id,
+    )
+    return ProcessingJobListRead(
+        items=[
+            _build_processing_job_summary(db, job, upload_root=upload_root)
+            for job in jobs
+        ],
+        total=total,
+        failed_count=counts.get(ProcessingJobStatus.FAILED, 0)
+        + counts.get(ProcessingJobStatus.CANCELLED, 0),
+        running_count=counts.get(ProcessingJobStatus.QUEUED, 0)
+        + counts.get(ProcessingJobStatus.PROCESSING, 0)
+        + counts.get(ProcessingJobStatus.RETRYING, 0),
+        completed_count=counts.get(ProcessingJobStatus.SUCCEEDED, 0),
+    )
+
+
+def _raise_processing_retry_error(exc: Exception) -> None:
+    if isinstance(exc, ActiveProcessingJobExistsError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error_code": "PROCESSING_JOB_ALREADY_RUNNING",
+                "message": str(exc),
+            },
+        ) from exc
+    if isinstance(exc, ProcessingJobSourceMissingError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error_code": "PROCESSING_SOURCE_MISSING",
+                "message": str(exc),
+            },
+        ) from exc
+    if isinstance(exc, ProcessingJobEligibilityError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error_code": "PROCESSING_RETRY_NOT_ALLOWED",
+                "message": str(exc),
+            },
+        ) from exc
+    raise exc
 
 
 def _raise_upload_guard_error(exc: UploadGuardError) -> None:
@@ -1067,6 +1162,55 @@ async def process_team_document_endpoint(
 
 
 @router.get(
+    "/{knowledge_base_id}/processing-jobs",
+    response_model=ProcessingJobListRead,
+)
+async def list_team_processing_jobs_endpoint(
+    team_id: int,
+    knowledge_base_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+    job_status: ProcessingJobStatus | None = Query(default=None, alias="status"),
+    search: str | None = Query(default=None, max_length=200),
+    limit: int = Query(default=100, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> ProcessingJobListRead:
+    _get_active_membership_or_404(
+        db,
+        team_id=team_id,
+        user_id=current_user.id,
+    )
+    knowledge_base = _get_team_knowledge_base_or_404(
+        db,
+        team_id=team_id,
+        knowledge_base_id=knowledge_base_id,
+    )
+    settings = get_settings()
+    upload_root = resolve_upload_root(settings.upload_dir, base_dir=BASE_DIR)
+    jobs = list_processing_jobs_for_knowledge_base(
+        db,
+        knowledge_base_id=knowledge_base.id,
+        status_filter=job_status,
+        search=search,
+        limit=limit,
+        offset=offset,
+    )
+    total = count_processing_jobs_for_knowledge_base(
+        db,
+        knowledge_base_id=knowledge_base.id,
+        status_filter=job_status,
+        search=search,
+    )
+    return _build_processing_job_list(
+        db,
+        knowledge_base_id=knowledge_base.id,
+        jobs=jobs,
+        total=total,
+        upload_root=upload_root,
+    )
+
+
+@router.get(
     "/{knowledge_base_id}/documents/{document_id}/processing-jobs",
     response_model=list[ProcessingJobRead],
 )
@@ -1107,7 +1251,11 @@ async def list_team_document_processing_jobs_endpoint(
 
 @router.post(
     "/{knowledge_base_id}/documents/{document_id}/retry-process",
-    response_model=ProcessingJobSubmissionRead,
+    response_model=ProcessingJobSummaryRead,
+)
+@router.post(
+    "/{knowledge_base_id}/documents/{document_id}/retry-processing",
+    response_model=ProcessingJobSummaryRead,
 )
 async def retry_team_document_processing_endpoint(
     team_id: int,
@@ -1116,7 +1264,7 @@ async def retry_team_document_processing_endpoint(
     db: DBSession,
     current_user: CurrentUser,
 ) -> ProcessingJobSubmissionRead:
-    _get_active_membership_or_404(
+    _get_admin_membership_or_raise(
         db,
         team_id=team_id,
         user_id=current_user.id,
@@ -1139,27 +1287,35 @@ async def retry_team_document_processing_endpoint(
     if document.review_status != DocumentReviewStatus.APPROVED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Document is not eligible for processing.",
+            detail={
+                "error_code": "PROCESSING_RETRY_NOT_ALLOWED",
+                "message": "Document is not eligible for processing.",
+            },
         )
 
     try:
-        job = processing_worker.create_and_submit_processing_job(
+        settings = get_settings()
+        upload_root = resolve_upload_root(settings.upload_dir, base_dir=BASE_DIR)
+        job = retry_document_processing_job(
             db,
             document=document,
             triggered_by_id=current_user.id,
-            trigger_type=ProcessingJobTrigger.RETRY,
+            upload_root=upload_root,
         )
+        processing_worker.submit_processing_job(job=job)
     except (ActiveProcessingJobExistsError, ProcessingJobEligibilityError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
-        ) from exc
+        _raise_processing_retry_error(exc)
+    except ProcessingJobSourceMissingError as exc:
+        _raise_processing_retry_error(exc)
     except RuntimeError as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(exc),
+            detail={
+                "error_code": "DOCUMENT_PROCESSING_FAILED",
+                "message": str(exc),
+            },
         ) from exc
-    return _build_processing_job_submission(job)
+    return _build_processing_job_summary(db, job, upload_root=upload_root)
 
 
 @router.post(
