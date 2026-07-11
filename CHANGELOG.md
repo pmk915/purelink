@@ -20,3 +20,6 @@ The format is based on Keep a Changelog, and this project intends to use Semanti
   use the new citation units; no database migration is required.
 
 ### Fixed
+
+- Improved rule-based auto retrieval routing with explicit confidence,
+  routed/effective mode metadata, and conservative graph/hybrid fallbacks.

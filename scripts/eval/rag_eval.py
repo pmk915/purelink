@@ -57,7 +57,11 @@ class RagEvalCaseResult:
     initial_candidate_count: int | None = None
     requested_mode: str | None = None
     selected_mode: str | None = None
+    effective_mode: str | None = None
     router_reason: str | None = None
+    router_confidence: str | None = None
+    fallback_mode: str | None = None
+    fallback_reason: str | None = None
     latency_ms: int | None = None
     retrieval_latency_ms: int | None = None
     total_eval_latency_ms: int | None = None
@@ -190,6 +194,7 @@ def evaluate_retrieval_result(
     )
     selected_mode = result.selected_mode.value if result.selected_mode else result.mode.value
     requested_mode = result.requested_mode.value if result.requested_mode else result.mode.value
+    effective_mode = result.effective_mode.value if result.effective_mode else result.mode.value
     router_accuracy = selected_mode == case.expected_mode if requested_mode == "auto" and case.expected_mode else None
     predicted_answerable = bool(evidences) and has_reliable_evidence(
         evidences,
@@ -251,7 +256,11 @@ def evaluate_retrieval_result(
         initial_candidate_count=initial_candidate_count,
         requested_mode=requested_mode,
         selected_mode=selected_mode,
+        effective_mode=effective_mode,
         router_reason=result.router_reason,
+        router_confidence=result.router_confidence,
+        fallback_mode=result.fallback_mode.value if result.fallback_mode else None,
+        fallback_reason=result.fallback_reason,
         latency_ms=latency_ms,
         retrieval_latency_ms=retrieval_latency_ms if retrieval_latency_ms is not None else latency_ms,
         total_eval_latency_ms=total_eval_latency_ms if total_eval_latency_ms is not None else latency_ms,
@@ -638,7 +647,11 @@ def case_result_to_dict(result: RagEvalCaseResult) -> dict[str, Any]:
         "initial_candidate_count": result.initial_candidate_count,
         "requested_mode": result.requested_mode,
         "selected_mode": result.selected_mode,
+        "effective_mode": result.effective_mode,
         "router_reason": result.router_reason,
+        "router_confidence": result.router_confidence,
+        "fallback_mode": result.fallback_mode,
+        "fallback_reason": result.fallback_reason,
         "latency_ms": result.latency_ms,
         "retrieval_latency_ms": result.retrieval_latency_ms,
         "total_eval_latency_ms": result.total_eval_latency_ms,

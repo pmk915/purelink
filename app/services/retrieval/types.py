@@ -102,6 +102,10 @@ class RetrievalResult(BaseModel):
     requested_mode: RetrievalMode | None = None
     selected_mode: RetrievalMode | None = None
     router_reason: str | None = None
+    router_confidence: str | None = None
+    effective_mode: RetrievalMode | None = None
+    fallback_mode: RetrievalMode | None = None
+    fallback_reason: str | None = None
 
     evidences: list[RetrievedEvidence]
     context_text: str

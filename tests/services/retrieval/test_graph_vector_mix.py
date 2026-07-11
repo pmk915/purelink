@@ -63,9 +63,17 @@ async def test_graph_vector_mix_falls_back_to_vector_when_graph_missing(
             )
         )
 
-    assert result.mode == RetrievalMode.GRAPH_VECTOR_MIX
+    assert result.selected_mode == RetrievalMode.GRAPH_VECTOR_MIX
+    assert result.mode == RetrievalMode.CHUNK_ONLY
+    assert result.effective_mode == RetrievalMode.CHUNK_ONLY
+    assert result.fallback_mode == RetrievalMode.CHUNK_ONLY
+    assert result.fallback_reason == "graph_candidates_empty"
     assert result.evidences
     assert result.metadata["graph_chunks"] == []
+    assert result.metadata["selected_mode"] == "graph_vector_mix"
+    assert result.metadata["effective_mode"] == "chunk_only"
+    assert result.metadata["fallback_mode"] == "chunk_only"
+    assert result.metadata["fallback_reason"] == "graph_candidates_empty"
 
 
 @pytest.mark.anyio
@@ -92,7 +100,11 @@ async def test_graph_vector_mix_includes_graph_candidates_and_preserves_citation
             )
         )
 
+    assert result.selected_mode == RetrievalMode.GRAPH_VECTOR_MIX
     assert result.mode == RetrievalMode.GRAPH_VECTOR_MIX
+    assert result.effective_mode == RetrievalMode.GRAPH_VECTOR_MIX
+    assert result.fallback_mode is None
+    assert result.fallback_reason is None
     assert result.evidences
     assert any(item.graph_score is not None for item in result.evidences)
     assert any(item.citation_unit_id is not None for item in result.evidences)
