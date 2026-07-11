@@ -1404,7 +1404,381 @@ def test_select_evidence_units_reranks_chinese_appearance_query() -> None:
 
     assert evidence_units
     assert evidence_units[0].chunk_id == "1:0"
-    assert evidence_units[0].lexical_relevance > evidence_units[1].lexical_relevance
+    assert len(evidence_units) == 1
+    assert "除草检定" not in evidence_units[0].text
+
+
+def test_select_evidence_units_entity_definition_filters_same_chunk_noise(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="乌萨奇.txt",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text=(
+                "乌萨奇是漫画《Chiikawa》中的核心主角。"
+                "### 四、为什么这么火？乌萨奇完美契合不内耗人设。"
+                "乌萨奇的生日是1月22日，声优是小泽亚李。"
+            ),
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=0,
+            unit_text="乌萨奇是漫画《Chiikawa》中的核心主角。",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=1,
+            unit_text="### 四、为什么这么火？乌萨奇完美契合不内耗人设。",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=2,
+            unit_text="乌萨奇的生日是1月22日，声优是小泽亚李。",
+        )
+        db.commit()
+
+        evidence_units = select_evidence_units(
+            question="乌萨奇是谁",
+            retrieved_chunks=[
+                _retrieved_chunk(
+                    chunk_id=chunk.chunk_key,
+                    chunk_db_id=chunk.id,
+                    document_id=document.id,
+                    document_name=document.original_filename,
+                    score=0.93,
+                    text=chunk.chunk_text,
+                )
+            ],
+            chunk_units=load_citation_units_for_chunks(
+                db=db,
+                chunks=[
+                    _retrieved_chunk(
+                        chunk_id=chunk.chunk_key,
+                        chunk_db_id=chunk.id,
+                        document_id=document.id,
+                        document_name=document.original_filename,
+                        score=0.93,
+                        text=chunk.chunk_text,
+                    )
+                ],
+            ),
+            max_evidence_units=4,
+        )
+
+    assert len(evidence_units) == 1
+    assert evidence_units[0].citation_unit_id is not None
+    assert "核心主角" in evidence_units[0].text
+    assert "为什么这么火" not in evidence_units[0].text
+    assert "声优" not in evidence_units[0].text
+
+
+def test_select_evidence_units_entity_attribute_prefers_appearance_over_identity_and_birthday(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="乌萨奇.txt",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="乌萨奇是核心主角。乌萨奇通体明黄色，有粉色内耳和白色尾巴。乌萨奇生日是1月22日。",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=0,
+            unit_text="乌萨奇是核心主角。",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=1,
+            unit_text="乌萨奇通体明黄色，有粉色内耳和白色尾巴。",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=2,
+            unit_text="乌萨奇生日是1月22日。",
+        )
+        db.commit()
+
+        evidence_units = select_evidence_units(
+            question="乌萨奇长什么样",
+            retrieved_chunks=[
+                _retrieved_chunk(
+                    chunk_id=chunk.chunk_key,
+                    chunk_db_id=chunk.id,
+                    document_id=document.id,
+                    document_name=document.original_filename,
+                    score=0.9,
+                    text=chunk.chunk_text,
+                )
+            ],
+            chunk_units=load_citation_units_for_chunks(
+                db=db,
+                chunks=[
+                    _retrieved_chunk(
+                        chunk_id=chunk.chunk_key,
+                        chunk_db_id=chunk.id,
+                        document_id=document.id,
+                        document_name=document.original_filename,
+                        score=0.9,
+                        text=chunk.chunk_text,
+                    )
+                ],
+            ),
+            max_evidence_units=4,
+        )
+
+    assert evidence_units[0].text == "乌萨奇通体明黄色，有粉色内耳和白色尾巴。"
+
+
+def test_select_evidence_units_entity_reason_prefers_reason_over_birthday(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="乌萨奇.txt",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="乌萨奇生日是1月22日。乌萨奇受欢迎的原因是不内耗、反差萌和性格强大。",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=0,
+            unit_text="乌萨奇生日是1月22日，声优是小泽亚李。",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=1,
+            unit_text="乌萨奇受欢迎的原因是不内耗、反差萌和性格强大。",
+        )
+        db.commit()
+
+        evidence_units = select_evidence_units(
+            question="乌萨奇为什么受欢迎",
+            retrieved_chunks=[
+                _retrieved_chunk(
+                    chunk_id=chunk.chunk_key,
+                    chunk_db_id=chunk.id,
+                    document_id=document.id,
+                    document_name=document.original_filename,
+                    score=0.9,
+                    text=chunk.chunk_text,
+                )
+            ],
+            chunk_units=load_citation_units_for_chunks(
+                db=db,
+                chunks=[
+                    _retrieved_chunk(
+                        chunk_id=chunk.chunk_key,
+                        chunk_db_id=chunk.id,
+                        document_id=document.id,
+                        document_name=document.original_filename,
+                        score=0.9,
+                        text=chunk.chunk_text,
+                    )
+                ],
+            ),
+            max_evidence_units=4,
+        )
+
+    assert "不内耗" in evidence_units[0].text
+    assert "声优" not in evidence_units[0].text
+
+
+def test_select_evidence_units_relation_allows_multiple_units_from_same_chunk(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="乌萨奇关系.txt",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="乌萨奇和吉伊卡哇是朋友。乌萨奇经常和吉伊卡哇一起行动。",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=0,
+            unit_text="乌萨奇和吉伊卡哇是朋友。",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=1,
+            unit_text="乌萨奇经常和吉伊卡哇一起行动。",
+        )
+        db.commit()
+
+        evidence_units = select_evidence_units(
+            question="乌萨奇和吉伊卡哇是什么关系",
+            retrieved_chunks=[
+                _retrieved_chunk(
+                    chunk_id=chunk.chunk_key,
+                    chunk_db_id=chunk.id,
+                    document_id=document.id,
+                    document_name=document.original_filename,
+                    score=0.9,
+                    text=chunk.chunk_text,
+                )
+            ],
+            chunk_units=load_citation_units_for_chunks(
+                db=db,
+                chunks=[
+                    _retrieved_chunk(
+                        chunk_id=chunk.chunk_key,
+                        chunk_db_id=chunk.id,
+                        document_id=document.id,
+                        document_name=document.original_filename,
+                        score=0.9,
+                        text=chunk.chunk_text,
+                    )
+                ],
+            ),
+            max_evidence_units=4,
+        )
+
+    assert len(evidence_units) == 2
+    assert all("吉伊卡哇" in item.text for item in evidence_units)
+
+
+def test_select_evidence_units_generic_factual_keeps_existing_multi_unit_behavior(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="tasks.txt",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="Redis 触发任务。ProcessingJob 保存任务状态。",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=0,
+            unit_text="Redis 触发任务。",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=1,
+            unit_text="ProcessingJob 保存任务状态。",
+        )
+        db.commit()
+
+        evidence_units = select_evidence_units(
+            question="任务处理如何记录状态",
+            retrieved_chunks=[
+                _retrieved_chunk(
+                    chunk_id=chunk.chunk_key,
+                    chunk_db_id=chunk.id,
+                    document_id=document.id,
+                    document_name=document.original_filename,
+                    score=0.9,
+                    text=chunk.chunk_text,
+                )
+            ],
+            chunk_units=load_citation_units_for_chunks(
+                db=db,
+                chunks=[
+                    _retrieved_chunk(
+                        chunk_id=chunk.chunk_key,
+                        chunk_db_id=chunk.id,
+                        document_id=document.id,
+                        document_name=document.original_filename,
+                        score=0.9,
+                        text=chunk.chunk_text,
+                    )
+                ],
+            ),
+            max_evidence_units=4,
+        )
+
+    assert len(evidence_units) == 2
+
+
+def test_select_evidence_units_overview_can_disable_entity_specific_gate() -> None:
+    retrieved_chunks = [
+        _retrieved_chunk(
+            chunk_id="1:0",
+            document_id=1,
+            document_name="overview.txt",
+            score=0.9,
+            text="乌萨奇是核心主角。",
+        ),
+        _retrieved_chunk(
+            chunk_id="1:1",
+            document_id=1,
+            document_name="overview.txt",
+            score=0.89,
+            text="生日和声优等资料也在知识库中。",
+        ),
+    ]
+
+    evidence_units = select_evidence_units(
+        question="总结乌萨奇是谁",
+        retrieved_chunks=retrieved_chunks,
+        chunk_units={},
+        max_evidence_units=4,
+        use_query_evidence_profile=False,
+    )
+
+    assert len(evidence_units) == 2
 
 
 def test_answer_question_supports_multi_document_citations(

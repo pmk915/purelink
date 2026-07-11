@@ -53,10 +53,90 @@ QUERY_SYNONYMS: dict[str, tuple[str, ...]] = {
     "长啥样": ("外貌", "外形", "样子", "特征"),
     "长什么样": ("外貌", "外形", "样子", "特征"),
     "是什么": ("定义", "含义", "介绍"),
+    "是谁": ("身份", "人物", "角色", "介绍", "定义"),
+    "为什么受欢迎": ("原因", "受欢迎", "人气", "性格", "反差"),
+    "为什么火": ("原因", "受欢迎", "人气", "性格", "反差"),
+    "什么关系": ("关系", "朋友", "伙伴", "关联", "一起"),
     "怎么做": ("方法", "步骤", "流程"),
     "有什么用": ("作用", "用途", "功能"),
     "怎么保证": ("可靠性", "保证", "机制", "设计"),
 }
+
+ENTITY_QUERY_TYPES = {
+    "entity_definition",
+    "entity_attribute",
+    "entity_reason",
+    "entity_relation",
+}
+ENTITY_PER_CHUNK_LIMIT_TYPES = {
+    "entity_definition",
+    "entity_attribute",
+    "entity_reason",
+}
+ENTITY_MAX_EVIDENCE_UNITS = 3
+ENTITY_FOLLOWUP_MIN_LEXICAL_RELEVANCE = 0.15
+ENTITY_FOLLOWUP_STRONG_LEXICAL_RELEVANCE = 0.40
+ENTITY_FOLLOWUP_MIN_RELATIVE_SCORE = 0.70
+SAME_CHUNK_ENTITY_FOLLOWUP_MIN_LEXICAL_RELEVANCE = 0.30
+
+ENTITY_DEFINITION_TERMS = frozenset(
+    {
+        "身份",
+        "人物",
+        "角色",
+        "主角",
+        "介绍",
+        "定义",
+        "兔子",
+        "朋友",
+        "形似动物",
+        "漫画",
+    }
+)
+ENTITY_ATTRIBUTE_TERMS = frozenset(
+    {
+        "外貌",
+        "外形",
+        "外型",
+        "样子",
+        "颜色",
+        "眼睛",
+        "尾巴",
+        "黄色",
+        "蓝色",
+        "白色",
+        "特征",
+        "粉色",
+        "耳",
+        "兔子",
+    }
+)
+ENTITY_REASON_TERMS = frozenset(
+    {
+        "原因",
+        "受欢迎",
+        "为什么火",
+        "人气",
+        "性格",
+        "不内耗",
+        "反差",
+        "可爱",
+        "强大",
+    }
+)
+ENTITY_RELATION_TERMS = frozenset(
+    {
+        "关系",
+        "朋友",
+        "伙伴",
+        "关联",
+        "一起",
+        "好友",
+        "同伴",
+        "主角",
+        "日常",
+    }
+)
 
 logger = logging.getLogger("purelink.qa")
 
@@ -111,6 +191,19 @@ class CitationUnitCandidate:
     heading_path: tuple[str, ...] | None
     lexical_relevance: float
     score: float
+    entity_exact_match: bool = False
+    intent_alignment: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class QueryEvidenceProfile:
+    query_type: str
+    entity_terms: frozenset[str]
+    intent_terms: frozenset[str]
+
+    @property
+    def is_entity_query(self) -> bool:
+        return self.query_type in ENTITY_QUERY_TYPES
 
 
 class AnswerGenerator(Protocol):
@@ -369,6 +462,7 @@ def _answer_with_context_chunks(
             retrieved_chunks=context_chunks,
             chunk_units=chunk_units,
             max_evidence_units=max(MAX_ASK_EVIDENCE_UNITS, settings.max_citations),
+            use_query_evidence_profile=intent != QAIntent.KB_OVERVIEW,
         )
     else:
         evidence_units = preselected_evidence_units
@@ -681,8 +775,23 @@ def select_evidence_units(
     retrieved_chunks: list[RetrievedChunk],
     chunk_units: dict[str, list[DocumentCitationUnit]],
     max_evidence_units: int,
+    use_query_evidence_profile: bool = True,
 ) -> list[CitationUnitCandidate]:
     question_features = _build_query_features(question)
+    evidence_profile = (
+        _build_query_evidence_profile(question)
+        if use_query_evidence_profile
+        else QueryEvidenceProfile(
+            query_type="generic_factual",
+            entity_terms=frozenset(),
+            intent_terms=frozenset(),
+        )
+    )
+    per_chunk_limit = (
+        1
+        if evidence_profile.query_type in ENTITY_PER_CHUNK_LIMIT_TYPES
+        else MAX_EVIDENCE_UNITS_PER_CHUNK
+    )
     selected: list[CitationUnitCandidate] = []
     seen_keys: set[tuple[int, str, int]] = set()
 
@@ -696,6 +805,7 @@ def select_evidence_units(
                         unit=unit,
                         chunk=chunk,
                         question_features=question_features,
+                        evidence_profile=evidence_profile,
                     )
                     for unit in units
                 ),
@@ -706,10 +816,13 @@ def select_evidence_units(
                 _build_chunk_fallback_candidate(
                     chunk=chunk,
                     question_features=question_features,
+                    evidence_profile=evidence_profile,
                 )
             ]
 
-        for candidate in ranked_units[:MAX_EVIDENCE_UNITS_PER_CHUNK]:
+        for candidate in ranked_units[:per_chunk_limit]:
+            if _should_filter_entity_candidate(candidate, profile=evidence_profile):
+                continue
             candidate_key = (candidate.document_id, candidate.chunk_id, candidate.citation_unit_id or -1)
             if candidate_key in seen_keys:
                 continue
@@ -719,6 +832,11 @@ def select_evidence_units(
                 break
 
     selected.sort(key=lambda item: (-item.score, item.document_id, item.chunk_id, item.citation_unit_id or -1))
+    selected = _apply_entity_evidence_gate(
+        selected,
+        profile=evidence_profile,
+        max_evidence_units=max_evidence_units,
+    )
     return [
         CitationUnitCandidate(
             marker=f"S{index}",
@@ -744,6 +862,8 @@ def select_evidence_units(
             heading_path=item.heading_path,
             lexical_relevance=item.lexical_relevance,
             score=item.score,
+            entity_exact_match=item.entity_exact_match,
+            intent_alignment=item.intent_alignment,
         )
         for index, item in enumerate(selected[:max_evidence_units], start=1)
     ]
@@ -754,10 +874,19 @@ def _build_citation_unit_candidate(
     unit: DocumentCitationUnit,
     chunk: RetrievedChunk,
     question_features: set[str],
+    evidence_profile: QueryEvidenceProfile,
 ) -> CitationUnitCandidate:
     metadata = parse_chunk_metadata(unit.metadata_json, fallback_source_type=chunk.source_type)
     lexical_relevance = _lexical_relevance(unit.unit_text, question_features)
-    score = (0.6 * chunk.score) + (0.4 * lexical_relevance)
+    entity_exact_match = _has_entity_exact_match(unit.unit_text, profile=evidence_profile)
+    intent_alignment = _intent_alignment(unit.unit_text, profile=evidence_profile)
+    score = _score_evidence_candidate(
+        chunk_score=chunk.score,
+        lexical_relevance=lexical_relevance,
+        entity_exact_match=entity_exact_match,
+        intent_alignment=intent_alignment,
+        profile=evidence_profile,
+    )
     return CitationUnitCandidate(
         marker="",
         citation_id=unit.id,
@@ -782,6 +911,8 @@ def _build_citation_unit_candidate(
         heading_path=metadata.heading_path or chunk.heading_path,
         lexical_relevance=lexical_relevance,
         score=score,
+        entity_exact_match=entity_exact_match,
+        intent_alignment=intent_alignment,
     )
 
 
@@ -789,9 +920,12 @@ def _build_chunk_fallback_candidate(
     *,
     chunk: RetrievedChunk,
     question_features: set[str],
+    evidence_profile: QueryEvidenceProfile,
 ) -> CitationUnitCandidate:
     fallback_text = _resolve_chunk_fallback_text(chunk)
     lexical_relevance = _lexical_relevance(fallback_text, question_features)
+    entity_exact_match = _has_entity_exact_match(fallback_text, profile=evidence_profile)
+    intent_alignment = _intent_alignment(fallback_text, profile=evidence_profile)
     return CitationUnitCandidate(
         marker="",
         citation_id=None,
@@ -815,7 +949,15 @@ def _build_chunk_fallback_candidate(
         source_locator=chunk.source_locator,
         heading_path=chunk.heading_path,
         lexical_relevance=lexical_relevance,
-        score=(0.6 * chunk.score) + (0.4 * lexical_relevance),
+        score=_score_evidence_candidate(
+            chunk_score=chunk.score,
+            lexical_relevance=lexical_relevance,
+            entity_exact_match=entity_exact_match,
+            intent_alignment=intent_alignment,
+            profile=evidence_profile,
+        ),
+        entity_exact_match=entity_exact_match,
+        intent_alignment=intent_alignment,
     )
 
 
@@ -835,6 +977,89 @@ def _looks_like_complete_evidence_text(text: str) -> bool:
     return text[-1] in PREFERRED_EVIDENCE_ENDING_CHARACTERS
 
 
+def _score_evidence_candidate(
+    *,
+    chunk_score: float,
+    lexical_relevance: float,
+    entity_exact_match: bool,
+    intent_alignment: float,
+    profile: QueryEvidenceProfile,
+) -> float:
+    if not profile.is_entity_query:
+        return (0.6 * chunk_score) + (0.4 * lexical_relevance)
+
+    entity_score = 1.0 if entity_exact_match else 0.0
+    return (
+        (0.50 * chunk_score)
+        + (0.25 * lexical_relevance)
+        + (0.15 * entity_score)
+        + (0.10 * intent_alignment)
+    )
+
+
+def _should_filter_entity_candidate(
+    candidate: CitationUnitCandidate,
+    *,
+    profile: QueryEvidenceProfile,
+) -> bool:
+    if not profile.is_entity_query:
+        return False
+    return (
+        candidate.lexical_relevance <= 0
+        and candidate.intent_alignment <= 0
+    )
+
+
+def _apply_entity_evidence_gate(
+    candidates: list[CitationUnitCandidate],
+    *,
+    profile: QueryEvidenceProfile,
+    max_evidence_units: int,
+) -> list[CitationUnitCandidate]:
+    if not profile.is_entity_query or not candidates:
+        return candidates
+
+    selected = [candidates[0]]
+    top = candidates[0]
+    limit = (
+        max_evidence_units
+        if profile.query_type == "entity_relation"
+        else min(max_evidence_units, ENTITY_MAX_EVIDENCE_UNITS)
+    )
+    for candidate in candidates[1:]:
+        if len(selected) >= limit:
+            break
+        if _passes_entity_followup_gate(candidate, top=top):
+            selected.append(candidate)
+    return selected
+
+
+def _passes_entity_followup_gate(
+    candidate: CitationUnitCandidate,
+    *,
+    top: CitationUnitCandidate,
+) -> bool:
+    same_chunk = (
+        candidate.document_id == top.document_id
+        and candidate.chunk_id == top.chunk_id
+    )
+    if same_chunk:
+        return (
+            candidate.entity_exact_match
+            and candidate.intent_alignment > 0
+            and candidate.lexical_relevance >= SAME_CHUNK_ENTITY_FOLLOWUP_MIN_LEXICAL_RELEVANCE
+        )
+    return (
+        candidate.entity_exact_match
+        and candidate.lexical_relevance >= ENTITY_FOLLOWUP_MIN_LEXICAL_RELEVANCE
+        and (
+            candidate.intent_alignment > 0
+            or candidate.lexical_relevance >= ENTITY_FOLLOWUP_STRONG_LEXICAL_RELEVANCE
+        )
+        and candidate.score >= (top.score * ENTITY_FOLLOWUP_MIN_RELATIVE_SCORE)
+    )
+
+
 def _lexical_relevance(text: str, query_features: set[str]) -> float:
     if not query_features:
         return 0.0
@@ -842,6 +1067,130 @@ def _lexical_relevance(text: str, query_features: set[str]) -> float:
     if not text_features:
         return 0.0
     return len(text_features & query_features) / max(1, len(query_features))
+
+
+def _build_query_evidence_profile(question: str) -> QueryEvidenceProfile:
+    normalized = _normalize_text(question)
+    lowered = normalized.lower()
+
+    relation_terms = _extract_relation_entity_terms(normalized)
+    if relation_terms:
+        return QueryEvidenceProfile(
+            query_type="entity_relation",
+            entity_terms=frozenset(relation_terms),
+            intent_terms=ENTITY_RELATION_TERMS,
+        )
+
+    if any(pattern in lowered for pattern in ("长什么样", "长啥样", "外貌", "样子")):
+        return QueryEvidenceProfile(
+            query_type="entity_attribute",
+            entity_terms=frozenset(_extract_single_entity_terms(normalized, "entity_attribute")),
+            intent_terms=ENTITY_ATTRIBUTE_TERMS,
+        )
+
+    if any(pattern in lowered for pattern in ("为什么受欢迎", "为什么这么火", "为什么火", "受欢迎")):
+        return QueryEvidenceProfile(
+            query_type="entity_reason",
+            entity_terms=frozenset(_extract_single_entity_terms(normalized, "entity_reason")),
+            intent_terms=ENTITY_REASON_TERMS,
+        )
+
+    if any(pattern in lowered for pattern in ("是谁", "是什么", "是啥", "介绍", "定义")):
+        return QueryEvidenceProfile(
+            query_type="entity_definition",
+            entity_terms=frozenset(_extract_single_entity_terms(normalized, "entity_definition")),
+            intent_terms=ENTITY_DEFINITION_TERMS,
+        )
+
+    return QueryEvidenceProfile(
+        query_type="generic_factual",
+        entity_terms=frozenset(),
+        intent_terms=frozenset(),
+    )
+
+
+def _extract_relation_entity_terms(question: str) -> tuple[str, ...]:
+    relation_match = re.search(
+        r"(.+?)(?:和|与|跟)(.+?)(?:是什么关系|有(?:什么)?关系|的关系|关系)",
+        question,
+    )
+    if relation_match is None:
+        return ()
+    return tuple(
+        term
+        for term in (
+            _normalize_entity_term(relation_match.group(1)),
+            _normalize_entity_term(relation_match.group(2)),
+        )
+        if term
+    )
+
+
+def _extract_single_entity_terms(question: str, query_type: str) -> tuple[str, ...]:
+    cleanup_patterns = {
+        "entity_definition": (
+            "是谁",
+            "是什么",
+            "是啥",
+            "介绍一下",
+            "介绍",
+            "定义",
+        ),
+        "entity_attribute": (
+            "长什么样",
+            "长啥样",
+            "是什么样",
+            "外貌是什么",
+            "外貌",
+            "样子",
+        ),
+        "entity_reason": (
+            "为什么受欢迎",
+            "为什么这么火",
+            "为什么火",
+            "受欢迎的原因",
+            "受欢迎",
+        ),
+    }
+    cleaned = question
+    for pattern in cleanup_patterns.get(query_type, ()):
+        cleaned = cleaned.replace(pattern, " ")
+    term = _normalize_entity_term(cleaned)
+    return (term,) if term else ()
+
+
+def _normalize_entity_term(value: str) -> str:
+    normalized = re.sub(r"[^\w\u3040-\u30ff\u4e00-\u9fffー]+", " ", value)
+    normalized = " ".join(normalized.split()).strip()
+    return normalized
+
+
+def _has_entity_exact_match(text: str, *, profile: QueryEvidenceProfile) -> bool:
+    if not profile.entity_terms:
+        return False
+    normalized_text = _normalize_text(text).lower()
+    entity_hits = [
+        term
+        for term in profile.entity_terms
+        if term and term.lower() in normalized_text
+    ]
+    if profile.query_type == "entity_relation":
+        if len(entity_hits) >= min(2, len(profile.entity_terms)):
+            return True
+        return bool(entity_hits) and _intent_alignment(text, profile=profile) > 0
+    return bool(entity_hits)
+
+
+def _intent_alignment(text: str, *, profile: QueryEvidenceProfile) -> float:
+    if not profile.intent_terms:
+        return 0.0
+    normalized_text = _normalize_text(text).lower()
+    hits = [
+        term
+        for term in profile.intent_terms
+        if term and term.lower() in normalized_text
+    ]
+    return len(hits) / max(1, len(profile.intent_terms))
 
 
 def build_citation_read_from_unit(item: CitationUnitCandidate) -> CitationRead:
