@@ -1,0 +1,83 @@
+name: Bug report
+description: Report a reproducible problem in PureLink.
+title: "[Bug]: "
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the problem clearly.
+      placeholder: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Provide the smallest set of steps that reproduces the issue.
+      placeholder: |
+        1. Start the stack with ...
+        2. Upload ...
+        3. Click ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      placeholder: What actually happened?
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "macOS 15, Ubuntu 24.04, Windows 11, etc."
+    validations:
+      required: true
+  - type: input
+    id: docker-version
+    attributes:
+      label: Docker version
+      placeholder: "docker --version"
+  - type: input
+    id: compose-version
+    attributes:
+      label: Docker Compose version
+      placeholder: "docker compose version"
+  - type: input
+    id: browser
+    attributes:
+      label: Browser
+      placeholder: "Chrome 126, Firefox 127, Safari 18, etc."
+  - type: input
+    id: version
+    attributes:
+      label: PureLink commit or release
+      placeholder: "git rev-parse --short HEAD or release tag"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Paste relevant logs, with secrets, tokens, and private URLs removed.
+      render: shell
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues.
+          required: true
+        - label: I removed secrets, tokens, passwords, and private data from logs.
+          required: true
+        - label: I reproduced this on latest main when possible.
+          required: false
