@@ -61,9 +61,26 @@ ask 接口返回结构：
 
 - `evidences`：citation-ready evidence
 - `context_text`：带 `[S1]` / `[S2]` 标记的 LLM context
-- `requested_mode` / `selected_mode` / `router_reason`：记录用户请求模式、实际执行模式和规则 router 原因
+- `requested_mode` / `selected_mode` / `effective_mode`：记录用户请求模式、规则路由模式和 fallback 后实际执行模式
+- `router_reason` / `router_confidence`：记录规则 router 原因和置信度
+- `fallback_mode` / `fallback_reason`：记录 graph/hybrid 保守 fallback
 - `metadata.context_chunks`：保留给当前 QA prompt 和可靠性判断使用的 chunk 对象
 - `metadata.evidence_units`：保留给当前 citation 生成使用的 citation unit 候选
+
+`AUTO` 是 deterministic rule-based router，不是 LLM classifier 或 Agent。当前优先级为：
+
+```text
+overview > relation > exact technical identifier > chunk_only
+```
+
+低置信度或弱关键词默认回到 `chunk_only`。手动指定 `chunk_only`、`overview`、`graph_vector_mix` 或 `hybrid_text` 时不会被 router 覆盖。
+
+`selected_mode` 表示 router 选择的模式，`effective_mode` 表示 fallback 后实际执行的模式。这样 eval 可以继续衡量 router 分类准确性，同时 trace 能说明实际检索是否从 `graph_vector_mix` 或 `hybrid_text` 回退到 `chunk_only`。
+
+保守 fallback：
+
+- `graph_vector_mix` 在 graph candidates 为空、低于阈值或 graph 检索失败时 fallback 到 `chunk_only`。
+- `hybrid_text` 在 keyword candidates 为空、keyword 检索失败或没有额外 keyword signal 时保留 vector candidates，并记录 fallback metadata。
 
 失败响应不改变成功的 ask/retrieval schema。Ask 和 Retrieval Debug 的失败
 会返回统一 API error envelope，前端显示 error code、message 和 request id
@@ -117,7 +134,7 @@ M5 新增 retrieval trace，用于调试和评估 RAG 检索质量。
 
 - trace 由 `retrieval_service.retrieve()` 生成。
 - trace header 记录 query、retrieval mode、top_k、provider metadata、reranker 配置、初始候选数量和最终 evidence 数量。
-- trace metadata 记录 `requested_mode`、`selected_mode`、`router_reason`、`router_type`。
+- trace metadata 记录 `requested_mode`、`selected_mode`、`effective_mode`、`router_reason`、`router_confidence`、`router_type`、`fallback_mode` 和 `fallback_reason`。
 - trace item 关联 document、chunk、citation unit。
 - trace item 记录 initial rank、rerank rank、final rank、vector score、rerank score、final score。
 - trace item 标记 `selected_for_context`，说明哪些 evidence 进入最终 context。

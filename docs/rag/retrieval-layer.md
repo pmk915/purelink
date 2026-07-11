@@ -25,7 +25,38 @@ retrieval_service.retrieve(request: RetrievalRequest) -> RetrievalResult
 
 Unsupported future modes fallback to `CHUNK_ONLY`.
 
-`AUTO` never reaches the lower-level retrieval implementation. `retrieval_service.retrieve()` records `requested_mode`, `selected_mode`, `router_reason`, and `router_type` in result/trace metadata, then calls the existing concrete mode implementation.
+`AUTO` never reaches the lower-level retrieval implementation. The query router is deterministic and rule-based; it is not an LLM classifier or agent router.
+
+Router priority is stable:
+
+```text
+overview > relation > exact technical identifier > chunk_only
+```
+
+The router also records `router_confidence`:
+
+- `high`: explicit overview phrase, strong relation structure, or exact technical identifier.
+- `low`: weak or ambiguous signal; the router defaults to `chunk_only`.
+- `manual`: non-auto mode was explicitly requested and the router did not override it.
+
+`selected_mode` means the routed mode. `effective_mode` means the retrieval mode actually used after fallback. For example, an `auto` query can route to `graph_vector_mix` but fall back to `chunk_only` if graph candidates are empty. This distinction lets eval measure router accuracy without treating fallback as a router classification failure.
+
+`retrieval_service.retrieve()` records these fields in result/trace metadata:
+
+- `requested_mode`
+- `selected_mode`
+- `effective_mode`
+- `router_reason`
+- `router_confidence`
+- `router_type`
+- `fallback_mode`
+- `fallback_reason`
+
+Fallback is conservative:
+
+- `graph_vector_mix` falls back to `chunk_only` when graph retrieval fails, returns no graph candidates, or graph candidates are below the retrieval threshold.
+- `hybrid_text` preserves vector candidates and records fallback when keyword retrieval fails, returns no keyword candidates, or adds no keyword signal.
+- Manual modes keep their requested/selected mode and use `router_confidence=manual`.
 
 `HYBRID_TEXT` is a lightweight local retrieval mode. It is not an Elasticsearch/OpenSearch integration and does not replace vector retrieval; it adds lexical candidates before the existing reranker and citation pipeline.
 

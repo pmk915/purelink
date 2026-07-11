@@ -270,8 +270,9 @@ async def test_auto_mode_records_selected_mode_and_router_trace_metadata(
                 chunk_id="chunk-api",
                 text="The API path is handled in knowledge base routes.",
                 score=0.92,
+                candidate_sources=("vector", "keyword"),
             )
-        ], SimpleNamespace(keyword_candidate_count=1, fallback_reason=None)
+        ], SimpleNamespace(keyword_candidate_count=1, keyword_failed=False, fallback_reason=None)
 
     monkeypatch.setattr(
         "app.services.retrieval.retrieval_service.retrieve_hybrid_text_chunks",
@@ -300,15 +301,27 @@ async def test_auto_mode_records_selected_mode_and_router_trace_metadata(
     assert result.requested_mode == RetrievalMode.AUTO
     assert result.selected_mode == RetrievalMode.HYBRID_TEXT
     assert result.mode == RetrievalMode.HYBRID_TEXT
-    assert result.router_reason == "question contains API/path/config/code-like tokens"
+    assert result.router_reason == "question contains exact technical identifier"
+    assert result.router_confidence == "high"
+    assert result.effective_mode == RetrievalMode.HYBRID_TEXT
+    assert result.fallback_mode is None
+    assert result.fallback_reason is None
     assert result.metadata["requested_mode"] == "auto"
     assert result.metadata["selected_mode"] == "hybrid_text"
+    assert result.metadata["effective_mode"] == "hybrid_text"
+    assert result.metadata["router_confidence"] == "high"
+    assert result.metadata["fallback_mode"] is None
+    assert result.metadata["fallback_reason"] is None
     assert trace is not None
     trace_metadata = json.loads(trace.metadata_json or "{}")
     assert trace_metadata["requested_mode"] == "auto"
     assert trace_metadata["selected_mode"] == "hybrid_text"
+    assert trace_metadata["effective_mode"] == "hybrid_text"
     assert trace_metadata["router_type"] == "rule_based"
-    assert trace_metadata["router_reason"] == "question contains API/path/config/code-like tokens"
+    assert trace_metadata["router_reason"] == "question contains exact technical identifier"
+    assert trace_metadata["router_confidence"] == "high"
+    assert trace_metadata["fallback_mode"] is None
+    assert trace_metadata["fallback_reason"] is None
 
 
 @pytest.mark.anyio
@@ -354,6 +367,10 @@ async def test_manual_chunk_only_mode_bypasses_auto_router(
     assert result.selected_mode == RetrievalMode.CHUNK_ONLY
     assert result.mode == RetrievalMode.CHUNK_ONLY
     assert result.router_reason == "manual mode specified"
+    assert result.router_confidence == "manual"
+    assert result.effective_mode == RetrievalMode.CHUNK_ONLY
+    assert result.fallback_mode is None
+    assert result.fallback_reason is None
 
 
 @pytest.mark.anyio
@@ -372,8 +389,9 @@ async def test_manual_hybrid_text_mode_keeps_selected_mode(
                 chunk_id="chunk-hybrid",
                 text="Manual hybrid retrieval result.",
                 score=0.88,
+                candidate_sources=("vector", "keyword"),
             )
-        ], SimpleNamespace(keyword_candidate_count=1, fallback_reason=None)
+        ], SimpleNamespace(keyword_candidate_count=1, keyword_failed=False, fallback_reason=None)
 
     monkeypatch.setattr(
         "app.services.retrieval.retrieval_service.retrieve_hybrid_text_chunks",
@@ -401,6 +419,276 @@ async def test_manual_hybrid_text_mode_keeps_selected_mode(
     assert result.requested_mode == RetrievalMode.HYBRID_TEXT
     assert result.selected_mode == RetrievalMode.HYBRID_TEXT
     assert result.mode == RetrievalMode.HYBRID_TEXT
+
+
+@pytest.mark.anyio
+async def test_graph_vector_mix_fallbacks_to_chunk_only_when_graph_candidates_empty(
+    session_factory: sessionmaker,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RERANKER_ENABLED", "false")
+    get_settings.cache_clear()
+
+    monkeypatch.setattr(
+        "app.services.retrieval.retrieval_service.chunk_retriever.retrieve_chunks_for_documents",
+        lambda **kwargs: [
+            _retrieved_chunk(
+                document_id=kwargs["documents"][0].id,
+                chunk_id="chunk-vector",
+                text="Vector fallback relation evidence.",
+                score=0.81,
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "app.services.retrieval.retrieval_service.retrieve_graph_chunks",
+        lambda **kwargs: [],
+    )
+
+    with session_factory() as db:
+        user, knowledge_base, document = _create_user_kb_document(db)
+        result = await retrieve(
+            RetrievalRequest(
+                db=db,
+                documents=[document],
+                vector_root=tmp_path,
+                scope=KnowledgeBaseScope.PERSONAL,
+                knowledge_base_id=knowledge_base.id,
+                user_id=user.id,
+                query="Alice Chen 和 Bob Li 是什么关系？",
+                top_k=3,
+                mode=RetrievalMode.AUTO,
+                include_citations=False,
+                required_review_status=DocumentReviewStatus.NOT_REQUIRED,
+            )
+        )
+        trace = db.scalar(select(RetrievalTrace).where(RetrievalTrace.id == result.trace_id))
+
+    trace_metadata = json.loads(trace.metadata_json or "{}")
+    assert result.selected_mode == RetrievalMode.GRAPH_VECTOR_MIX
+    assert result.mode == RetrievalMode.CHUNK_ONLY
+    assert result.effective_mode == RetrievalMode.CHUNK_ONLY
+    assert result.fallback_mode == RetrievalMode.CHUNK_ONLY
+    assert result.fallback_reason == "graph_candidates_empty"
+    assert result.evidences
+    assert result.metadata["selected_mode"] == "graph_vector_mix"
+    assert result.metadata["effective_mode"] == "chunk_only"
+    assert result.metadata["fallback_mode"] == "chunk_only"
+    assert trace_metadata["selected_mode"] == "graph_vector_mix"
+    assert trace_metadata["effective_mode"] == "chunk_only"
+    assert trace_metadata["fallback_reason"] == "graph_candidates_empty"
+
+
+@pytest.mark.anyio
+async def test_graph_retrieval_failure_fallbacks_to_chunk_only(
+    session_factory: sessionmaker,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RERANKER_ENABLED", "false")
+    get_settings.cache_clear()
+
+    monkeypatch.setattr(
+        "app.services.retrieval.retrieval_service.chunk_retriever.retrieve_chunks_for_documents",
+        lambda **kwargs: [
+            _retrieved_chunk(
+                document_id=kwargs["documents"][0].id,
+                chunk_id="chunk-vector",
+                text="Vector fallback survives graph failure.",
+                score=0.82,
+            )
+        ],
+    )
+
+    def raise_graph_failure(**kwargs):  # noqa: ANN003
+        raise RuntimeError("graph unavailable")
+
+    monkeypatch.setattr(
+        "app.services.retrieval.retrieval_service.retrieve_graph_chunks",
+        raise_graph_failure,
+    )
+
+    with session_factory() as db:
+        user, knowledge_base, document = _create_user_kb_document(db)
+        result = await retrieve(
+            RetrievalRequest(
+                db=db,
+                documents=[document],
+                vector_root=tmp_path,
+                scope=KnowledgeBaseScope.PERSONAL,
+                knowledge_base_id=knowledge_base.id,
+                user_id=user.id,
+                query="Alice Chen 和 Bob Li 是什么关系？",
+                top_k=3,
+                mode=RetrievalMode.AUTO,
+                include_citations=False,
+                required_review_status=DocumentReviewStatus.NOT_REQUIRED,
+            )
+        )
+
+    assert result.selected_mode == RetrievalMode.GRAPH_VECTOR_MIX
+    assert result.mode == RetrievalMode.CHUNK_ONLY
+    assert result.fallback_reason == "graph_retrieval_failed"
+    assert result.evidences
+
+
+@pytest.mark.anyio
+async def test_graph_vector_mix_with_graph_candidates_does_not_fallback(
+    session_factory: sessionmaker,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RERANKER_ENABLED", "false")
+    get_settings.cache_clear()
+
+    monkeypatch.setattr(
+        "app.services.retrieval.retrieval_service.chunk_retriever.retrieve_chunks_for_documents",
+        lambda **kwargs: [
+            _retrieved_chunk(
+                document_id=kwargs["documents"][0].id,
+                chunk_id="chunk-vector",
+                text="Vector relation evidence.",
+                score=0.5,
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        "app.services.retrieval.retrieval_service.retrieve_graph_chunks",
+        lambda **kwargs: [
+            _retrieved_chunk(
+                document_id=kwargs["documents"][0].id,
+                chunk_id="chunk-graph",
+                text="Graph relation evidence.",
+                score=0.9,
+                candidate_sources=("graph",),
+            )
+        ],
+    )
+
+    with session_factory() as db:
+        user, knowledge_base, document = _create_user_kb_document(db)
+        result = await retrieve(
+            RetrievalRequest(
+                db=db,
+                documents=[document],
+                vector_root=tmp_path,
+                scope=KnowledgeBaseScope.PERSONAL,
+                knowledge_base_id=knowledge_base.id,
+                user_id=user.id,
+                query="Alice Chen 和 Bob Li 是什么关系？",
+                top_k=3,
+                mode=RetrievalMode.AUTO,
+                include_citations=False,
+                required_review_status=DocumentReviewStatus.NOT_REQUIRED,
+            )
+        )
+
+    assert result.selected_mode == RetrievalMode.GRAPH_VECTOR_MIX
+    assert result.mode == RetrievalMode.GRAPH_VECTOR_MIX
+    assert result.fallback_mode is None
+    assert result.fallback_reason is None
+    assert any("Graph relation evidence" in item.text for item in result.evidences)
+
+
+@pytest.mark.anyio
+async def test_hybrid_text_keyword_empty_records_chunk_only_fallback(
+    session_factory: sessionmaker,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RERANKER_ENABLED", "false")
+    get_settings.cache_clear()
+
+    def fake_retrieve_hybrid_text_chunks(**kwargs):  # noqa: ANN003
+        return [
+            _retrieved_chunk(
+                document_id=kwargs["documents"][0].id,
+                chunk_id="chunk-vector",
+                text="Vector candidate remains available.",
+                score=0.8,
+                candidate_sources=("vector",),
+            )
+        ], SimpleNamespace(keyword_candidate_count=0, keyword_failed=False, fallback_reason=None)
+
+    monkeypatch.setattr(
+        "app.services.retrieval.retrieval_service.retrieve_hybrid_text_chunks",
+        fake_retrieve_hybrid_text_chunks,
+    )
+
+    with session_factory() as db:
+        user, knowledge_base, document = _create_user_kb_document(db)
+        result = await retrieve(
+            RetrievalRequest(
+                db=db,
+                documents=[document],
+                vector_root=tmp_path,
+                scope=KnowledgeBaseScope.PERSONAL,
+                knowledge_base_id=knowledge_base.id,
+                user_id=user.id,
+                query="RETRIEVAL_MIN_SCORE 默认值是什么？",
+                top_k=3,
+                mode=RetrievalMode.AUTO,
+                include_citations=False,
+                required_review_status=DocumentReviewStatus.NOT_REQUIRED,
+            )
+        )
+
+    assert result.selected_mode == RetrievalMode.HYBRID_TEXT
+    assert result.mode == RetrievalMode.CHUNK_ONLY
+    assert result.effective_mode == RetrievalMode.CHUNK_ONLY
+    assert result.fallback_mode == RetrievalMode.CHUNK_ONLY
+    assert result.fallback_reason == "keyword_candidates_empty"
+    assert result.evidences
+
+
+@pytest.mark.anyio
+async def test_hybrid_text_keyword_failure_records_chunk_only_fallback(
+    session_factory: sessionmaker,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RERANKER_ENABLED", "false")
+    get_settings.cache_clear()
+
+    def fake_retrieve_hybrid_text_chunks(**kwargs):  # noqa: ANN003
+        return [
+            _retrieved_chunk(
+                document_id=kwargs["documents"][0].id,
+                chunk_id="chunk-vector",
+                text="Vector candidate survives keyword failure.",
+                score=0.8,
+                candidate_sources=("vector",),
+            )
+        ], SimpleNamespace(keyword_candidate_count=0, keyword_failed=True, fallback_reason="RuntimeError: boom")
+
+    monkeypatch.setattr(
+        "app.services.retrieval.retrieval_service.retrieve_hybrid_text_chunks",
+        fake_retrieve_hybrid_text_chunks,
+    )
+
+    with session_factory() as db:
+        user, knowledge_base, document = _create_user_kb_document(db)
+        result = await retrieve(
+            RetrievalRequest(
+                db=db,
+                documents=[document],
+                vector_root=tmp_path,
+                scope=KnowledgeBaseScope.PERSONAL,
+                knowledge_base_id=knowledge_base.id,
+                user_id=user.id,
+                query="RETRIEVAL_MIN_SCORE 默认值是什么？",
+                top_k=3,
+                mode=RetrievalMode.AUTO,
+                include_citations=False,
+                required_review_status=DocumentReviewStatus.NOT_REQUIRED,
+            )
+        )
+
+    assert result.selected_mode == RetrievalMode.HYBRID_TEXT
+    assert result.mode == RetrievalMode.CHUNK_ONLY
+    assert result.fallback_reason == "keyword_retrieval_failed"
+    assert result.evidences
 
 
 def _create_user_kb_document(db: Session) -> tuple[User, KnowledgeBase, Document]:
@@ -442,6 +730,7 @@ def _retrieved_chunk(
     chunk_id: str,
     text: str,
     score: float,
+    candidate_sources: tuple[str, ...] = (),
 ) -> RetrievedChunk:
     return RetrievedChunk(
         chunk_id=chunk_id,
@@ -463,4 +752,5 @@ def _retrieved_chunk(
         heading_path=None,
         score=score,
         chunk_db_id=None,
+        candidate_sources=candidate_sources,
     )

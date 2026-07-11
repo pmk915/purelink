@@ -24,7 +24,7 @@ from app.services.retrieval.citation_builder import build_evidences
 from app.services.retrieval.context_builder import build_context
 from app.services.retrieval.hybrid_text_retriever import retrieve_hybrid_text_chunks
 from app.services.retrieval.overview_retriever_adapter import retrieve_overview_chunks
-from app.services.retrieval.query_router import route_query
+from app.services.retrieval.query_router import CONFIDENCE_MANUAL, QueryRouteDecision, route_query
 from app.services.retrieval.rerank_service import (
     align_chunks_to_evidences,
     rerank_evidences,
@@ -42,12 +42,11 @@ logger = logging.getLogger("purelink.retrieval")
 async def retrieve(request: RetrievalRequest) -> RetrievalResult:
     active_settings = request.settings or get_settings()
     requested_mode = request.mode
-    resolved_mode, router_reason = _select_retrieval_mode(request)
-    router_metadata = _build_router_metadata(
-        requested_mode=requested_mode,
-        selected_mode=resolved_mode,
-        router_reason=router_reason,
-    )
+    route_decision = _select_retrieval_mode(request)
+    resolved_mode = route_decision.selected_mode
+    effective_mode = resolved_mode
+    fallback_mode: RetrievalMode | None = None
+    fallback_reason: str | None = None
     final_top_k = request.top_k
     expand_for_reranker = should_expand_initial_recall(active_settings)
     initial_top_k = (
@@ -57,7 +56,7 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
         else final_top_k
     )
 
-    _validate_internal_context(request, mode=resolved_mode)
+    _validate_internal_context(request, mode=effective_mode)
     scope = _coerce_scope(request.scope)
     required_review_status = _coerce_review_status(request.required_review_status)
     trace_id = _safe_start_trace(
@@ -84,7 +83,7 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
             context_chunks = raw_chunks
         else:
             hybrid_metadata = None
-            if resolved_mode == RetrievalMode.HYBRID_TEXT:
+            if effective_mode == RetrievalMode.HYBRID_TEXT:
                 raw_chunks, hybrid_metadata = retrieve_hybrid_text_chunks(
                     db=request.db,
                     documents=documents,
@@ -97,6 +96,12 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
                     required_review_status=required_review_status,
                     team_id=request.team_id,
                 )
+                fallback_mode, fallback_reason = _hybrid_fallback_metadata(
+                    hybrid_metadata=hybrid_metadata,
+                    raw_chunks=raw_chunks,
+                )
+                if fallback_mode is not None:
+                    effective_mode = fallback_mode
             else:
                 raw_chunks = chunk_retriever.retrieve_chunks_for_documents(
                     db=request.db,
@@ -110,21 +115,38 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
                     team_id=request.team_id,
                 )
             graph_chunks = []
-            if resolved_mode == RetrievalMode.GRAPH_VECTOR_MIX:
-                graph_chunks = retrieve_graph_chunks(
-                    db=request.db,
-                    documents=documents,
-                    knowledge_base_id=request.knowledge_base_id,
-                    query=request.query,
-                    scope=scope.value,
-                    team_id=request.team_id,
-                    limit=initial_top_k,
-                )
-                raw_chunks = merge_graph_and_vector_chunks(
-                    vector_chunks=raw_chunks,
-                    graph_chunks=graph_chunks,
-                    top_k=initial_top_k,
-                )
+            if effective_mode == RetrievalMode.GRAPH_VECTOR_MIX:
+                try:
+                    graph_chunks = retrieve_graph_chunks(
+                        db=request.db,
+                        documents=documents,
+                        knowledge_base_id=request.knowledge_base_id,
+                        query=request.query,
+                        scope=scope.value,
+                        team_id=request.team_id,
+                        limit=initial_top_k,
+                    )
+                except Exception:
+                    logger.warning("graph retrieval failed; falling back to chunk_only", exc_info=True)
+                    graph_chunks = []
+                    effective_mode = RetrievalMode.CHUNK_ONLY
+                    fallback_mode = RetrievalMode.CHUNK_ONLY
+                    fallback_reason = "graph_retrieval_failed"
+                else:
+                    graph_fallback_reason = _graph_fallback_reason(
+                        graph_chunks=graph_chunks,
+                        min_score=active_settings.retrieval_min_score,
+                    )
+                    if graph_fallback_reason:
+                        effective_mode = RetrievalMode.CHUNK_ONLY
+                        fallback_mode = RetrievalMode.CHUNK_ONLY
+                        fallback_reason = graph_fallback_reason
+                    else:
+                        raw_chunks = merge_graph_and_vector_chunks(
+                            vector_chunks=raw_chunks,
+                            graph_chunks=graph_chunks,
+                            top_k=initial_top_k,
+                        )
             context_chunks = raw_chunks if expand_for_reranker else _select_context_chunks(raw_chunks)
             graph_chunk_keys = {
                 (item.document_id, str(item.chunk_id))
@@ -142,7 +164,7 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
                     if expand_for_reranker
                     else max(active_settings.max_citations, 8)
                 ),
-                use_query_evidence_profile=resolved_mode != RetrievalMode.OVERVIEW,
+                use_query_evidence_profile=effective_mode != RetrievalMode.OVERVIEW,
             )
 
         candidate_evidences = _annotate_chunk_score_evidences(
@@ -151,7 +173,7 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
                 graph_chunk_keys=locals().get("graph_chunk_keys", set()),
             ),
             chunks=raw_chunks,
-            retrieval_mode=resolved_mode,
+            retrieval_mode=effective_mode,
         )
         evidences, used_reranker = await rerank_evidences(
             query=request.evidence_query or request.query,
@@ -186,8 +208,16 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
             final_evidence_count=len(evidences),
             used_reranker=used_reranker,
             metadata={
-                "mode": resolved_mode.value,
-                **router_metadata,
+                "mode": effective_mode.value,
+                **_build_router_metadata(
+                    requested_mode=requested_mode,
+                    selected_mode=resolved_mode,
+                    effective_mode=effective_mode,
+                    router_reason=route_decision.reason,
+                    router_confidence=route_decision.confidence,
+                    fallback_mode=fallback_mode,
+                    fallback_reason=fallback_reason,
+                ),
                 "context_chunk_count": len(context_chunks),
                 "evidence_unit_count": len(evidence_units),
                 "graph_candidate_count": len(locals().get("graph_chunks", [])),
@@ -201,10 +231,11 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
         retrieved_chunks = context_chunks if used_reranker else raw_chunks
 
         logger.info(
-            "retrieval completed knowledge_base_id=%s user_id=%s mode=%s initial_top_k=%s final_top_k=%s raw_chunk_count=%s context_chunk_count=%s evidence_count=%s used_reranker=%s trace_id=%s",
+            "retrieval completed knowledge_base_id=%s user_id=%s routed_mode=%s effective_mode=%s initial_top_k=%s final_top_k=%s raw_chunk_count=%s context_chunk_count=%s evidence_count=%s used_reranker=%s trace_id=%s fallback_reason=%s",
             request.knowledge_base_id,
             request.user_id,
             resolved_mode.value,
+            effective_mode.value,
             initial_top_k,
             final_top_k,
             len(raw_chunks),
@@ -212,19 +243,32 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
             len(evidences),
             used_reranker,
             trace_id,
+            fallback_reason,
         )
         return RetrievalResult(
             query=request.query,
-            mode=resolved_mode,
+            mode=effective_mode,
             requested_mode=requested_mode,
             selected_mode=resolved_mode,
-            router_reason=router_reason,
+            router_reason=route_decision.reason,
+            router_confidence=route_decision.confidence,
+            effective_mode=effective_mode,
+            fallback_mode=fallback_mode,
+            fallback_reason=fallback_reason,
             evidences=evidences,
             context_text=context_text,
             used_reranker=used_reranker,
             trace_id=trace_id,
             metadata={
-                **router_metadata,
+                **_build_router_metadata(
+                    requested_mode=requested_mode,
+                    selected_mode=resolved_mode,
+                    effective_mode=effective_mode,
+                    router_reason=route_decision.reason,
+                    router_confidence=route_decision.confidence,
+                    fallback_mode=fallback_mode,
+                    fallback_reason=fallback_reason,
+                ),
                 "retrieved_chunks": retrieved_chunks,
                 "initial_chunks": raw_chunks,
                 "context_chunks": context_chunks,
@@ -242,32 +286,72 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
             final_evidence_count=0,
             used_reranker=False,
             metadata={
-                **router_metadata,
+                **_build_router_metadata(
+                    requested_mode=requested_mode,
+                    selected_mode=resolved_mode,
+                    effective_mode=effective_mode,
+                    router_reason=route_decision.reason,
+                    router_confidence=route_decision.confidence,
+                    fallback_mode=fallback_mode,
+                    fallback_reason=fallback_reason,
+                ),
                 "error": f"{type(exc).__name__}: {exc}",
             },
         )
         raise
 
 
-def _select_retrieval_mode(request: RetrievalRequest) -> tuple[RetrievalMode, str | None]:
+def _select_retrieval_mode(request: RetrievalRequest) -> QueryRouteDecision:
     if request.mode == RetrievalMode.AUTO:
-        decision = route_query(request.query)
-        return decision.selected_mode, decision.reason
-    return resolve_mode(request.mode), "manual mode specified"
+        return route_query(request.query)
+    return QueryRouteDecision(
+        selected_mode=resolve_mode(request.mode),
+        reason="manual mode specified",
+        confidence=CONFIDENCE_MANUAL,
+    )
 
 
 def _build_router_metadata(
     *,
     requested_mode: RetrievalMode,
     selected_mode: RetrievalMode,
+    effective_mode: RetrievalMode,
     router_reason: str | None,
+    router_confidence: str | None,
+    fallback_mode: RetrievalMode | None,
+    fallback_reason: str | None,
 ) -> dict[str, object]:
     return {
         "requested_mode": requested_mode.value,
         "selected_mode": selected_mode.value,
+        "effective_mode": effective_mode.value,
         "router_reason": router_reason,
+        "router_confidence": router_confidence,
         "router_type": "rule_based" if requested_mode == RetrievalMode.AUTO else None,
+        "fallback_mode": fallback_mode.value if fallback_mode else None,
+        "fallback_reason": fallback_reason,
     }
+
+
+def _graph_fallback_reason(*, graph_chunks, min_score: float) -> str | None:
+    if not graph_chunks:
+        return "graph_candidates_empty"
+    threshold = max(0.0, float(min_score))
+    if all(getattr(chunk, "score", 0.0) < threshold for chunk in graph_chunks):
+        return "graph_candidates_below_threshold"
+    return None
+
+
+def _hybrid_fallback_metadata(*, hybrid_metadata, raw_chunks) -> tuple[RetrievalMode | None, str | None]:
+    if hybrid_metadata is None:
+        return None, None
+    if getattr(hybrid_metadata, "keyword_failed", False):
+        return RetrievalMode.CHUNK_ONLY, "keyword_retrieval_failed"
+    if getattr(hybrid_metadata, "keyword_candidate_count", 0) <= 0:
+        return RetrievalMode.CHUNK_ONLY, "keyword_candidates_empty"
+    if raw_chunks and not any("keyword" in (getattr(chunk, "candidate_sources", ()) or ()) for chunk in raw_chunks):
+        return RetrievalMode.CHUNK_ONLY, "hybrid_no_additional_signal"
+    return None, None
 
 
 def _validate_internal_context(request: RetrievalRequest, *, mode: RetrievalMode | None = None) -> None:
