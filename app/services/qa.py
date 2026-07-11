@@ -74,6 +74,12 @@ ENTITY_PER_CHUNK_LIMIT_TYPES = {
     "entity_reason",
 }
 ENTITY_MAX_EVIDENCE_UNITS = 3
+ENTITY_CONTEXT_QUERY_TYPES = {
+    "entity_definition",
+    "entity_attribute",
+    "entity_reason",
+}
+ENTITY_CONTEXT_MIN_LEXICAL_RELEVANCE = 0.05
 ENTITY_FOLLOWUP_MIN_LEXICAL_RELEVANCE = 0.15
 ENTITY_FOLLOWUP_STRONG_LEXICAL_RELEVANCE = 0.40
 ENTITY_FOLLOWUP_MIN_RELATIVE_SCORE = 0.70
@@ -192,6 +198,7 @@ class CitationUnitCandidate:
     lexical_relevance: float
     score: float
     entity_exact_match: bool = False
+    entity_context_match: bool = False
     intent_alignment: float = 0.0
 
 
@@ -863,6 +870,7 @@ def select_evidence_units(
             lexical_relevance=item.lexical_relevance,
             score=item.score,
             entity_exact_match=item.entity_exact_match,
+            entity_context_match=item.entity_context_match,
             intent_alignment=item.intent_alignment,
         )
         for index, item in enumerate(selected[:max_evidence_units], start=1)
@@ -880,10 +888,19 @@ def _build_citation_unit_candidate(
     lexical_relevance = _lexical_relevance(unit.unit_text, question_features)
     entity_exact_match = _has_entity_exact_match(unit.unit_text, profile=evidence_profile)
     intent_alignment = _intent_alignment(unit.unit_text, profile=evidence_profile)
+    entity_context_match = _has_entity_context_match(
+        unit_text=unit.unit_text,
+        chunk=chunk,
+        metadata=metadata,
+        lexical_relevance=lexical_relevance,
+        intent_alignment=intent_alignment,
+        profile=evidence_profile,
+    )
     score = _score_evidence_candidate(
         chunk_score=chunk.score,
         lexical_relevance=lexical_relevance,
         entity_exact_match=entity_exact_match,
+        entity_context_match=entity_context_match,
         intent_alignment=intent_alignment,
         profile=evidence_profile,
     )
@@ -912,6 +929,7 @@ def _build_citation_unit_candidate(
         lexical_relevance=lexical_relevance,
         score=score,
         entity_exact_match=entity_exact_match,
+        entity_context_match=entity_context_match,
         intent_alignment=intent_alignment,
     )
 
@@ -953,6 +971,7 @@ def _build_chunk_fallback_candidate(
             chunk_score=chunk.score,
             lexical_relevance=lexical_relevance,
             entity_exact_match=entity_exact_match,
+            entity_context_match=False,
             intent_alignment=intent_alignment,
             profile=evidence_profile,
         ),
@@ -982,13 +1001,14 @@ def _score_evidence_candidate(
     chunk_score: float,
     lexical_relevance: float,
     entity_exact_match: bool,
+    entity_context_match: bool,
     intent_alignment: float,
     profile: QueryEvidenceProfile,
 ) -> float:
     if not profile.is_entity_query:
         return (0.6 * chunk_score) + (0.4 * lexical_relevance)
 
-    entity_score = 1.0 if entity_exact_match else 0.0
+    entity_score = 1.0 if entity_exact_match or entity_context_match else 0.0
     return (
         (0.50 * chunk_score)
         + (0.25 * lexical_relevance)
@@ -1019,14 +1039,22 @@ def _apply_entity_evidence_gate(
     if not profile.is_entity_query or not candidates:
         return candidates
 
-    selected = [candidates[0]]
-    top = candidates[0]
+    top = next(
+        (candidate for candidate in candidates if _has_supported_entity_context(candidate)),
+        None,
+    )
+    if top is None:
+        return []
+
+    selected = [top]
     limit = (
         max_evidence_units
         if profile.query_type == "entity_relation"
         else min(max_evidence_units, ENTITY_MAX_EVIDENCE_UNITS)
     )
-    for candidate in candidates[1:]:
+    for candidate in candidates:
+        if candidate == top:
+            continue
         if len(selected) >= limit:
             break
         if _passes_entity_followup_gate(candidate, top=top):
@@ -1045,19 +1073,43 @@ def _passes_entity_followup_gate(
     )
     if same_chunk:
         return (
-            candidate.entity_exact_match
+            _has_supported_entity_context(candidate)
             and candidate.intent_alignment > 0
-            and candidate.lexical_relevance >= SAME_CHUNK_ENTITY_FOLLOWUP_MIN_LEXICAL_RELEVANCE
+            and candidate.lexical_relevance
+            >= _entity_followup_min_lexical_relevance(
+                candidate,
+                same_chunk=True,
+            )
         )
     return (
-        candidate.entity_exact_match
-        and candidate.lexical_relevance >= ENTITY_FOLLOWUP_MIN_LEXICAL_RELEVANCE
+        _has_supported_entity_context(candidate)
+        and candidate.lexical_relevance
+        >= _entity_followup_min_lexical_relevance(
+            candidate,
+            same_chunk=False,
+        )
         and (
             candidate.intent_alignment > 0
             or candidate.lexical_relevance >= ENTITY_FOLLOWUP_STRONG_LEXICAL_RELEVANCE
         )
         and candidate.score >= (top.score * ENTITY_FOLLOWUP_MIN_RELATIVE_SCORE)
     )
+
+
+def _has_supported_entity_context(candidate: CitationUnitCandidate) -> bool:
+    return candidate.entity_exact_match or candidate.entity_context_match
+
+
+def _entity_followup_min_lexical_relevance(
+    candidate: CitationUnitCandidate,
+    *,
+    same_chunk: bool,
+) -> float:
+    if candidate.entity_context_match and not candidate.entity_exact_match:
+        return ENTITY_CONTEXT_MIN_LEXICAL_RELEVANCE
+    if same_chunk:
+        return SAME_CHUNK_ENTITY_FOLLOWUP_MIN_LEXICAL_RELEVANCE
+    return ENTITY_FOLLOWUP_MIN_LEXICAL_RELEVANCE
 
 
 def _lexical_relevance(text: str, query_features: set[str]) -> float:
@@ -1179,6 +1231,43 @@ def _has_entity_exact_match(text: str, *, profile: QueryEvidenceProfile) -> bool
             return True
         return bool(entity_hits) and _intent_alignment(text, profile=profile) > 0
     return bool(entity_hits)
+
+
+def _has_entity_context_match(
+    *,
+    unit_text: str,
+    chunk: RetrievedChunk,
+    metadata: object,
+    lexical_relevance: float,
+    intent_alignment: float,
+    profile: QueryEvidenceProfile,
+) -> bool:
+    if profile.query_type not in ENTITY_CONTEXT_QUERY_TYPES:
+        return False
+    if not profile.entity_terms:
+        return False
+    if _has_entity_exact_match(unit_text, profile=profile):
+        return False
+    if intent_alignment <= 0:
+        return False
+    if lexical_relevance < ENTITY_CONTEXT_MIN_LEXICAL_RELEVANCE:
+        return False
+
+    context_text = _build_entity_context_text(chunk=chunk, metadata=metadata)
+    return _has_entity_exact_match(context_text, profile=profile)
+
+
+def _build_entity_context_text(*, chunk: RetrievedChunk, metadata: object) -> str:
+    section_title = getattr(metadata, "section_title", None) or chunk.section_title
+    heading_path = getattr(metadata, "heading_path", None) or chunk.heading_path
+    parts: list[str] = []
+    if section_title:
+        parts.append(str(section_title))
+    if heading_path:
+        parts.extend(str(item) for item in heading_path if item)
+    if chunk.text:
+        parts.append(_trim_text_for_prompt(chunk.text, max_chars=800))
+    return " ".join(parts)
 
 
 def _intent_alignment(text: str, *, profile: QueryEvidenceProfile) -> float:

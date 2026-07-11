@@ -1558,6 +1558,89 @@ def test_select_evidence_units_entity_attribute_prefers_appearance_over_identity
     assert evidence_units[0].text == "乌萨奇通体明黄色，有粉色内耳和白色尾巴。"
 
 
+def test_select_evidence_units_entity_attribute_uses_chunk_context_for_unit_without_entity(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="乌萨奇.txt",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text=(
+                "一、基本设定\n中文名：乌萨奇\n"
+                "外貌：通体明黄色的小兔子，有一对粉色内耳、圆眼睛、白色蓬松的棉花糖尾巴。\n"
+                "生日：2019年1月22日\n声优：小泽亚李"
+            ),
+            metadata={"section_title": "一、基本设定", "heading_path": ["一、基本设定"]},
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=0,
+            unit_text="中文名：乌萨奇",
+            metadata={"section_title": "一、基本设定", "heading_path": ["一、基本设定"]},
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=1,
+            unit_text="外貌：通体明黄色的小兔子，有一对粉色内耳、圆眼睛、白色蓬松的棉花糖尾巴。",
+            metadata={"section_title": "一、基本设定", "heading_path": ["一、基本设定"]},
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=2,
+            unit_text="生日：2019年1月22日",
+            metadata={"section_title": "一、基本设定", "heading_path": ["一、基本设定"]},
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=3,
+            unit_text="声优：小泽亚李",
+            metadata={"section_title": "一、基本设定", "heading_path": ["一、基本设定"]},
+        )
+        db.commit()
+
+        retrieved_chunk = _retrieved_chunk(
+            chunk_id=chunk.chunk_key,
+            chunk_db_id=chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.9,
+            text=chunk.chunk_text,
+            section_title="一、基本设定",
+            heading_path=("一、基本设定",),
+        )
+        evidence_units = select_evidence_units(
+            question="乌萨奇长什么样",
+            retrieved_chunks=[retrieved_chunk],
+            chunk_units=load_citation_units_for_chunks(
+                db=db,
+                chunks=[retrieved_chunk],
+            ),
+            max_evidence_units=4,
+        )
+
+    assert evidence_units
+    assert evidence_units[0].text == "外貌：通体明黄色的小兔子，有一对粉色内耳、圆眼睛、白色蓬松的棉花糖尾巴。"
+    assert evidence_units[0].entity_context_match is True
+    assert all("生日" not in item.text for item in evidence_units)
+    assert all("声优" not in item.text for item in evidence_units)
+
+
 def test_select_evidence_units_entity_reason_prefers_reason_over_birthday(
     session_factory: sessionmaker,
 ) -> None:
@@ -1623,6 +1706,66 @@ def test_select_evidence_units_entity_reason_prefers_reason_over_birthday(
     assert "声优" not in evidence_units[0].text
 
 
+def test_select_evidence_units_entity_reason_uses_chunk_context_for_unit_without_entity(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="乌萨奇.txt",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text=(
+                "乌萨奇为什么受欢迎\n乌萨奇的人设很突出。\n"
+                "这种“疯批外表+暖男内心+超强战力”的极致反差，让它人气很高。"
+            ),
+            metadata={"section_title": "四、为什么这么火？"},
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=0,
+            unit_text="乌萨奇的人设很突出。",
+            metadata={"section_title": "四、为什么这么火？"},
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=1,
+            unit_text="这种“疯批外表+暖男内心+超强战力”的极致反差，让它人气很高。",
+            metadata={"section_title": "四、为什么这么火？"},
+        )
+        db.commit()
+
+        retrieved_chunk = _retrieved_chunk(
+            chunk_id=chunk.chunk_key,
+            chunk_db_id=chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.9,
+            text=chunk.chunk_text,
+            section_title="四、为什么这么火？",
+        )
+        evidence_units = select_evidence_units(
+            question="乌萨奇为什么受欢迎",
+            retrieved_chunks=[retrieved_chunk],
+            chunk_units=load_citation_units_for_chunks(db=db, chunks=[retrieved_chunk]),
+            max_evidence_units=4,
+        )
+
+    assert evidence_units
+    assert "反差" in evidence_units[0].text
+    assert evidence_units[0].entity_context_match is True
+
+
 def test_select_evidence_units_relation_allows_multiple_units_from_same_chunk(
     session_factory: sessionmaker,
 ) -> None:
@@ -1686,6 +1829,101 @@ def test_select_evidence_units_relation_allows_multiple_units_from_same_chunk(
 
     assert len(evidence_units) == 2
     assert all("吉伊卡哇" in item.text for item in evidence_units)
+
+
+def test_select_evidence_units_relation_does_not_use_contextual_entity_shortcut(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="乌萨奇关系.txt",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="乌萨奇和吉伊卡哇是朋友。朋友。",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=0,
+            unit_text="乌萨奇和吉伊卡哇是朋友。",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=1,
+            unit_text="朋友。",
+        )
+        db.commit()
+
+        retrieved_chunk = _retrieved_chunk(
+            chunk_id=chunk.chunk_key,
+            chunk_db_id=chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.9,
+            text=chunk.chunk_text,
+        )
+        evidence_units = select_evidence_units(
+            question="乌萨奇和吉伊卡哇是什么关系",
+            retrieved_chunks=[retrieved_chunk],
+            chunk_units=load_citation_units_for_chunks(db=db, chunks=[retrieved_chunk]),
+            max_evidence_units=4,
+        )
+
+    assert [item.text for item in evidence_units] == ["乌萨奇和吉伊卡哇是朋友。"]
+
+
+def test_select_evidence_units_entity_attribute_rejects_unrelated_document_context(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="其它角色.txt",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="角色外貌设定：通体明黄色，有粉色内耳和白色尾巴。",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=0,
+            unit_text="外貌：通体明黄色，有粉色内耳和白色尾巴。",
+        )
+        db.commit()
+
+        retrieved_chunk = _retrieved_chunk(
+            chunk_id=chunk.chunk_key,
+            chunk_db_id=chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.9,
+            text=chunk.chunk_text,
+        )
+        evidence_units = select_evidence_units(
+            question="乌萨奇长什么样",
+            retrieved_chunks=[retrieved_chunk],
+            chunk_units=load_citation_units_for_chunks(db=db, chunks=[retrieved_chunk]),
+            max_evidence_units=4,
+        )
+
+    assert evidence_units == []
 
 
 def test_select_evidence_units_generic_factual_keeps_existing_multi_unit_behavior(
