@@ -1,0 +1,44 @@
+name: Feature request
+description: Suggest an improvement or new capability for PureLink.
+title: "[Feature]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user or developer problem would this solve?
+      placeholder: Describe the problem, limitation, or workflow gap.
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed solution
+      description: Describe the change you would like to see.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workarounds or different approaches have you considered?
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What should be included, and what should stay out of scope?
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add screenshots, links, examples, or implementation notes if useful.
+  - type: dropdown
+    id: willing-to-contribute
+    attributes:
+      label: Are you willing to contribute a PR?
+      options:
+        - "Yes"
+        - "No"
+        - "Maybe"
+    validations:
+      required: true
