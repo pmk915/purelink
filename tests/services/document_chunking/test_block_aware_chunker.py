@@ -12,6 +12,7 @@ def _block(
     *,
     heading_level: int | None = None,
     source_locator: str | None = None,
+    metadata: dict[str, object] | None = None,
 ) -> DocumentBlock:
     return DocumentBlock(
         block_type=block_type,
@@ -19,6 +20,7 @@ def _block(
         order_index=order_index,
         heading_level=heading_level,
         source_locator=source_locator,
+        metadata=metadata or {},
     )
 
 
@@ -124,3 +126,71 @@ def test_oversized_text_section_falls_back_to_boundary_split() -> None:
 
 def test_missing_blocks_return_empty_for_fixed_fallback_caller() -> None:
     assert _chunk([]) == []
+
+
+def test_block_aware_chunks_include_source_spans_and_single_page_metadata() -> None:
+    chunks = _chunk(
+        [
+            _block(
+                DocumentBlockType.TEXT,
+                "PDF page one identity text.",
+                0,
+                source_locator="page:1",
+                metadata={
+                    "char_start": 0,
+                    "char_end": 27,
+                    "page_number": 1,
+                    "extractor": "pymupdf",
+                },
+            ),
+            _block(
+                DocumentBlockType.TEXT,
+                "PDF page one relationship text.",
+                1,
+                source_locator="page:1",
+                metadata={
+                    "char_start": 29,
+                    "char_end": 60,
+                    "page_number": 1,
+                    "extractor": "pymupdf",
+                },
+            ),
+        ],
+        source_type="pdf",
+    )
+
+    assert len(chunks) == 1
+    assert chunks[0].metadata["page_number"] == 1
+    assert chunks[0].metadata["extractor"] == "pymupdf"
+    assert [(span.local_start, span.local_end) for span in chunks[0].source_spans] == [
+        (0, 27),
+        (29, 60),
+    ]
+    assert [(span.source_char_start, span.source_char_end) for span in chunks[0].source_spans] == [
+        (0, 27),
+        (29, 60),
+    ]
+    assert all(span.page_number == 1 for span in chunks[0].source_spans)
+
+
+def test_large_block_split_source_spans_keep_original_offsets() -> None:
+    text = "\n".join(f"Line {index} keeps source offsets." for index in range(8))
+    chunks = _chunk(
+        [
+            _block(
+                DocumentBlockType.TEXT,
+                text,
+                0,
+                metadata={"char_start": 100, "char_end": 100 + len(text)},
+            ),
+        ],
+        max_chars=70,
+    )
+
+    assert len(chunks) > 1
+    for chunk in chunks:
+        assert len(chunk.source_spans) == 1
+        span = chunk.source_spans[0]
+        assert chunk.text == text[span.source_char_start - 100:span.source_char_end - 100]
+        assert span.local_start == 0
+        assert span.local_end == len(chunk.text)

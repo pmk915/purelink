@@ -7,8 +7,13 @@ PureLink Core 当前支持四类默认来源。
 ### txt
 
 - `source_type=text`
-- `source_locator=text:chunk:n`
-- `extractor=text`
+- `source_locator=chars:start-end` or `section:title`
+- `extractor=text` or `text:structured`
+
+Markdown-like `.txt` files can be parsed into structured text blocks when the
+file contains multiple valid headings and body text. The source type remains
+`text`; the structured parser only improves block, section, and citation
+metadata.
 
 ### markdown
 
@@ -208,6 +213,18 @@ document -> blocks -> chunks -> citation units -> embeddings -> retrieval
 - `.md` -> MarkdownParser
 - `.docx` -> DocxParser
 - `.pdf` -> PdfTextParser
+
+Citation-unit generation now uses chunk source spans when available. Those spans
+preserve processed-document char ranges, PDF page numbers, heading paths,
+section titles, line roles, and extractor metadata across both fixed and
+block-aware chunking. Citation units respect hard boundaries such as blocks,
+pages, headings, field-like lines, and list items; short field facts with both
+label and value are preserved, while heading-only or other low-value fragments
+are filtered.
+
+Existing processed documents are not rewritten automatically. To apply updated
+block or citation-unit rules to old data, reprocess the document and rebuild its
+vector index. This does not require a database schema migration.
 
 ## 10. Document Processing Inspector
 

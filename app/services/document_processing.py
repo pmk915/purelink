@@ -33,6 +33,11 @@ from app.services.chunk_metadata import (
 )
 from app.services.document import update_document_processing_status
 from app.services.document_chunking import ChunkingStrategy, build_block_aware_chunks
+from app.services.document_chunking.types import ChunkSourceSpan
+from app.services.document_parsing.block_normalizer import (
+    assign_block_char_ranges,
+    blocks_to_plain_text,
+)
 from app.services.document_parsing import get_parser
 from app.services.document_parsing.block_persistence import replace_document_blocks
 from app.services.document_parsing.types import ParsedDocument
@@ -76,9 +81,12 @@ MARKDOWN_HEADING_PATTERN = re.compile(r"^(#{1,6})\s+(.*)$")
 MARKDOWN_LIST_MARKER_PATTERN = re.compile(r"^\s*([-*+]|\d+[.)])\s+")
 MARKDOWN_LINK_PATTERN = re.compile(r"!?\[([^\]]*)\]\([^)]+\)")
 MARKDOWN_EMPHASIS_PATTERN = re.compile(r"(\*\*|__|\*|_|~~)")
+FIELD_LIKE_LINE_PATTERN = re.compile(r"^[^：:\n]{1,32}[：:]\s*\S+")
 SENTENCE_ENDING_CHARACTERS = {"。", "！", "？", "；", ".", "!", "?", ";"}
 CLAUSE_ENDING_CHARACTERS = {"，", ",", "、", "：", ":"}
 LOW_VALUE_CITATION_TEXTS = {
+    "概要",
+    "登场角色",
     "如下：",
     "因此。",
     "综上。",
@@ -139,6 +147,7 @@ class GeneratedChunkPayload:
     chunk_index: int
     chunk_text: str
     metadata_json: str | None
+    source_spans: tuple[ChunkSourceSpan, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,6 +184,17 @@ class SentenceSpan:
     text: str
     start_char: int
     end_char: int
+
+
+@dataclass(frozen=True, slots=True)
+class CitationTextGroup:
+    text: str
+    local_start: int
+    local_end: int
+    source_char_start: int
+    source_char_end: int
+    source_span: ChunkSourceSpan
+    hard_role: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -243,6 +263,14 @@ def process_document(
             source_path,
             filename=document.original_filename,
             mime_type=document.file_type,
+        )
+        parsed_document = parsed_document.model_copy(
+            update={
+                "blocks": assign_block_char_ranges(parsed_document.blocks),
+            }
+        )
+        parsed_document = parsed_document.model_copy(
+            update={"text": blocks_to_plain_text(parsed_document.blocks)}
         )
         extracted = build_extracted_text_result_from_parsed_document(parsed_document)
         logger.info(
@@ -1223,6 +1251,10 @@ def chunk_extracted_text_result(
                 chunk_index=0,
                 chunk_text=chunk_text,
                 metadata=chunk_metadata,
+                source_spans=build_source_spans_from_prepared_segments(
+                    prepared_segments,
+                    chunk_text=chunk_text,
+                ),
             )
         ]
 
@@ -1366,14 +1398,19 @@ def chunk_document_for_processing(
             metadata = dict(draft.metadata)
             metadata.setdefault("source_type", extracted.source_type)
             metadata.setdefault("chunk_strategy", ChunkingStrategy.BLOCK_AWARE.value)
-            metadata["char_start"] = char_cursor
-            metadata["char_end"] = char_cursor + len(text)
+            if draft.source_spans:
+                metadata["char_start"] = min(span.source_char_start for span in draft.source_spans)
+                metadata["char_end"] = max(span.source_char_end for span in draft.source_spans)
+            else:
+                metadata["char_start"] = char_cursor
+                metadata["char_end"] = char_cursor + len(text)
             chunks.append(
                 build_generated_chunk(
                     document_id=document_id,
                     chunk_index=index,
                     chunk_text=text,
                     metadata=metadata,
+                    source_spans=draft.source_spans,
                 )
             )
             char_cursor += len(text) + 2
@@ -1405,6 +1442,56 @@ def build_prepared_segments(
     return prepared_segments
 
 
+def build_source_spans_from_prepared_segments(
+    prepared_segments: list[PreparedTextSegment],
+    *,
+    chunk_text: str,
+) -> tuple[ChunkSourceSpan, ...]:
+    spans: list[ChunkSourceSpan] = []
+    local_cursor = 0
+    for index, segment in enumerate(prepared_segments):
+        if index > 0:
+            local_cursor += 2
+        spans.append(
+            build_source_span_from_segment_slice(
+                segment=segment,
+                local_start=0,
+                local_end=len(segment.text),
+                chunk_text=chunk_text,
+                chunk_local_start=local_cursor,
+            )
+        )
+        local_cursor += len(segment.text)
+    return tuple(spans)
+
+
+def build_source_span_from_segment_slice(
+    *,
+    segment: PreparedTextSegment,
+    local_start: int,
+    local_end: int,
+    chunk_text: str,
+    chunk_local_start: int = 0,
+) -> ChunkSourceSpan:
+    del chunk_text
+    return ChunkSourceSpan(
+        local_start=chunk_local_start,
+        local_end=chunk_local_start + max(0, local_end - local_start),
+        source_char_start=segment.char_start + local_start,
+        source_char_end=segment.char_start + local_end,
+        page_number=_metadata_int(segment.metadata, "page_number"),
+        start_time=_metadata_float(segment.metadata, "start_time"),
+        end_time=_metadata_float(segment.metadata, "end_time"),
+        section_title=_metadata_str(segment.metadata, "section_title"),
+        heading_path=_metadata_heading_path(segment.metadata.get("heading_path")),
+        source_locator=_metadata_str(segment.metadata, "source_locator"),
+        block_type=_metadata_str(segment.metadata, "block_type"),
+        line_role=_metadata_str(segment.metadata, "line_role"),
+        extractor=_metadata_str(segment.metadata, "extractor"),
+        source_type=_metadata_str(segment.metadata, "source_type"),
+    )
+
+
 def build_chunk_from_segments(
     *,
     document_id: int,
@@ -1424,7 +1511,21 @@ def build_chunk_from_segments(
         chunk_index=chunk_index,
         chunk_text=chunk_text,
         metadata=metadata,
+        source_spans=build_source_spans_from_prepared_segments(
+            prepared_segments,
+            chunk_text=chunk_text,
+        ),
     )
+
+
+def trim_text_slice_bounds(text: str, start: int, end: int) -> tuple[int, int]:
+    trimmed_start = start
+    trimmed_end = end
+    while trimmed_start < trimmed_end and text[trimmed_start].isspace():
+        trimmed_start += 1
+    while trimmed_end > trimmed_start and text[trimmed_end - 1].isspace():
+        trimmed_end -= 1
+    return trimmed_start, trimmed_end
 
 
 def split_large_segment_into_chunks(
@@ -1446,12 +1547,13 @@ def split_large_segment_into_chunks(
             max_end=max_end,
             chunk_size=chunk_size,
         )
-        chunk_text = segment.text[local_start:local_end].strip()
+        trimmed_start, trimmed_end = trim_text_slice_bounds(segment.text, local_start, local_end)
+        chunk_text = segment.text[trimmed_start:trimmed_end]
         if chunk_text:
             metadata = build_chunk_metadata(
                 prepared_segments=[segment],
-                char_start=segment.char_start + local_start,
-                char_end=segment.char_start + local_end,
+                char_start=segment.char_start + trimmed_start,
+                char_end=segment.char_start + trimmed_end,
             )
             chunk_payloads.append(
                 build_generated_chunk(
@@ -1459,6 +1561,14 @@ def split_large_segment_into_chunks(
                     chunk_index=chunk_index,
                     chunk_text=chunk_text,
                     metadata=metadata,
+                    source_spans=(
+                        build_source_span_from_segment_slice(
+                            segment=segment,
+                            local_start=trimmed_start,
+                            local_end=trimmed_end,
+                            chunk_text=chunk_text,
+                        ),
+                    ),
                 )
             )
             chunk_index += 1
@@ -1480,6 +1590,7 @@ def build_generated_chunk(
     chunk_index: int,
     chunk_text: str,
     metadata: dict[str, object] | None = None,
+    source_spans: tuple[ChunkSourceSpan, ...] = (),
 ) -> GeneratedChunkPayload:
     metadata_json = None
     if metadata:
@@ -1495,6 +1606,7 @@ def build_generated_chunk(
         chunk_index=chunk_index,
         chunk_text=chunk_text,
         metadata_json=metadata_json,
+        source_spans=source_spans,
     )
 
 
@@ -1925,6 +2037,37 @@ def parse_chunk_metadata_json(metadata_json: str | None) -> dict[str, object]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _metadata_int(metadata: dict[str, object], key: str) -> int | None:
+    value = metadata.get(key)
+    if isinstance(value, bool):
+        return None
+    return value if isinstance(value, int) else None
+
+
+def _metadata_float(metadata: dict[str, object], key: str) -> float | None:
+    value = metadata.get(key)
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _metadata_str(metadata: dict[str, object], key: str) -> str | None:
+    value = metadata.get(key)
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _metadata_heading_path(value: object) -> tuple[str, ...] | None:
+    if not isinstance(value, (list, tuple)):
+        return None
+    items = tuple(item.strip() for item in value if isinstance(item, str) and item.strip())
+    return items or None
+
+
 def build_citation_units_for_chunk(
     *,
     chunk: GeneratedChunkPayload,
@@ -1934,6 +2077,16 @@ def build_citation_units_for_chunk(
     max_chars: int,
     max_sentences: int,
 ) -> list[GeneratedCitationUnitPayload]:
+    if chunk.source_spans:
+        return build_boundary_aware_citation_units_for_chunk(
+            chunk=chunk,
+            chunk_metadata=chunk_metadata,
+            min_chars=min_chars,
+            target_chars=target_chars,
+            max_chars=max_chars,
+            max_sentences=max_sentences,
+        )
+
     sentence_spans = [
         span
         for span in expand_sentence_spans_for_citation_units(
@@ -2019,6 +2172,266 @@ def build_citation_units_for_chunk(
         cursor += max(1, len(merged_spans))
 
     return units
+
+
+def build_boundary_aware_citation_units_for_chunk(
+    *,
+    chunk: GeneratedChunkPayload,
+    chunk_metadata: dict[str, object],
+    min_chars: int,
+    target_chars: int,
+    max_chars: int,
+    max_sentences: int,
+) -> list[GeneratedCitationUnitPayload]:
+    groups: list[CitationTextGroup] = []
+    for source_span in chunk.source_spans:
+        groups.extend(split_source_span_into_citation_groups(chunk.chunk_text, source_span))
+
+    units: list[GeneratedCitationUnitPayload] = []
+    local_unit_index = 0
+    for group in groups:
+        sentence_spans = [
+            SentenceSpan(
+                text=span.text,
+                start_char=group.source_char_start + span.start_char,
+                end_char=group.source_char_start + span.end_char,
+            )
+            for span in expand_sentence_spans_for_citation_units(
+                split_text_into_sentence_spans(group.text),
+                max_chars=max_chars,
+            )
+            if not is_low_value_sentence_span(span.text, chunk_metadata=chunk_metadata)
+        ]
+        if not sentence_spans:
+            continue
+
+        cursor = 0
+        while cursor < len(sentence_spans):
+            merged_spans = [sentence_spans[cursor]]
+            merged_text = normalize_citation_unit_text(merged_spans[0].text)
+
+            while (
+                cursor + len(merged_spans) < len(sentence_spans)
+                and len(merged_spans) < max_sentences
+                and len(merged_text) < target_chars
+            ):
+                next_span = sentence_spans[cursor + len(merged_spans)]
+                candidate_text = normalize_citation_unit_text(
+                    " ".join(span.text for span in [*merged_spans, next_span])
+                )
+                if len(candidate_text) > max_chars:
+                    break
+                merged_spans.append(next_span)
+                merged_text = candidate_text
+                if len(merged_text) >= min_chars:
+                    break
+
+            if (
+                len(merged_text) < min_chars
+                and cursor + len(merged_spans) < len(sentence_spans)
+            ):
+                next_span = sentence_spans[cursor + len(merged_spans)]
+                candidate_text = normalize_citation_unit_text(
+                    " ".join(span.text for span in [*merged_spans, next_span])
+                )
+                if len(candidate_text) <= max_chars and len(merged_spans) < max_sentences:
+                    merged_spans.append(next_span)
+                    merged_text = candidate_text
+
+            if not merged_text or is_low_value_sentence_span(merged_text, chunk_metadata=chunk_metadata):
+                cursor += max(1, len(merged_spans))
+                continue
+
+            unit_char_start = merged_spans[0].start_char
+            unit_char_end = merged_spans[-1].end_char
+            metadata = build_citation_unit_metadata(
+                chunk_metadata=chunk_metadata,
+                source_span=group.source_span,
+                chunk_index=chunk.chunk_index,
+                unit_char_start=unit_char_start,
+                unit_char_end=unit_char_end,
+            )
+            units.append(
+                GeneratedCitationUnitPayload(
+                    chunk_key=chunk.chunk_key,
+                    unit_index=local_unit_index,
+                    unit_text=merged_text,
+                    start_char=unit_char_start,
+                    end_char=unit_char_end,
+                    metadata_json=json.dumps(metadata, ensure_ascii=False),
+                )
+            )
+            local_unit_index += 1
+            cursor += max(1, len(merged_spans))
+
+    return units
+
+
+def split_source_span_into_citation_groups(
+    chunk_text: str,
+    source_span: ChunkSourceSpan,
+) -> list[CitationTextGroup]:
+    span_text = chunk_text[source_span.local_start:source_span.local_end]
+    if source_span.block_type == "heading":
+        return []
+    if source_span.line_role in {"field", "list_item"}:
+        group = build_citation_group(
+            text=span_text,
+            source_span=source_span,
+            local_start=source_span.local_start,
+            local_end=source_span.local_end,
+            hard_role=source_span.line_role or source_span.block_type,
+        )
+        return [group] if group is not None else []
+
+    groups: list[CitationTextGroup] = []
+    current_start: int | None = None
+    current_end: int | None = None
+    cursor = source_span.local_start
+    for raw_line in span_text.splitlines(keepends=True):
+        line_start = cursor
+        line_end = cursor + len(raw_line)
+        cursor = line_end
+        trimmed_start, trimmed_end = trim_text_slice_bounds(chunk_text, line_start, line_end)
+        if trimmed_start >= trimmed_end:
+            if current_start is not None and current_end is not None:
+                group = build_citation_group(
+                    text=chunk_text[current_start:current_end],
+                    source_span=source_span,
+                    local_start=current_start,
+                    local_end=current_end,
+                )
+                if group is not None:
+                    groups.append(group)
+                current_start = None
+                current_end = None
+            continue
+
+        line_text = chunk_text[trimmed_start:trimmed_end]
+        line_role = structured_line_role(line_text)
+        if line_role is not None:
+            if current_start is not None and current_end is not None:
+                group = build_citation_group(
+                    text=chunk_text[current_start:current_end],
+                    source_span=source_span,
+                    local_start=current_start,
+                    local_end=current_end,
+                )
+                if group is not None:
+                    groups.append(group)
+                current_start = None
+                current_end = None
+            group = build_citation_group(
+                text=line_text,
+                source_span=source_span,
+                local_start=trimmed_start,
+                local_end=trimmed_end,
+                hard_role=line_role,
+            )
+            if group is not None:
+                groups.append(group)
+            continue
+
+        if current_start is None:
+            current_start = trimmed_start
+        current_end = trimmed_end
+
+    if current_start is not None and current_end is not None:
+        group = build_citation_group(
+            text=chunk_text[current_start:current_end],
+            source_span=source_span,
+            local_start=current_start,
+            local_end=current_end,
+        )
+        if group is not None:
+            groups.append(group)
+    return groups
+
+
+def build_citation_group(
+    *,
+    text: str,
+    source_span: ChunkSourceSpan,
+    local_start: int,
+    local_end: int,
+    hard_role: str | None = None,
+) -> CitationTextGroup | None:
+    trimmed_text = text.strip()
+    if not trimmed_text:
+        return None
+    trimmed_local_start, trimmed_local_end = trim_text_slice_bounds(text, 0, len(text))
+    adjusted_start = local_start + trimmed_local_start
+    adjusted_end = local_start + trimmed_local_end
+    source_start = source_span.source_char_start + (adjusted_start - source_span.local_start)
+    source_end = source_span.source_char_start + (adjusted_end - source_span.local_start)
+    return CitationTextGroup(
+        text=trimmed_text,
+        local_start=adjusted_start,
+        local_end=adjusted_end,
+        source_char_start=source_start,
+        source_char_end=source_end,
+        source_span=source_span,
+        hard_role=hard_role,
+    )
+
+
+def structured_line_role(text: str) -> str | None:
+    stripped = text.strip()
+    if MARKDOWN_LIST_MARKER_PATTERN.match(stripped) is not None:
+        return "list_item"
+    if FIELD_LIKE_LINE_PATTERN.match(stripped) is not None:
+        return "field"
+    return None
+
+
+def build_citation_unit_metadata(
+    *,
+    chunk_metadata: dict[str, object],
+    source_span: ChunkSourceSpan,
+    chunk_index: int,
+    unit_char_start: int,
+    unit_char_end: int,
+) -> dict[str, object]:
+    source_type = source_span.source_type or _metadata_str(chunk_metadata, "source_type")
+    metadata = dict(chunk_metadata)
+    metadata["parent_chunk_index"] = chunk_index
+    metadata["char_start"] = unit_char_start
+    metadata["char_end"] = unit_char_end
+    metadata.pop("source_locators", None)
+    if source_span.page_number is not None:
+        metadata["page_number"] = source_span.page_number
+    else:
+        metadata.pop("page_number", None)
+    if source_span.start_time is not None:
+        metadata["start_time"] = source_span.start_time
+    if source_span.end_time is not None:
+        metadata["end_time"] = source_span.end_time
+    if source_span.section_title:
+        metadata["section_title"] = source_span.section_title
+    else:
+        metadata.pop("section_title", None)
+    if source_span.heading_path:
+        metadata["heading_path"] = list(source_span.heading_path)
+    else:
+        metadata.pop("heading_path", None)
+    if source_span.extractor:
+        metadata["extractor"] = source_span.extractor
+    if source_span.line_role:
+        metadata["line_role"] = source_span.line_role
+    else:
+        metadata.pop("line_role", None)
+    if source_span.block_type:
+        metadata["block_type"] = source_span.block_type
+    metadata["source_locator"] = build_source_locator(
+        source_type=source_type,
+        char_start=unit_char_start,
+        char_end=unit_char_end,
+        page_number=source_span.page_number,
+        start_time=source_span.start_time,
+        end_time=source_span.end_time,
+        section_title=source_span.section_title,
+    )
+    return metadata
 
 
 def expand_sentence_spans_for_citation_units(

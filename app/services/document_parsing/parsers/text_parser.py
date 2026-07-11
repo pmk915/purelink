@@ -6,6 +6,11 @@ from app.services import document_processing
 from app.services.document_parsing.parsers._extracted_adapter import (
     parsed_document_from_extracted_result,
 )
+from app.services.document_parsing.structured_text import (
+    detect_markdown_like_structure,
+    parse_structured_text_blocks,
+    structured_blocks_to_text,
+)
 from app.services.document_parsing.types import ParsedDocument
 
 
@@ -22,6 +27,22 @@ class TextParser:
         filename: str,
         mime_type: str | None = None,
     ) -> ParsedDocument:
+        decoded_text, encoding = document_processing.read_text_file_with_fallback(file_path)
+        if detect_markdown_like_structure(decoded_text):
+            blocks = parse_structured_text_blocks(decoded_text, source_type="text")
+            return ParsedDocument(
+                text=structured_blocks_to_text(blocks),
+                blocks=blocks,
+                metadata={
+                    "parser": self.parser_name,
+                    "source_type": "text",
+                    "extractor": "text:structured",
+                    "encoding": encoding,
+                    "original_filename": filename,
+                    "markdown_like": True,
+                },
+            )
+
         extracted = document_processing.extract_text_from_txt(source_path=file_path)
         return parsed_document_from_extracted_result(
             extracted,
