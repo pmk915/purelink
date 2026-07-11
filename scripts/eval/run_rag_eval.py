@@ -175,6 +175,11 @@ def _override_case(
         notes=case.notes,
         scope=case.scope,
         team_id=case.team_id,
+        category=case.category,
+        expected_mode=case.expected_mode,
+        expected_evidence_phrases=case.expected_evidence_phrases,
+        forbidden_evidence_phrases=case.forbidden_evidence_phrases,
+        expected_answerable=case.expected_answerable,
     )
 
 

@@ -1,0 +1,33 @@
+# PureLink Document Processing
+
+Source basis: PureLink ingestion, document block, Docker, and changelog documentation
+Adaptation: concise project-specific facts for deterministic PureLink evaluation
+Retrieved: 2026-07-11
+
+## Upload Validation
+
+PureLink validates uploads before processing. Supported local demo text formats include Markdown-like text, Markdown, PDF, DOCX, and other configured extensions. Upload validation also checks size and MIME settings such as `MAX_UPLOAD_SIZE_MB`, `ALLOWED_UPLOAD_EXTENSIONS`, and `ALLOWED_UPLOAD_MIME_TYPES`.
+
+## Parser Routing
+
+Parser routing chooses a parser based on file type and available providers. Text files remain `source_type=text`, while Markdown-like `.txt` content can be conservatively recognized as structured text. The parser produces extracted content that later becomes document blocks, chunks, citation units, and indexes.
+
+## Document Blocks
+
+DocumentBlock records preserve structure such as headings, text blocks, tables, code blocks, page metadata, and source spans. Blocks make it possible for later chunking and citation generation to keep section and locator context instead of treating every document as one flat string.
+
+## Chunk Strategies
+
+PureLink supports `fixed` and `block_aware` chunk strategies. Fixed chunking creates character-based chunks. Block-aware chunking uses document block boundaries and source spans so chunks better respect headings, pages, tables, and code blocks.
+
+## Citation Units
+
+Citation units are smaller evidence spans derived from chunks and source spans. They preserve locator metadata such as text ranges, section titles, heading paths, PDF pages, or timed ranges. New citation-unit granularity does not require a database migration.
+
+## Reprocessing
+
+Already processed documents do not automatically receive new citation-unit behavior. To apply new citation units to an old document, the operator must reprocess the document and rebuild the vector index. Newly uploaded documents use the current processing logic automatically.
+
+## Docker Data Safety
+
+`docker compose down` stops and removes containers while preserving named volumes unless volume deletion is requested. `docker compose down -v` removes volumes and can delete local database, Redis, vector, and uploaded file state, so it should not be used for routine checks.

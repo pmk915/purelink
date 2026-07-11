@@ -5,9 +5,16 @@ GO ?= go
 KEEP_STACK_UP ?= 0
 EVAL_CASES ?= tests/eval/purelink_rag_cases.jsonl
 EVAL_OUTPUT ?= tests/eval/reports/latest.json
+EVAL_OUTPUT_DIR ?= data/eval_runs
 BASELINE_EVAL_CASES ?= docs/interview/rag-eval-cases.json
 BASELINE_EVAL_OUTPUT ?= docs/interview/rag-eval-baseline-results.json
 BASELINE_EVAL_SUMMARY ?= docs/interview/rag-eval-baseline-summary.md
+GENERALIZATION_EVAL_CASES ?= tests/eval/rag_generalization_cases.jsonl
+GENERALIZATION_EVAL_OUTPUT_DIR ?= $(EVAL_OUTPUT_DIR)
+GENERALIZATION_EVAL_SELECTED_CASES := $(if $(filter command line environment,$(origin EVAL_CASES)),$(EVAL_CASES),$(GENERALIZATION_EVAL_CASES))
+GENERALIZATION_BASELINE_SNAPSHOT_DIR ?=
+EVAL_MODE ?= auto
+EVAL_CHUNK_STRATEGY ?= block_aware
 
 ifneq ("$(wildcard .venv/bin/python)","")
 PYTHON ?= .venv/bin/python
@@ -15,7 +22,7 @@ else
 PYTHON ?= python3
 endif
 
-.PHONY: up down logs ps build restart docker-up docker-down docker-logs docker-ps docker-smoke docker-prod-up docker-prod-down test test-python test-go check docs-check release-check smoke smoke-docx-rag e2e eval-rag eval-rag-baseline
+.PHONY: up down logs ps build restart docker-up docker-down docker-logs docker-ps docker-smoke docker-prod-up docker-prod-down test test-python test-go check docs-check release-check smoke smoke-docx-rag e2e eval-rag eval-rag-baseline eval-rag-generalization
 
 up:
 	$(COMPOSE) up --build -d
@@ -90,6 +97,9 @@ eval-rag:
 
 eval-rag-baseline:
 	$(PYTHON) scripts/eval/run_rag_eval_baseline.py --cases $(BASELINE_EVAL_CASES) --output $(BASELINE_EVAL_OUTPUT) --summary $(BASELINE_EVAL_SUMMARY)
+
+eval-rag-generalization:
+	EVAL_MODE=$(EVAL_MODE) EVAL_CHUNK_STRATEGY=$(EVAL_CHUNK_STRATEGY) $(PYTHON) scripts/eval/run_rag_generalization_eval.py --cases $(GENERALIZATION_EVAL_SELECTED_CASES) --output-dir $(GENERALIZATION_EVAL_OUTPUT_DIR) --mode $(EVAL_MODE) --chunk-strategy $(EVAL_CHUNK_STRATEGY) $(if $(GENERALIZATION_BASELINE_SNAPSHOT_DIR),--baseline-snapshot-dir $(GENERALIZATION_BASELINE_SNAPSHOT_DIR),)
 
 e2e:
 	@set -euo pipefail; \

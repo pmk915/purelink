@@ -1,0 +1,29 @@
+# PostgreSQL Concurrency Control
+
+Source basis: PostgreSQL official documentation, MVCC and locking
+Adaptation: concise paraphrase for deterministic PureLink evaluation
+Retrieved: 2026-07-11
+
+## MVCC
+
+PostgreSQL uses multiversion concurrency control, or MVCC, so readers and writers can often operate without blocking each other. Each transaction sees a snapshot of rows that are visible according to its isolation level. Updates create new row versions instead of overwriting the only copy immediately, which helps preserve consistency while concurrent work continues.
+
+## Read Committed
+
+Read Committed is the default isolation level. Each statement sees data committed before that statement starts. Two statements in the same transaction may see different committed data if another transaction commits between them. This level is useful for many applications but does not promise a stable transaction-wide snapshot.
+
+## Repeatable Read
+
+Repeatable Read gives a transaction a stable snapshot for its duration. Queries in the same transaction continue to see the same committed state from the snapshot, even if other transactions commit changes later. This reduces surprises from repeated reads but may require retrying a transaction when serialization conflicts occur.
+
+## Serializable
+
+Serializable isolation provides the strongest behavior by making concurrent transactions appear as if they executed one at a time. PostgreSQL can detect conflicts that would break this model and abort one transaction. Applications using this level should be prepared to retry failed transactions.
+
+## Explicit Locking
+
+MVCC reduces many read-write conflicts, but explicit locks still exist for cases that require stronger coordination. Applications can lock rows or tables when they need to protect a critical section. Explicit locking must be used carefully because it can reduce concurrency.
+
+## Deadlocks
+
+Deadlocks can occur when transactions wait on each other in a cycle. PostgreSQL detects deadlocks and cancels one transaction so the others can continue. Applications should keep transactions short and acquire locks in a consistent order to reduce deadlock risk.

@@ -1,0 +1,25 @@
+# Alice in Wonderland Characters
+
+Source basis: Project Gutenberg edition of Alice's Adventures in Wonderland
+Adaptation: concise character facts for deterministic PureLink evaluation
+Retrieved: 2026-07-11
+
+## Alice
+
+Alice is the central child character of the story. She follows strange events with curiosity, asks questions, and reacts to Wonderland's changing rules. Many scenes are organized around what Alice sees, hears, and challenges as she moves through the unusual world.
+
+## White Rabbit
+
+The White Rabbit helps start the adventure. He appears in a hurry, carries a watch, and worries about being late. Alice follows him, which leads her into the rabbit-hole and into Wonderland. The White Rabbit functions as the trigger that draws Alice away from ordinary surroundings.
+
+## Cheshire Cat
+
+The Cheshire Cat is known for its grin and its ability to vanish. It can disappear gradually while leaving the smile visible. The cat speaks to Alice in a puzzling style and points her toward other Wonderland figures, making it a guide-like but strange encounter.
+
+## Queen of Hearts
+
+The Queen of Hearts is domineering and quick to command punishment. She is associated with loud orders and a harsh temper. Her behavior creates tension in the court and garden scenes because other characters fear her authority.
+
+## Relationships and Encounters
+
+Alice encounters the White Rabbit near the beginning, speaks with the Cheshire Cat during her journey, and later faces the Queen of Hearts in a more confrontational setting. These relationships are not equal friendships; they are story encounters that move Alice through Wonderland.

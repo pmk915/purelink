@@ -191,9 +191,11 @@ make docs-check
 make smoke
 make e2e
 make eval-rag-baseline
+make eval-rag-generalization
 ```
 
 `make eval-rag-baseline` is a regression baseline over repository documentation. It is useful for comparing retrieval behavior across modes, but it is not a large statistical benchmark.
+`make eval-rag-generalization` builds a temporary local eval KB from small cross-domain text documents and writes deterministic retrieval/evidence reports under `data/eval_runs/`.
 
 ## Project Structure
 

@@ -8,6 +8,10 @@ The format is based on Keep a Changelog, and this project intends to use Semanti
 
 ### Added
 
+- Added a deterministic cross-domain RAG generalization eval corpus, JSONL
+  cases, evidence-level metrics, run metadata, summary generation, and
+  `make eval-rag-generalization`.
+
 ### Changed
 
 - Improved citation-unit granularity by preserving source-span metadata across

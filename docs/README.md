@@ -23,6 +23,7 @@ This page is the main map for PureLink's product, RAG architecture, ingestion, G
 - [Optional Reranker](rag/reranker.md): reranker configuration and behavior.
 - [Index Metadata](rag/index-metadata.md): vector index compatibility and stale index safety.
 - [RAG Evaluation](rag/rag-evaluation.md): deterministic retrieval/citation eval harness.
+- [RAG Generalization Eval](rag/rag-evaluation.md#generalization-corpus): cross-domain corpus, evidence precision, router, and no-answer metrics.
 - [RAG Eval Baseline Summary](interview/rag-eval-baseline-summary.md): M18 baseline results and findings.
 
 ## Ingestion
