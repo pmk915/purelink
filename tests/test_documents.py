@@ -145,6 +145,14 @@ def test_session_factory() -> sessionmaker:
 
 
 @pytest.fixture
+def fixed_chunk_strategy(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CHUNK_STRATEGY", "fixed")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+@pytest.fixture
 async def document_client(
     test_session_factory: sessionmaker,
     tmp_path: Path,
@@ -4701,8 +4709,9 @@ async def test_personal_markdown_process_endpoint_marks_ready_creates_chunks_and
 
 
 @pytest.mark.anyio
-async def test_personal_pdf_process_endpoint_marks_ready_and_preserves_page_metadata(
+async def test_personal_pdf_process_endpoint_with_fixed_chunk_strategy_preserves_page_metadata(
     document_client: AsyncClient,
+    fixed_chunk_strategy: None,
     monkeypatch: pytest.MonkeyPatch,
     test_session_factory: sessionmaker,
     processing_job_runner: CapturedProcessingJobRunner,
@@ -5571,8 +5580,9 @@ async def test_personal_scanned_pdf_index_failure_keeps_document_ready_and_retri
 
 
 @pytest.mark.anyio
-async def test_personal_docx_process_endpoint_marks_ready_and_preserves_section_metadata(
+async def test_personal_docx_process_endpoint_with_fixed_chunk_strategy_preserves_section_metadata(
     document_client: AsyncClient,
+    fixed_chunk_strategy: None,
     test_session_factory: sessionmaker,
     processing_job_runner: CapturedProcessingJobRunner,
 ) -> None:
@@ -7036,8 +7046,9 @@ async def test_personal_video_index_failure_keeps_document_ready_and_retrieval_f
 
 
 @pytest.mark.anyio
-async def test_personal_ready_document_auto_upgrades_to_indexed_after_process(
+async def test_personal_ready_document_with_fixed_chunk_strategy_auto_upgrades_to_indexed_after_process(
     document_client: AsyncClient,
+    fixed_chunk_strategy: None,
     tmp_path: Path,
     test_session_factory: sessionmaker,
     processing_job_runner: CapturedProcessingJobRunner,
