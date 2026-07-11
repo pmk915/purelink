@@ -142,6 +142,7 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
                     if expand_for_reranker
                     else max(active_settings.max_citations, 8)
                 ),
+                use_query_evidence_profile=resolved_mode != RetrievalMode.OVERVIEW,
             )
 
         candidate_evidences = _annotate_chunk_score_evidences(
@@ -531,6 +532,7 @@ def _select_evidence_units(
     query: str,
     context_chunks,
     max_evidence_units: int,
+    use_query_evidence_profile: bool = True,
 ):
     from app.services.qa import (
         load_citation_units_for_chunks,
@@ -543,6 +545,7 @@ def _select_evidence_units(
         retrieved_chunks=context_chunks,
         chunk_units=chunk_units,
         max_evidence_units=max_evidence_units,
+        use_query_evidence_profile=use_query_evidence_profile,
     )
 
 
