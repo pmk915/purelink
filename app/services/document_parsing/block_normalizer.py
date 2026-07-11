@@ -33,6 +33,37 @@ def blocks_to_plain_text(blocks: list[DocumentBlock]) -> str:
     )
 
 
+def assign_block_char_ranges(blocks: list[DocumentBlock]) -> list[DocumentBlock]:
+    ranged_blocks: list[DocumentBlock] = []
+    cursor = 0
+    first = True
+    for block in sorted(blocks, key=lambda item: item.order_index):
+        text = block.text.strip()
+        if not text and block.block_type not in {DocumentBlockType.IMAGE, DocumentBlockType.FORMULA}:
+            continue
+        if not first:
+            cursor += 2
+        start = cursor
+        end = start + len(text)
+        metadata = {
+            **block.metadata,
+            "char_start": start,
+            "char_end": end,
+        }
+        ranged_blocks.append(
+            block.model_copy(
+                update={
+                    "text": text,
+                    "order_index": len(ranged_blocks),
+                    "metadata": metadata,
+                }
+            )
+        )
+        cursor = end
+        first = False
+    return ranged_blocks
+
+
 def normalize_blocks(blocks: list[DocumentBlock]) -> list[DocumentBlock]:
     normalized: list[DocumentBlock] = []
     for block in sorted(blocks, key=lambda item: item.order_index):
