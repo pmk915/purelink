@@ -978,7 +978,7 @@ def test_answer_question_binds_claims_to_used_evidence_markers(
             document=document,
             chunk_key=f"{document.id}:1",
             unit_index=1,
-            unit_text="乌萨奇有粉色内耳。",
+            unit_text="乌萨奇外貌特征包括粉色内耳。",
             metadata={"source_type": "text", "source_locator": "text:chunk:1"},
         )
         db.commit()
@@ -999,19 +999,19 @@ def test_answer_question_binds_claims_to_used_evidence_markers(
                     document_id=document.id,
                     document_name="乌萨奇.txt",
                     score=0.91,
-                    text="乌萨奇有粉色内耳。",
+                    text="乌萨奇外貌特征包括粉色内耳。",
                 ),
             ],
             generator=StaticAnswerGenerator(
-                "乌萨奇是蓝色兔子外型 [S1]。它有粉色内耳 [S2]。"
+                "乌萨奇外貌特征包括粉色内耳 [S1]。它是蓝色兔子外型 [S2]。"
             ),
         )
 
-    assert result.answer == "乌萨奇是蓝色兔子外型 [S1]。它有粉色内耳 [S2]。"
+    assert result.answer == "乌萨奇外貌特征包括粉色内耳 [S1]。它是蓝色兔子外型 [S2]。"
     assert [item.citation_marker for item in result.citations] == ["S1", "S2"]
     assert [item.snippet for item in result.citations] == [
+        "乌萨奇外貌特征包括粉色内耳。",
         "乌萨奇是蓝色兔子外型。",
-        "乌萨奇有粉色内耳。",
     ]
     assert result.intent == QAIntent.KB_FACT_QA.value
 
@@ -1502,7 +1502,7 @@ def test_select_evidence_units_entity_attribute_prefers_appearance_over_identity
             db,
             document=document,
             chunk_index=0,
-            chunk_text="乌萨奇是核心主角。乌萨奇通体明黄色，有粉色内耳和白色尾巴。乌萨奇生日是1月22日。",
+            chunk_text="乌萨奇是核心主角。乌萨奇外貌：通体明黄色，有粉色内耳和白色尾巴。乌萨奇生日是1月22日。",
         )
         _create_citation_unit(
             db,
@@ -1516,7 +1516,7 @@ def test_select_evidence_units_entity_attribute_prefers_appearance_over_identity
             document=document,
             chunk_key=chunk.chunk_key,
             unit_index=1,
-            unit_text="乌萨奇通体明黄色，有粉色内耳和白色尾巴。",
+            unit_text="乌萨奇外貌：通体明黄色，有粉色内耳和白色尾巴。",
         )
         _create_citation_unit(
             db,
@@ -1555,7 +1555,7 @@ def test_select_evidence_units_entity_attribute_prefers_appearance_over_identity
             max_evidence_units=4,
         )
 
-    assert evidence_units[0].text == "乌萨奇通体明黄色，有粉色内耳和白色尾巴。"
+    assert evidence_units[0].text == "乌萨奇外貌：通体明黄色，有粉色内耳和白色尾巴。"
 
 
 def test_select_evidence_units_entity_attribute_uses_chunk_context_for_unit_without_entity(
@@ -1781,7 +1781,7 @@ def test_select_evidence_units_relation_allows_multiple_units_from_same_chunk(
             db,
             document=document,
             chunk_index=0,
-            chunk_text="乌萨奇和吉伊卡哇是朋友。乌萨奇经常和吉伊卡哇一起行动。",
+            chunk_text="乌萨奇和吉伊卡哇是朋友。乌萨奇和吉伊卡哇是伙伴。",
         )
         _create_citation_unit(
             db,
@@ -1795,7 +1795,7 @@ def test_select_evidence_units_relation_allows_multiple_units_from_same_chunk(
             document=document,
             chunk_key=chunk.chunk_key,
             unit_index=1,
-            unit_text="乌萨奇经常和吉伊卡哇一起行动。",
+            unit_text="乌萨奇和吉伊卡哇是伙伴。",
         )
         db.commit()
 
@@ -1882,6 +1882,144 @@ def test_select_evidence_units_relation_does_not_use_contextual_entity_shortcut(
     assert [item.text for item in evidence_units] == ["乌萨奇和吉伊卡哇是朋友。"]
 
 
+def test_select_evidence_units_relation_friend_has_positive_intent_alignment(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="team-relations.md",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="Alice 和 Bob 是朋友。",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=0,
+            unit_text="Alice 和 Bob 是朋友。",
+        )
+        db.commit()
+
+        retrieved_chunk = _retrieved_chunk(
+            chunk_id=chunk.chunk_key,
+            chunk_db_id=chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.9,
+            text=chunk.chunk_text,
+        )
+        evidence_units = select_evidence_units(
+            question="Alice 和 Bob 是什么关系？",
+            retrieved_chunks=[retrieved_chunk],
+            chunk_units=load_citation_units_for_chunks(db=db, chunks=[retrieved_chunk]),
+            max_evidence_units=4,
+        )
+
+    assert [item.text for item in evidence_units] == ["Alice 和 Bob 是朋友。"]
+    assert evidence_units[0].intent_alignment > 0
+    assert evidence_units[0].entity_exact_match is True
+    assert evidence_units[0].entity_context_match is False
+
+
+def test_select_evidence_units_relation_partner_is_supported(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="partners.md",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="Aurora Labs 是 Nova Systems 的合作伙伴。",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=0,
+            unit_text="Aurora Labs 是 Nova Systems 的合作伙伴。",
+        )
+        db.commit()
+
+        retrieved_chunk = _retrieved_chunk(
+            chunk_id=chunk.chunk_key,
+            chunk_db_id=chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.9,
+            text=chunk.chunk_text,
+        )
+        evidence_units = select_evidence_units(
+            question="Aurora Labs 和 Nova Systems 是什么关系？",
+            retrieved_chunks=[retrieved_chunk],
+            chunk_units=load_citation_units_for_chunks(db=db, chunks=[retrieved_chunk]),
+            max_evidence_units=4,
+        )
+
+    assert [item.text for item in evidence_units] == ["Aurora Labs 是 Nova Systems 的合作伙伴。"]
+    assert evidence_units[0].intent_alignment > 0
+    assert evidence_units[0].entity_exact_match is True
+    assert evidence_units[0].entity_context_match is False
+
+
+def test_select_evidence_units_relation_ignores_together_without_relation_intent(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="meeting-notes.md",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="Alice 和 Bob 一起参加了会议。",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=0,
+            unit_text="Alice 和 Bob 一起参加了会议。",
+        )
+        db.commit()
+
+        retrieved_chunk = _retrieved_chunk(
+            chunk_id=chunk.chunk_key,
+            chunk_db_id=chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.9,
+            text=chunk.chunk_text,
+        )
+        evidence_units = select_evidence_units(
+            question="Alice 和 Bob 是什么关系？",
+            retrieved_chunks=[retrieved_chunk],
+            chunk_units=load_citation_units_for_chunks(db=db, chunks=[retrieved_chunk]),
+            max_evidence_units=4,
+        )
+
+    assert evidence_units == []
+
+
 def test_select_evidence_units_entity_attribute_rejects_unrelated_document_context(
     session_factory: sessionmaker,
 ) -> None:
@@ -1924,6 +2062,368 @@ def test_select_evidence_units_entity_attribute_rejects_unrelated_document_conte
         )
 
     assert evidence_units == []
+
+
+def test_select_evidence_units_team_member_attribute_uses_matching_heading_only(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="team.md",
+        )
+        chunk_text = (
+            "# Team\n\n"
+            "## Alice Chen\n角色：检索工程师\n办公地点：Singapore\n\n"
+            "## Bob Li\n角色：平台工程师\n办公地点：Shanghai\n\n"
+            "## Carol Wang\n角色：产品经理\n办公地点：Beijing"
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text=chunk_text,
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=0,
+            unit_text="办公地点：Singapore",
+            metadata={"section_title": "Alice Chen", "heading_path": ["Team", "Alice Chen"]},
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=1,
+            unit_text="办公地点：Shanghai",
+            metadata={"section_title": "Bob Li", "heading_path": ["Team", "Bob Li"]},
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=2,
+            unit_text="办公地点：Beijing",
+            metadata={"section_title": "Carol Wang", "heading_path": ["Team", "Carol Wang"]},
+        )
+        db.commit()
+
+        retrieved_chunk = _retrieved_chunk(
+            chunk_id=chunk.chunk_key,
+            chunk_db_id=chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.9,
+            text=chunk.chunk_text,
+        )
+        chunk_units = load_citation_units_for_chunks(db=db, chunks=[retrieved_chunk])
+
+        alice_evidence = select_evidence_units(
+            question="Alice Chen 的办公地点在哪里？",
+            retrieved_chunks=[retrieved_chunk],
+            chunk_units=chunk_units,
+            max_evidence_units=4,
+        )
+        bob_evidence = select_evidence_units(
+            question="Bob Li 的办公地点在哪里？",
+            retrieved_chunks=[retrieved_chunk],
+            chunk_units=chunk_units,
+            max_evidence_units=4,
+        )
+
+    assert [item.text for item in alice_evidence] == ["办公地点：Singapore"]
+    assert alice_evidence[0].entity_context_match is True
+    assert [item.text for item in bob_evidence] == ["办公地点：Shanghai"]
+    assert bob_evidence[0].entity_context_match is True
+
+
+def test_select_evidence_units_product_attribute_does_not_cross_entities(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="products.md",
+        )
+        chunk_text = (
+            "## Aurora Mini\n颜色：银色\n重量：1.2 kg\n特点：便携\n\n"
+            "## Aurora Pro\n颜色：黑色\n重量：2.1 kg\n特点：高性能\n\n"
+            "## Aurora Air\n颜色：蓝色\n重量：0.9 kg\n特点：轻薄"
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text=chunk_text,
+        )
+        unit_specs = [
+            ("颜色：银色", "Aurora Mini"),
+            ("重量：1.2 kg", "Aurora Mini"),
+            ("颜色：黑色", "Aurora Pro"),
+            ("重量：2.1 kg", "Aurora Pro"),
+            ("颜色：蓝色", "Aurora Air"),
+            ("重量：0.9 kg", "Aurora Air"),
+        ]
+        for index, (unit_text, product_name) in enumerate(unit_specs):
+            _create_citation_unit(
+                db,
+                document=document,
+                chunk_key=chunk.chunk_key,
+                unit_index=index,
+                unit_text=unit_text,
+                metadata={"section_title": product_name, "heading_path": [product_name]},
+            )
+        db.commit()
+
+        retrieved_chunk = _retrieved_chunk(
+            chunk_id=chunk.chunk_key,
+            chunk_db_id=chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.9,
+            text=chunk.chunk_text,
+        )
+        chunk_units = load_citation_units_for_chunks(db=db, chunks=[retrieved_chunk])
+
+        mini_color = select_evidence_units(
+            question="Aurora Mini 颜色是什么？",
+            retrieved_chunks=[retrieved_chunk],
+            chunk_units=chunk_units,
+            max_evidence_units=4,
+        )
+        pro_weight = select_evidence_units(
+            question="Aurora Pro 重量是多少？",
+            retrieved_chunks=[retrieved_chunk],
+            chunk_units=chunk_units,
+            max_evidence_units=4,
+        )
+
+    assert [item.text for item in mini_color] == ["颜色：银色"]
+    assert "黑色" not in mini_color[0].text
+    assert "蓝色" not in mini_color[0].text
+    assert [item.text for item in pro_weight] == ["重量：2.1 kg"]
+    assert "1.2 kg" not in pro_weight[0].text
+    assert "0.9 kg" not in pro_weight[0].text
+
+
+def test_select_evidence_units_context_requires_local_entity_anchor(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="team.md",
+        )
+        chunk_text = (
+            "## Alice Chen\n角色：检索工程师\n办公地点：Singapore\n\n"
+            "## Bob Li\n办公地点：Shanghai"
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text=chunk_text,
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=0,
+            unit_text="办公地点：Shanghai",
+            metadata={"section_title": "Bob Li", "heading_path": ["Bob Li"]},
+        )
+        db.commit()
+
+        retrieved_chunk = _retrieved_chunk(
+            chunk_id=chunk.chunk_key,
+            chunk_db_id=chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.9,
+            text=chunk.chunk_text,
+        )
+        evidence_units = select_evidence_units(
+            question="Alice Chen 的办公地点在哪里？",
+            retrieved_chunks=[retrieved_chunk],
+            chunk_units=load_citation_units_for_chunks(db=db, chunks=[retrieved_chunk]),
+            max_evidence_units=4,
+        )
+
+    assert evidence_units == []
+
+
+def test_select_evidence_units_accepted_limit_skips_duplicate_without_counting_it(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="team.md",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="# Team\n\n## Alice Chen\n办公地点：Singapore\n位置：Singapore Office",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=0,
+            unit_text="办公地点：Singapore",
+            metadata={"section_title": "Alice Chen", "heading_path": ["Team", "Alice Chen"]},
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=1,
+            unit_text="位置：Singapore Office",
+            metadata={"section_title": "Alice Chen", "heading_path": ["Team", "Alice Chen"]},
+        )
+        db.commit()
+
+        retrieved_chunk = _retrieved_chunk(
+            chunk_id=chunk.chunk_key,
+            chunk_db_id=chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.9,
+            text=chunk.chunk_text,
+        )
+        evidence_units = select_evidence_units(
+            question="Alice Chen 的办公地点在哪里？",
+            retrieved_chunks=[retrieved_chunk, retrieved_chunk],
+            chunk_units=load_citation_units_for_chunks(db=db, chunks=[retrieved_chunk]),
+            max_evidence_units=4,
+        )
+
+    assert [item.text for item in evidence_units] == ["办公地点：Singapore", "位置：Singapore Office"]
+
+
+def test_select_evidence_units_max_evidence_units_stops_global_selection(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="systems.md",
+        )
+        first_chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="PureLink 是一个知识库问答系统。",
+        )
+        second_chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=1,
+            chunk_text="PureLink 也提供文档检索工具。",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=first_chunk.chunk_key,
+            unit_index=0,
+            unit_text="PureLink 是一个知识库问答系统。",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=second_chunk.chunk_key,
+            unit_index=1,
+            unit_text="PureLink 也提供文档检索工具。",
+        )
+        db.commit()
+
+        first_retrieved = _retrieved_chunk(
+            chunk_id=first_chunk.chunk_key,
+            chunk_db_id=first_chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.95,
+            text=first_chunk.chunk_text,
+        )
+        second_retrieved = _retrieved_chunk(
+            chunk_id=second_chunk.chunk_key,
+            chunk_db_id=second_chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.9,
+            text=second_chunk.chunk_text,
+        )
+        evidence_units = select_evidence_units(
+            question="PureLink 是什么？",
+            retrieved_chunks=[first_retrieved, second_retrieved],
+            chunk_units=load_citation_units_for_chunks(db=db, chunks=[first_retrieved, second_retrieved]),
+            max_evidence_units=1,
+        )
+
+    assert [item.text for item in evidence_units] == ["PureLink 是一个知识库问答系统。"]
+
+
+def test_select_evidence_units_mixed_english_entity_config_attribute(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="providers.md",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="## DeepSeek API\n配置：DEEPSEEK_API_KEY\n规格：OpenAI-compatible chat endpoint",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=0,
+            unit_text="配置：DEEPSEEK_API_KEY",
+            metadata={"section_title": "DeepSeek API", "heading_path": ["DeepSeek API"]},
+        )
+        db.commit()
+
+        retrieved_chunk = _retrieved_chunk(
+            chunk_id=chunk.chunk_key,
+            chunk_db_id=chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.9,
+            text=chunk.chunk_text,
+        )
+        evidence_units = select_evidence_units(
+            question="DeepSeek API 的配置在哪里？",
+            retrieved_chunks=[retrieved_chunk],
+            chunk_units=load_citation_units_for_chunks(db=db, chunks=[retrieved_chunk]),
+            max_evidence_units=4,
+        )
+
+    assert [item.text for item in evidence_units] == ["配置：DEEPSEEK_API_KEY"]
 
 
 def test_select_evidence_units_generic_factual_keeps_existing_multi_unit_behavior(
