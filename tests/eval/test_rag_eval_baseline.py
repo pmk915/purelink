@@ -78,6 +78,7 @@ def test_metric_calculation_records_selected_mode_and_router_reason() -> None:
                 chunk_id="1:0",
                 citation_unit_id=10,
                 document_name="docs/rag/retrieval-layer.md",
+                source_locator="section:retrieval",
                 text="HYBRID_TEXT helps API paths.",
             )
         ],
@@ -115,6 +116,7 @@ def test_summary_markdown_contains_required_sections() -> None:
                     chunk_id="1:0",
                     citation_unit_id=1,
                     document_name="doc.md",
+                    source_locator="section:doc",
                     text="keyword",
                 )
             ],

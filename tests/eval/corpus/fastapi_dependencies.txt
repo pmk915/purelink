@@ -1,0 +1,29 @@
+# FastAPI Dependencies
+
+Source basis: FastAPI official documentation, Dependencies tutorial
+Adaptation: concise paraphrase for deterministic PureLink evaluation
+Retrieved: 2026-07-11
+
+## Dependency Injection
+
+FastAPI dependency injection lets an endpoint declare reusable requirements instead of creating every object directly in the route body. A dependency is usually a callable that receives request data or other dependencies and returns a value for the endpoint. This pattern keeps route functions focused on the HTTP operation while shared concerns stay in small functions.
+
+## Depends
+
+An endpoint uses `Depends` to ask FastAPI to execute a dependency and pass the result into the path operation function. The same dependency can be reused across routes. Dependencies can validate input, compute values, open resources, or enforce preconditions before the endpoint logic runs.
+
+## Nested Dependencies
+
+A dependency can depend on another dependency. FastAPI resolves this tree and reuses results where appropriate during one request. Nested dependencies make it possible to build layered behavior, such as authentication that relies on token parsing and user loading.
+
+## Database Sessions
+
+Database sessions are a common dependency. A session dependency can open the database session, yield it to the endpoint, and close it after the request. This avoids repeating session setup code in every endpoint and gives tests a single seam for replacing database behavior.
+
+## Authentication
+
+Authentication can also be expressed as dependencies. A route can depend on a current-user dependency, and that dependency can inspect credentials, validate a token, and return the user object. Endpoints then receive an authenticated user without duplicating security code.
+
+## OpenAPI Integration
+
+FastAPI includes dependency information in OpenAPI when it affects parameters or security. This allows generated API docs to show required query parameters, headers, cookies, and security schemes that come from dependency declarations.

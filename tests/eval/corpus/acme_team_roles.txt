@@ -1,0 +1,36 @@
+# Acme AI Team
+
+## Alice Chen
+
+角色：检索工程师
+办公地点：Singapore
+负责：向量索引、混合检索和 reranker 评测
+合作伙伴：Bob Li
+
+Alice Chen focuses on retrieval quality. Her work includes evaluating chunk recall, checking evidence precision, and comparing vector search with hybrid text retrieval. She collaborates with Bob Li when retrieval experiments need deployment support.
+
+## Bob Li
+
+角色：平台工程师
+办公地点：Shanghai
+负责：Docker、监控和部署
+合作伙伴：Alice Chen
+
+Bob Li maintains the platform runtime. He owns Docker configuration, service health checks, observability, and deployment reliability. He works with Alice Chen when evaluation jobs need stable containers and repeatable indexes.
+
+## Carol Wang
+
+角色：产品经理
+办公地点：Beijing
+负责：知识库工作台和用户研究
+隶属：Product Group
+
+Carol Wang defines workspace workflows and collects user feedback. She belongs to the Product Group and translates product research into interface requirements for the knowledge base workspace.
+
+## Daniel Zhou
+
+角色：安全工程师
+办公地点：Shenzhen
+负责：权限审计和安全测试
+
+Daniel Zhou reviews access control, permission boundaries, and security test coverage. His work is separate from Carol's product research and Bob's deployment ownership.

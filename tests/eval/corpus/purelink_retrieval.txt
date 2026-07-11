@@ -1,0 +1,37 @@
+# PureLink Retrieval
+
+Source basis: PureLink retrieval and citation documentation
+Adaptation: concise project-specific facts for deterministic PureLink evaluation
+Retrieved: 2026-07-11
+
+## Retrieval Modes
+
+PureLink supports several retrieval modes. `chunk_only` performs vector retrieval over indexed chunks. `overview` collects broader summary context. `graph_vector_mix` combines lightweight graph candidates with vector candidates. `hybrid_text` merges keyword retrieval with vector retrieval for exact technical tokens. `auto` uses the rule-based query router.
+
+## Chunk Only
+
+`chunk_only` is the default factual retrieval path. It searches indexed chunks and builds citation evidence from chunk or citation-unit data. It is appropriate when exact config keys or graph relations are not the main signal.
+
+## Hybrid Text
+
+`hybrid_text` helps with API paths, environment variables, code-like tokens, file names, commands, and other exact text. It does not replace vector retrieval; it merges lexical candidates with vector candidates so exact strings can influence evidence selection.
+
+## Graph Vector Mix
+
+`graph_vector_mix` is used for relation-oriented questions. It retrieves lightweight graph candidates and merges them with vector chunks. It is useful for questions about dependencies, ownership, permissions, source-target links, and entity relationships.
+
+## Auto Router
+
+`auto` records the requested mode and selected mode. Technical tokens route toward `hybrid_text`, relation language routes toward `graph_vector_mix`, overview questions route toward `overview`, and default factual questions route toward `chunk_only`.
+
+## Evidence Selection
+
+PureLink selects final citation evidence from retrieved context. Citation units preserve smaller source spans when available. Entity-focused questions use evidence profiling so identity, attribute, reason, and relation questions prefer evidence that matches the question intent.
+
+## Retrieval Trace
+
+Retrieval trace records candidate and final evidence metadata, the selected mode, router reason, reranker usage, and counts. Trace availability is an evaluation metric because it confirms observable diagnostics.
+
+## Minimum Score
+
+`RETRIEVAL_MIN_SCORE` configures the minimum retrieval score used by answer generation reliability checks. Low-scoring or missing evidence can trigger a no-reliable-evidence response rather than unsupported answer generation.

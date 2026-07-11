@@ -1,0 +1,29 @@
+# Python Classes
+
+Source basis: Python official documentation, Classes tutorial
+Adaptation: concise paraphrase for deterministic PureLink evaluation
+Retrieved: 2026-07-11
+
+## Class Definition
+
+A Python class is a user-defined type that organizes data and behavior together. It acts as a namespace for attributes and functions, and it gives related operations a shared structure. A class definition creates a class object, not an instance. The class body can define methods, constants, and other attributes that describe what instances can do.
+
+## Class Objects
+
+After a class statement runs, the class object supports attribute reference and instantiation. Attribute reference reads values such as methods or class variables from the class namespace. Instantiation calls the class object like a function and creates a new instance object. If the class defines `__init__`, Python calls it during instantiation to initialize the instance state.
+
+## Instance Objects
+
+An instance object stores per-object state. Instance attributes can be assigned after construction or initialized in `__init__`. Two instances of the same class can share the same methods while holding different attribute values. This makes classes useful for modeling many objects that follow one interface but keep separate state.
+
+## Methods
+
+A method is a function defined by a class and accessed through an instance. The instance is passed as the first argument, conventionally named `self`. Methods can read and modify instance attributes, call other methods, and expose behavior that belongs with the object's data.
+
+## Class and Instance Variables
+
+Class variables live on the class object and are shared unless an instance overrides the name. Instance variables live on individual objects. Mutable class variables should be used carefully because changes may be visible through multiple instances.
+
+## Inheritance
+
+Inheritance lets a class derive behavior from another class. A subclass can reuse parent methods, add new behavior, or override methods to specialize behavior. Method lookup starts on the instance's class and continues through base classes, so inheritance can express shared interfaces while allowing specialization.

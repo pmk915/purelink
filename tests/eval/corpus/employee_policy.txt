@@ -1,0 +1,21 @@
+# Employee Policy
+
+## Working Hours
+
+Employees are expected to keep a predictable work schedule and coordinate availability with their team. Core collaboration hours are used for meetings, reviews, and customer support handoffs. Teams may adjust schedules when projects require support across time zones.
+
+## Remote Work
+
+Remote work is allowed when the employee's manager approves the arrangement and the role can be performed securely away from the office. Employees should keep communication channels updated, protect company devices, and follow the same confidentiality rules that apply in the office.
+
+## Annual Leave
+
+Annual leave should be requested in advance through the internal HR workflow. Managers approve leave based on team coverage and project timing. Employees should document handoffs before extended absence so active work can continue.
+
+## Equipment Reimbursement
+
+The company reimburses approved equipment that is necessary for work. Requests should include a receipt, a short business reason, and manager approval. Personal entertainment devices are not covered by this policy.
+
+## Information Security
+
+Employees must protect credentials, use approved devices, and report suspected security issues promptly. Sensitive documents should not be shared through personal accounts. Lost equipment or accidental disclosure must be reported to the security team.

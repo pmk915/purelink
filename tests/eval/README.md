@@ -9,6 +9,10 @@ It does not use LLM-as-judge, external APIs, or heavy evaluation frameworks. It 
 - keyword coverage
 - reranker usage
 - trace availability
+- expected/forbidden evidence hit
+- evidence precision
+- router accuracy
+- no-answer answerability accuracy
 
 ## Prepare Cases
 
@@ -38,6 +42,40 @@ Optional overrides:
 .venv/bin/python scripts/eval/run_rag_eval.py --disable-trace
 make eval-rag EVAL_CASES=tests/eval/purelink_rag_cases.jsonl
 ```
+
+## Generalization Eval
+
+For a deterministic cross-domain retrieval baseline that does not depend on
+local KB ids, run:
+
+```bash
+make eval-rag-generalization
+```
+
+This command builds a temporary in-memory eval KB from the curated corpus in
+`tests/eval/corpus/`, indexes it with the configured chunk strategy, runs the
+50 JSONL cases in `tests/eval/rag_generalization_cases.jsonl`, and writes:
+
+```text
+data/eval_runs/<run-id>/run.json
+data/eval_runs/<run-id>/results.json
+data/eval_runs/<run-id>/summary.md
+```
+
+The generalization corpus covers entity definition, entity attribute, entity
+reason, entity relation, technical, overview, and no-answer cases. It uses
+phrase/document checks only; it does not use LLM-as-judge.
+
+To generate a sanitized local snapshot preview:
+
+```bash
+make eval-rag-generalization \
+  GENERALIZATION_BASELINE_SNAPSHOT_DIR=tests/eval/baselines/generalization-auto-block-aware
+```
+
+The snapshot removes live trace ids, temporary database ids, absolute local
+paths, and secret-like configuration. Rerun on a clean commit before committing
+an official baseline snapshot.
 
 ## RAG v2 Baseline Evaluation
 
@@ -112,11 +150,14 @@ Local cases and generated reports depend on local KB IDs and should not be commi
 
 ## Interpret Results
 
-- `retrieval_hit`: final selected evidence came from an expected document.
-- `citation_hit`: final selected citation-ready evidence came from an expected document.
+- `retrieval_hit`: final selected evidence came from an expected document. It is `null` when the case has no expected document.
+- `citation_hit`: final selected citation-ready evidence came from an expected document. It is `null` when citation is not required, and citation evidence must include both citation unit and source locator metadata.
 - `keyword_coverage`: expected keyword substring matches in `RetrievalResult.context_text`.
 - `used_reranker`: whether retrieval used the reranker for that case.
 - `trace_available`: whether `RetrievalResult.trace_id` was populated.
+- Generalization summaries show `passed / applicable (percentage)` and skip `null` values from denominators.
+- Evidence-gate answerability means final evidence is present and reaches `RETRIEVAL_MIN_SCORE`; it is not semantic QA accuracy.
+- Final evidence metrics use `RetrievalResult.evidences`, not raw `initial_chunks` or intermediate `context_chunks`.
 
 This harness is intended for local/manual RAG quality checks and regression comparison. Metric unit tests live in `tests/eval/test_rag_eval_metrics.py` and are safe for the default test suite.
 

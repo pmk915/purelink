@@ -1,0 +1,37 @@
+# Aurora Device Catalog
+
+## Aurora Mini
+
+颜色：银色
+重量：1.2 kg
+特点：便携
+适用场景：移动办公
+
+Aurora Mini is the compact member of the Aurora catalog. It is designed for people who need a lightweight device that can move between desks, meeting rooms, and travel bags. Its silver color and 1.2 kg weight distinguish it from the larger Pro and Server models.
+
+## Aurora Pro
+
+颜色：黑色
+重量：2.1 kg
+特点：高性能
+适用场景：本地模型推理
+
+Aurora Pro is the performance-oriented model. It is heavier than the Mini and Air, uses a black finish, and targets local model inference workloads where more compute is useful.
+
+## Aurora Air
+
+颜色：蓝色
+重量：0.9 kg
+特点：轻薄
+适用场景：差旅
+
+Aurora Air is the lightest model in this catalog. Its blue finish and 0.9 kg weight make it suitable for travel scenarios where portability matters more than maximum local compute.
+
+## Aurora Server
+
+颜色：灰色
+重量：8.5 kg
+特点：可扩展
+适用场景：团队部署
+
+Aurora Server is a team deployment device. It is much heavier than the portable models, uses a gray finish, and emphasizes extensibility for shared environments.

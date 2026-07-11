@@ -8,6 +8,12 @@ Runner:
 make eval-rag
 ```
 
+Cross-domain generalization baseline:
+
+```bash
+make eval-rag-generalization
+```
+
 Custom cases:
 
 ```bash
@@ -28,16 +34,60 @@ Each JSONL line includes:
 - `expected_keywords`
 - `expected_citation_required`
 
+The generalization case file also supports optional fields:
+
+- `category`: one of `entity_definition`, `entity_attribute`, `entity_reason`, `entity_relation`, `technical`, `overview`, or `no_answer`.
+- `expected_mode`: expected selected mode for `mode=auto` cases.
+- `expected_evidence_phrases`: phrases that should appear in final evidence.
+- `forbidden_evidence_phrases`: phrases that should not appear in final evidence.
+- `expected_answerable`: deterministic evidence-gate answerability expectation.
+- `notes`: free-form operator notes.
+
 ## Metrics
 
-- `retrieval_hit`: expected document appears in final evidence.
-- `citation_hit`: citation-ready evidence appears from expected document.
+- `retrieval_hit`: expected document appears in final evidence. Applicable only when `expected_doc_names` or `expected_doc_ids` is present.
+- `citation_hit`: citation-ready evidence appears from expected document. Applicable only when `expected_citation_required=true`; citation evidence must include both `citation_unit_id` and `source_locator`.
 - `keyword_coverage`: expected keyword substring coverage in context.
 - `top_1_doc_hit` / `top_3_doc_hit`: ranking quality indicators.
 - `used_reranker`: whether reranker changed the pipeline.
 - `trace_available`: whether retrieval produced a trace id.
+- `expected_evidence_hit`: final evidence from an expected document contains an expected evidence phrase. Applicable only when `expected_evidence_phrases` is non-empty.
+- `forbidden_evidence_hit`: final evidence contains a forbidden phrase. Applicable only when `forbidden_evidence_phrases` is non-empty.
+- `irrelevant_evidence_count`: explicit forbidden evidence plus evidence from unexpected documents.
+- `unknown_evidence_count`: evidence that cannot be judged by phrase/doc rules.
+- `evidence_precision`: relevant / (relevant + irrelevant), excluding unknown evidence.
+- `router_accuracy`: selected mode matches `expected_mode` for `auto` cases. Applicable only when the requested mode is `auto` and `expected_mode` is present.
+- `answerability_accuracy`: evidence-gate answerability matches `expected_answerable`. This uses final evidence presence plus `RETRIEVAL_MIN_SCORE`; it does not judge semantic entailment.
+- `retrieval_latency_ms` and `total_eval_latency_ms`: in-process retrieval timing values.
 
 The harness is deterministic and does not use LLM-as-judge.
+
+The canonical final evidence source is `RetrievalResult.evidences`. Retrieval metadata such as `initial_chunks`, `context_chunks`, and `evidence_units` is useful for debugging, but summary metrics do not treat raw chunks as final citation evidence. When the reranker is enabled, `RetrievalResult.evidences` contains the aligned final evidence.
+
+Summary tables show `passed / applicable (percentage)`. `null` or non-applicable metrics are skipped from the denominator, so no-answer cases do not dilute ordinary retrieval/citation rates.
+
+## Generalization Corpus
+
+`tests/eval/corpus/` contains nine small Markdown-like `.txt` documents covering Python classes, FastAPI dependencies, PostgreSQL concurrency, Alice in Wonderland characters, synthetic team roles, synthetic device catalog data, employee policy no-answer cases, PureLink retrieval, and PureLink document processing.
+
+The external-source documents are concise paraphrases for deterministic local evaluation. The runner does not fetch network resources at runtime. The corpus is intentionally small; it is designed to reveal retrieval and evidence-selection regressions, not to prove production quality.
+
+Run output is written under `data/eval_runs/<run-id>/`:
+
+- `run.json`: run id, commit, dirty worktree flag, corpus manifest, config, model identity, and duration.
+- `results.json`: per-case selected mode, router reason, final evidence units, evidence metrics, answerability metrics, trace id, latency, and failure reasons.
+- `summary.md`: run configuration, overall metrics, category/mode breakdowns, no-answer results, latency summary, failed cases, and known limitations.
+
+The generated reports should be interpreted as phrase/doc based approximations. Latency is useful only for comparison on the same machine and configuration.
+
+To write a sanitized local preview that can later become a committed baseline snapshot, use:
+
+```bash
+make eval-rag-generalization \
+  GENERALIZATION_BASELINE_SNAPSHOT_DIR=tests/eval/baselines/generalization-auto-block-aware
+```
+
+The snapshot removes live trace ids, temporary database ids, absolute local paths, and secret-like configuration. Do not commit a dirty-worktree snapshot as the official baseline; rerun on a clean commit first.
 
 Supported modes include:
 
@@ -71,3 +121,11 @@ The same JSONL case set can be run with different modes to compare recall behavi
 3. Compare `retrieval_hit`, `citation_hit`, `keyword_coverage`, and top-k document hits.
 
 `hybrid_text` is expected to help exact technical queries. It should not be assumed to improve every semantic question.
+
+## Adding a Generalization Case
+
+1. Add or edit a small corpus document under `tests/eval/corpus/`.
+2. Add one JSONL object to `tests/eval/rag_generalization_cases.jsonl`.
+3. Include `expected_doc_names`, `expected_evidence_phrases`, and `forbidden_evidence_phrases` when the answer can be checked by phrases.
+4. Use `expected_answerable=false` only when the answer is intentionally absent from the corpus.
+5. Run `make eval-rag-generalization` and review failed cases instead of deleting them.
