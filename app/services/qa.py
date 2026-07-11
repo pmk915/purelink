@@ -54,9 +54,11 @@ QUERY_SYNONYMS: dict[str, tuple[str, ...]] = {
     "长什么样": ("外貌", "外形", "样子", "特征"),
     "是什么": ("定义", "含义", "介绍"),
     "是谁": ("身份", "人物", "角色", "介绍", "定义"),
-    "为什么受欢迎": ("原因", "受欢迎", "人气", "性格", "反差"),
-    "为什么火": ("原因", "受欢迎", "人气", "性格", "反差"),
-    "什么关系": ("关系", "朋友", "伙伴", "关联", "一起"),
+    "为什么受欢迎": ("原因", "受欢迎", "人气", "吸引力", "因素"),
+    "为什么火": ("原因", "受欢迎", "人气", "吸引力", "因素"),
+    "什么关系": ("关系", "关联", "依赖", "连接", "朋友", "伙伴", "合作"),
+    "在哪里": ("地点", "位置", "办公地点"),
+    "在哪": ("地点", "位置", "办公地点"),
     "怎么做": ("方法", "步骤", "流程"),
     "有什么用": ("作用", "用途", "功能"),
     "怎么保证": ("可靠性", "保证", "机制", "设计"),
@@ -90,57 +92,70 @@ ENTITY_DEFINITION_TERMS = frozenset(
         "身份",
         "人物",
         "角色",
-        "主角",
-        "介绍",
         "定义",
-        "兔子",
-        "朋友",
-        "形似动物",
-        "漫画",
+        "介绍",
+        "职业",
+        "产品",
+        "项目",
+        "工具",
+        "系统",
+        "组织",
+        "概念",
     }
 )
 ENTITY_ATTRIBUTE_TERMS = frozenset(
     {
+        "属性",
         "外貌",
         "外形",
         "外型",
+        "形态",
+        "结构",
         "样子",
         "颜色",
-        "眼睛",
-        "尾巴",
-        "黄色",
-        "蓝色",
-        "白色",
+        "尺寸",
+        "重量",
         "特征",
-        "粉色",
-        "耳",
-        "兔子",
+        "特点",
+        "配置",
+        "规格",
+        "地点",
+        "位置",
+        "办公地点",
     }
 )
 ENTITY_REASON_TERMS = frozenset(
     {
         "原因",
+        "为什么",
+        "优势",
+        "影响",
         "受欢迎",
-        "为什么火",
         "人气",
-        "性格",
-        "不内耗",
-        "反差",
-        "可爱",
-        "强大",
+        "吸引力",
+        "因素",
+        "特点",
     }
 )
 ENTITY_RELATION_TERMS = frozenset(
     {
         "关系",
+        "关联",
+        "依赖",
         "朋友",
         "伙伴",
-        "关联",
-        "一起",
-        "好友",
-        "同伴",
-        "主角",
-        "日常",
+        "合作",
+        "同事",
+        "成员",
+        "隶属",
+        "属于",
+        "包含",
+        "调用",
+        "负责",
+        "权限",
+        "上下游",
+        "连接",
+        "组成",
     }
 )
 
@@ -803,6 +818,8 @@ def select_evidence_units(
     seen_keys: set[tuple[int, str, int]] = set()
 
     for chunk in retrieved_chunks:
+        if len(selected) >= max_evidence_units:
+            break
         units = chunk_units.get(chunk.chunk_id)
         ranked_units: list[CitationUnitCandidate]
         if units:
@@ -827,7 +844,8 @@ def select_evidence_units(
                 )
             ]
 
-        for candidate in ranked_units[:per_chunk_limit]:
+        accepted_count = 0
+        for candidate in ranked_units:
             if _should_filter_entity_candidate(candidate, profile=evidence_profile):
                 continue
             candidate_key = (candidate.document_id, candidate.chunk_id, candidate.citation_unit_id or -1)
@@ -835,7 +853,10 @@ def select_evidence_units(
                 continue
             selected.append(candidate)
             seen_keys.add(candidate_key)
+            accepted_count += 1
             if len(selected) >= max_evidence_units:
+                break
+            if accepted_count >= per_chunk_limit:
                 break
 
     selected.sort(key=lambda item: (-item.score, item.document_id, item.chunk_id, item.citation_unit_id or -1))
@@ -1024,6 +1045,17 @@ def _should_filter_entity_candidate(
 ) -> bool:
     if not profile.is_entity_query:
         return False
+    if (
+        profile.query_type == "entity_relation"
+        and candidate.intent_alignment <= 0
+    ):
+        return True
+    if (
+        profile.query_type in {"entity_attribute", "entity_reason"}
+        and candidate.citation_unit_id is not None
+        and candidate.intent_alignment <= 0
+    ):
+        return True
     return (
         candidate.lexical_relevance <= 0
         and candidate.intent_alignment <= 0
@@ -1057,7 +1089,7 @@ def _apply_entity_evidence_gate(
             continue
         if len(selected) >= limit:
             break
-        if _passes_entity_followup_gate(candidate, top=top):
+        if _passes_entity_followup_gate(candidate, top=top, profile=profile):
             selected.append(candidate)
     return selected
 
@@ -1066,11 +1098,21 @@ def _passes_entity_followup_gate(
     candidate: CitationUnitCandidate,
     *,
     top: CitationUnitCandidate,
+    profile: QueryEvidenceProfile,
 ) -> bool:
     same_chunk = (
         candidate.document_id == top.document_id
         and candidate.chunk_id == top.chunk_id
     )
+    if profile.query_type == "entity_relation":
+        return (
+            _has_supported_entity_context(candidate)
+            and (
+                candidate.intent_alignment > 0
+                or candidate.lexical_relevance >= ENTITY_FOLLOWUP_MIN_LEXICAL_RELEVANCE
+            )
+            and candidate.score >= (top.score * ENTITY_FOLLOWUP_MIN_RELATIVE_SCORE)
+        )
     if same_chunk:
         return (
             _has_supported_entity_context(candidate)
@@ -1133,14 +1175,33 @@ def _build_query_evidence_profile(question: str) -> QueryEvidenceProfile:
             intent_terms=ENTITY_RELATION_TERMS,
         )
 
-    if any(pattern in lowered for pattern in ("长什么样", "长啥样", "外貌", "样子")):
+    if any(
+        pattern in lowered
+        for pattern in (
+            "长什么样",
+            "长啥样",
+            "外貌",
+            "样子",
+            "颜色",
+            "重量",
+            "尺寸",
+            "规格",
+            "配置",
+            "属性",
+            "特点",
+            "特征",
+            "办公地点",
+            "地点",
+            "位置",
+        )
+    ):
         return QueryEvidenceProfile(
             query_type="entity_attribute",
             entity_terms=frozenset(_extract_single_entity_terms(normalized, "entity_attribute")),
             intent_terms=ENTITY_ATTRIBUTE_TERMS,
         )
 
-    if any(pattern in lowered for pattern in ("为什么受欢迎", "为什么这么火", "为什么火", "受欢迎")):
+    if any(pattern in lowered for pattern in ("为什么受欢迎", "为什么这么火", "为什么火", "为什么", "受欢迎")):
         return QueryEvidenceProfile(
             query_type="entity_reason",
             entity_terms=frozenset(_extract_single_entity_terms(normalized, "entity_reason")),
@@ -1192,16 +1253,38 @@ def _extract_single_entity_terms(question: str, query_type: str) -> tuple[str, .
             "长什么样",
             "长啥样",
             "是什么样",
+            "是什么颜色",
+            "是什么规格",
+            "是什么",
+            "是多少",
             "外貌是什么",
+            "在哪里",
+            "在哪",
             "外貌",
             "样子",
+            "颜色",
+            "重量",
+            "尺寸",
+            "规格",
+            "配置",
+            "属性",
+            "特点",
+            "特征",
+            "办公地点",
+            "地点",
+            "位置",
+            "的",
+            "多少",
         ),
         "entity_reason": (
             "为什么受欢迎",
             "为什么这么火",
             "为什么火",
+            "为什么",
             "受欢迎的原因",
             "受欢迎",
+            "原因",
+            "因素",
         ),
     }
     cleaned = question
@@ -1253,11 +1336,21 @@ def _has_entity_context_match(
     if lexical_relevance < ENTITY_CONTEXT_MIN_LEXICAL_RELEVANCE:
         return False
 
-    context_text = _build_entity_context_text(chunk=chunk, metadata=metadata)
-    return _has_entity_exact_match(context_text, profile=profile)
+    structured_context_text = _build_structured_entity_context_text(
+        chunk=chunk,
+        metadata=metadata,
+    )
+    if _has_entity_exact_match(structured_context_text, profile=profile):
+        return True
+
+    return _has_local_entity_anchor(
+        unit_text=unit_text,
+        chunk=chunk,
+        profile=profile,
+    )
 
 
-def _build_entity_context_text(*, chunk: RetrievedChunk, metadata: object) -> str:
+def _build_structured_entity_context_text(*, chunk: RetrievedChunk, metadata: object) -> str:
     section_title = getattr(metadata, "section_title", None) or chunk.section_title
     heading_path = getattr(metadata, "heading_path", None) or chunk.heading_path
     parts: list[str] = []
@@ -1265,9 +1358,64 @@ def _build_entity_context_text(*, chunk: RetrievedChunk, metadata: object) -> st
         parts.append(str(section_title))
     if heading_path:
         parts.extend(str(item) for item in heading_path if item)
-    if chunk.text:
-        parts.append(_trim_text_for_prompt(chunk.text, max_chars=800))
     return " ".join(parts)
+
+
+def _has_local_entity_anchor(
+    *,
+    unit_text: str,
+    chunk: RetrievedChunk,
+    profile: QueryEvidenceProfile,
+) -> bool:
+    if not chunk.text:
+        return False
+
+    unit_start = _find_unit_offset_in_chunk(unit_text=unit_text, chunk_text=chunk.text)
+    if unit_start is None:
+        return False
+
+    local_context = _local_context_before_unit(
+        chunk_text=chunk.text,
+        unit_start=unit_start,
+    )
+    if not local_context:
+        return False
+    return _has_entity_exact_match(local_context, profile=profile)
+
+
+def _find_unit_offset_in_chunk(*, unit_text: str, chunk_text: str) -> int | None:
+    if not unit_text:
+        return None
+    direct_offset = chunk_text.find(unit_text)
+    if direct_offset >= 0:
+        return direct_offset
+
+    normalized_unit = _normalize_text(unit_text)
+    if not normalized_unit:
+        return None
+    direct_offset = chunk_text.find(normalized_unit)
+    if direct_offset >= 0:
+        return direct_offset
+
+    prefix = normalized_unit[: min(24, len(normalized_unit))]
+    if len(prefix) < 8:
+        return None
+    prefix_offset = chunk_text.find(prefix)
+    return prefix_offset if prefix_offset >= 0 else None
+
+
+SECTION_BOUNDARY_PATTERN = re.compile(
+    r"(?m)^(?:#{1,6}\s+.+|[一二三四五六七八九十]+[、.．]\s*.+)$"
+)
+
+
+def _local_context_before_unit(*, chunk_text: str, unit_start: int) -> str:
+    prefix = chunk_text[: max(0, unit_start)]
+    boundary_start = 0
+    for match in SECTION_BOUNDARY_PATTERN.finditer(prefix):
+        boundary_start = match.start()
+    local_context = prefix[boundary_start:]
+    return _trim_text_for_prompt(local_context, max_chars=400)
 
 
 def _intent_alignment(text: str, *, profile: QueryEvidenceProfile) -> float:
