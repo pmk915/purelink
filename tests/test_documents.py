@@ -26,6 +26,7 @@ from app.core.config import get_settings
 from app.db.base import Base, load_all_models
 from app.db.session import get_db
 from app.main import app
+from app.models.conversation import Conversation
 from app.models.document import Document
 from app.models.document_citation_unit import DocumentCitationUnit
 from app.models.document_chunk import DocumentChunk
@@ -34,13 +35,15 @@ from app.models.enums import (
     DocumentProcessingStatus,
     DocumentTaskStatus,
     KnowledgeBaseScope,
+    MessageRole,
     ProcessingJobStatus,
     ProcessingJobTrigger,
     ProcessingJobType,
 )
 from app.models.message import Message
 from app.models.processing_job import ProcessingJob
-from app.services.document_embedding import DocumentEmbeddingError
+from app.models.retrieval_trace import RetrievalTrace
+from app.services.document_embedding import DocumentEmbeddingError, RetrievedChunk
 from app.services.document_embedding import build_index_relative_path
 from app.services.document_processing import (
     DocumentProcessingError,
@@ -54,7 +57,9 @@ from app.services.asr_provider import ASRProviderError, ASRResult, ASRSegment
 from app.services.ocr_provider import OCRProviderError, OCRRegion, OCRResult
 from app.services import document_indexing as document_indexing_service
 from app.services import processing_worker as processing_worker_service
-from app.services.qa import NO_RELIABLE_EVIDENCE_MESSAGE
+from app.services.qa import CitationUnitCandidate, NO_RELIABLE_EVIDENCE_MESSAGE
+from app.services.retrieval.query_router import route_query
+from app.services.retrieval.types import RetrievalMode, RetrievalResult
 from app.services.processing_job import (
     acquire_processing_job,
     fail_timed_out_processing_jobs,
@@ -3352,6 +3357,7 @@ async def test_personal_conversation_delete_removes_messages_and_blocks_other_us
 @pytest.mark.anyio
 async def test_personal_conversation_append_supports_kb_overview_follow_up(
     document_client: AsyncClient,
+    test_session_factory: sessionmaker,
     processing_job_runner: CapturedProcessingJobRunner,
 ) -> None:
     alice = await _register_and_login(
@@ -3426,6 +3432,268 @@ async def test_personal_conversation_append_supports_kb_overview_follow_up(
     assert overview_message["citations"]
     cited_document_ids = {item["document_id"] for item in overview_message["citations"]}
     assert len(cited_document_ids) >= 2
+    with test_session_factory() as db:
+        trace = db.scalar(
+            select(RetrievalTrace)
+            .where(RetrievalTrace.conversation_id == conversation_id)
+            .order_by(RetrievalTrace.id.desc())
+        )
+        assert trace is not None
+        trace_metadata = json.loads(trace.metadata_json or "{}")
+    assert trace.mode == RetrievalMode.OVERVIEW.value
+    assert trace_metadata["requested_mode"] == RetrievalMode.AUTO.value
+    assert trace_metadata["selected_mode"] == RetrievalMode.OVERVIEW.value
+    assert trace_metadata["effective_mode"] == RetrievalMode.OVERVIEW.value
+    assert trace_metadata["routing_query_source"] == "evidence_query"
+    assert trace_metadata["answerable"] is True
+    assert trace_metadata["evidence_support_reason"] == "supported"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("history", "question", "expected_selected", "expected_effective", "expected_confidence"),
+    [
+        ([], "Python 类是什么？", RetrievalMode.CHUNK_ONLY, RetrievalMode.CHUNK_ONLY, "low"),
+        (
+            ["普通属性问题不会决定下一轮模式"],
+            "CHUNK_STRATEGY 支持哪些值？",
+            RetrievalMode.HYBRID_TEXT,
+            RetrievalMode.HYBRID_TEXT,
+            "high",
+        ),
+        (
+            [],
+            "Alice Chen 和 Bob Li 是什么关系？",
+            RetrievalMode.GRAPH_VECTOR_MIX,
+            RetrievalMode.CHUNK_ONLY,
+            "high",
+        ),
+        ([], "总结这份知识库的主要内容。", RetrievalMode.OVERVIEW, RetrievalMode.OVERVIEW, "high"),
+        ([], "介绍一下这个内容。", RetrievalMode.CHUNK_ONLY, RetrievalMode.CHUNK_ONLY, "low"),
+        (
+            ["请总结文档", "RETRIEVAL_MIN_SCORE", "Alice 和 Bob 的关系"],
+            "Alice Chen 在哪里办公？",
+            RetrievalMode.CHUNK_ONLY,
+            RetrievalMode.CHUNK_ONLY,
+            "low",
+        ),
+    ],
+)
+async def test_conversation_append_uses_current_question_for_auto_routing(
+    document_client: AsyncClient,
+    test_session_factory: sessionmaker,
+    monkeypatch: pytest.MonkeyPatch,
+    history: list[str],
+    question: str,
+    expected_selected: RetrievalMode,
+    expected_effective: RetrievalMode,
+    expected_confidence: str,
+) -> None:
+    account = await _register_and_login(
+        document_client,
+        email=f"conversation-routing-{abs(hash(question))}@example.com",
+        username=f"conversation-routing-{abs(hash(question))}",
+    )
+    headers = {"Authorization": f"Bearer {account['access_token']}"}
+    knowledge_base_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(account["access_token"]),
+        name="Conversation Routing KB",
+    )
+    with test_session_factory() as db:
+        conversation = Conversation(
+            user_id=int(account["user_id"]),
+            knowledge_base_id=knowledge_base_id,
+            title="Conversation routing",
+        )
+        db.add(conversation)
+        db.flush()
+        conversation_id = conversation.id
+        db.add_all(
+            Message(
+                conversation_id=conversation_id,
+                role=MessageRole.USER,
+                content=content,
+            )
+            for content in history
+        )
+        db.commit()
+
+    captured_requests = []
+    captured_results: list[RetrievalResult] = []
+
+    async def fake_retrieve(request):  # noqa: ANN001
+        captured_requests.append(request)
+        decision = route_query(request.evidence_query or request.query)
+        fallback = decision.selected_mode == RetrievalMode.GRAPH_VECTOR_MIX
+        effective_mode = RetrievalMode.CHUNK_ONLY if fallback else decision.selected_mode
+        result = RetrievalResult(
+            query=request.query,
+            mode=effective_mode,
+            requested_mode=request.mode,
+            selected_mode=decision.selected_mode,
+            router_reason=decision.reason,
+            router_confidence=decision.confidence,
+            effective_mode=effective_mode,
+            fallback_mode=RetrievalMode.CHUNK_ONLY if fallback else None,
+            fallback_reason="graph_candidates_empty" if fallback else None,
+            evidences=[],
+            context_text="",
+            metadata={
+                "retrieved_chunks": [],
+                "context_chunks": [],
+                "evidence_units": [],
+            },
+        )
+        captured_results.append(result)
+        return result
+
+    monkeypatch.setattr("app.api.v1.conversations.retrieve_knowledge", fake_retrieve)
+
+    response = await document_client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers=headers,
+        json={"content": question},
+    )
+
+    assert response.status_code == 200
+    assert len(captured_requests) == 1
+    request = captured_requests[0]
+    assert request.mode == RetrievalMode.AUTO
+    assert request.evidence_query == question
+    assert request.conversation_id == conversation_id
+    assert request.query.endswith(question)
+    for historical_message in history[-2:]:
+        assert historical_message in request.query
+    decision = route_query(request.evidence_query)
+    assert decision.selected_mode == expected_selected
+    assert decision.confidence == expected_confidence
+    if history:
+        assert captured_requests[0].query != captured_requests[0].evidence_query
+    assert captured_results[0].selected_mode == expected_selected
+    assert captured_results[0].effective_mode == expected_effective
+    if expected_selected == RetrievalMode.GRAPH_VECTOR_MIX:
+        assert captured_results[0].fallback_reason == "graph_candidates_empty"
+    body = response.json()
+    assert set(body) == {"conversation", "user_message", "assistant_message"}
+    assert body["assistant_message"]["citations"] == []
+    assert captured_requests[0].mode == RetrievalMode.AUTO
+
+
+@pytest.mark.anyio
+async def test_conversation_support_gate_rejects_high_score_wrong_attribute(
+    document_client: AsyncClient,
+    test_session_factory: sessionmaker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    account = await _register_and_login(
+        document_client,
+        email="conversation-support-gate@example.com",
+        username="conversation-support-gate",
+    )
+    headers = {"Authorization": f"Bearer {account['access_token']}"}
+    knowledge_base_id = await _create_personal_knowledge_base(
+        document_client,
+        access_token=str(account["access_token"]),
+        name="Conversation Support Gate KB",
+    )
+    with test_session_factory() as db:
+        conversation = Conversation(
+            user_id=int(account["user_id"]),
+            knowledge_base_id=knowledge_base_id,
+            title="Conversation support gate",
+        )
+        db.add(conversation)
+        db.commit()
+        conversation_id = conversation.id
+
+    chunk = RetrievedChunk(
+        chunk_id="1:0",
+        document_id=1,
+        knowledge_base_id=knowledge_base_id,
+        scope=KnowledgeBaseScope.PERSONAL.value,
+        team_id=None,
+        document_name="alice.txt",
+        text="Alice Chen 在 Singapore 办公，负责向量检索。",
+        snippet="Alice Chen 在 Singapore 办公。",
+        source_type="text",
+        char_start=0,
+        char_end=32,
+        page_number=None,
+        start_time=None,
+        end_time=None,
+        section_title="Alice Chen",
+        source_locator="section:Alice Chen",
+        heading_path=("Alice Chen",),
+        score=0.99,
+        chunk_db_id=None,
+    )
+    captured_results: list[RetrievalResult] = []
+    evidence_unit = CitationUnitCandidate(
+        marker="S1",
+        citation_id=None,
+        citation_unit_id=1,
+        chunk_db_id=None,
+        chunk_id=chunk.chunk_id,
+        document_id=chunk.document_id,
+        knowledge_base_id=knowledge_base_id,
+        scope=KnowledgeBaseScope.PERSONAL.value,
+        team_id=None,
+        document_name=chunk.document_name,
+        text=chunk.text,
+        snippet=chunk.snippet,
+        source_type=chunk.source_type,
+        char_start=chunk.char_start,
+        char_end=chunk.char_end,
+        page_number=None,
+        start_time=None,
+        end_time=None,
+        section_title=chunk.section_title,
+        source_locator=chunk.source_locator,
+        heading_path=chunk.heading_path,
+        lexical_relevance=0.8,
+        score=chunk.score,
+        entity_exact_match=True,
+    )
+
+    async def fake_retrieve(request):  # noqa: ANN001
+        result = RetrievalResult(
+            query=request.query,
+            mode=RetrievalMode.CHUNK_ONLY,
+            requested_mode=RetrievalMode.AUTO,
+            selected_mode=RetrievalMode.CHUNK_ONLY,
+            router_reason="default factual question",
+            router_confidence="low",
+            effective_mode=RetrievalMode.CHUNK_ONLY,
+            evidences=[],
+            context_text="",
+            metadata={
+                "retrieved_chunks": [chunk],
+                "context_chunks": [chunk],
+                "evidence_units": [evidence_unit],
+            },
+        )
+        captured_results.append(result)
+        return result
+
+    monkeypatch.setattr("app.api.v1.conversations.retrieve_knowledge", fake_retrieve)
+    monkeypatch.setattr(
+        "app.services.qa.resolve_answer_generator",
+        lambda settings: pytest.fail("provider must not run for unsupported evidence"),
+    )
+
+    response = await document_client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers=headers,
+        json={"content": "Alice Chen 的生日是什么？"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["assistant_message"]["content"] == NO_RELIABLE_EVIDENCE_MESSAGE
+    assert body["assistant_message"]["citations"] == []
+    assert captured_results[0].metadata["answerable"] is False
+    assert captured_results[0].metadata["evidence_support_reason"] == "missing_attribute_support"
 
 
 @pytest.mark.anyio

@@ -26,6 +26,7 @@ available:
 
 - `requested_mode`, `selected_mode`, `effective_mode`
 - `router_reason`, `router_confidence`
+- `routing_query_source` (`evidence_query` or `query`)
 - `fallback_mode`, `fallback_reason`
 - `answerable`
 - `evidence_support_score`
@@ -33,6 +34,12 @@ available:
 - `evidence_support_query_type`
 - `evidence_support_signals`
 - `supporting_evidence_ids`
+
+Conversation retrieval traces also carry `conversation_id`. The trace header
+keeps the actual retrieval query, while `routing_query_source` records which
+request field drove the rule-based router without duplicating the current user
+question in metadata. A message id is not fabricated before message
+persistence.
 
 ## Trace Items
 

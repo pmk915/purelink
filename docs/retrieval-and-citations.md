@@ -77,6 +77,15 @@ overview > relation > exact technical identifier > chunk_only
 
 `selected_mode` 表示 router 选择的模式，`effective_mode` 表示 fallback 后实际执行的模式。这样 eval 可以继续衡量 router 分类准确性，同时 trace 能说明实际检索是否从 `graph_vector_mix` 或 `hybrid_text` 回退到 `chunk_only`。
 
+Conversation 中追加消息时默认请求 `AUTO`。当前用户问题保存在
+`evidence_query`，用于 deterministic rule-based Router、evidence profile 和
+Evidence Support Gate；实际检索使用的 `query` 可以包含最近对话上下文。
+这样历史消息中的总结、配置键或关系词不会污染当前问题的模式选择，
+同时 follow-up 仍保留对话增强召回。conversation trace 关联
+`conversation_id`，并通过 `routing_query_source` 记录 Router 使用了哪个字段。
+unsupported evidence 会跳过 answer provider、返回无可靠证据文案并保持空
+citations，现有 conversation response schema 不变。
+
 保守 fallback：
 
 - `graph_vector_mix` 在 graph candidates 为空、低于阈值或 graph 检索失败时 fallback 到 `chunk_only`。

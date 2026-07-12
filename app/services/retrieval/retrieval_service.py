@@ -42,6 +42,7 @@ logger = logging.getLogger("purelink.retrieval")
 async def retrieve(request: RetrievalRequest) -> RetrievalResult:
     active_settings = request.settings or get_settings()
     requested_mode = request.mode
+    routing_query_source = "evidence_query" if request.evidence_query else "query"
     route_decision = _select_retrieval_mode(request)
     resolved_mode = route_decision.selected_mode
     effective_mode = resolved_mode
@@ -217,6 +218,7 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
                     router_confidence=route_decision.confidence,
                     fallback_mode=fallback_mode,
                     fallback_reason=fallback_reason,
+                    routing_query_source=routing_query_source,
                 ),
                 "context_chunk_count": len(context_chunks),
                 "evidence_unit_count": len(evidence_units),
@@ -268,6 +270,7 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
                     router_confidence=route_decision.confidence,
                     fallback_mode=fallback_mode,
                     fallback_reason=fallback_reason,
+                    routing_query_source=routing_query_source,
                 ),
                 "retrieved_chunks": retrieved_chunks,
                 "initial_chunks": raw_chunks,
@@ -294,6 +297,7 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
                     router_confidence=route_decision.confidence,
                     fallback_mode=fallback_mode,
                     fallback_reason=fallback_reason,
+                    routing_query_source=routing_query_source,
                 ),
                 "error": f"{type(exc).__name__}: {exc}",
             },
@@ -303,7 +307,7 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
 
 def _select_retrieval_mode(request: RetrievalRequest) -> QueryRouteDecision:
     if request.mode == RetrievalMode.AUTO:
-        return route_query(request.query)
+        return route_query(request.evidence_query or request.query)
     return QueryRouteDecision(
         selected_mode=resolve_mode(request.mode),
         reason="manual mode specified",
@@ -320,6 +324,7 @@ def _build_router_metadata(
     router_confidence: str | None,
     fallback_mode: RetrievalMode | None,
     fallback_reason: str | None,
+    routing_query_source: str,
 ) -> dict[str, object]:
     return {
         "requested_mode": requested_mode.value,
@@ -330,6 +335,7 @@ def _build_router_metadata(
         "router_type": "rule_based" if requested_mode == RetrievalMode.AUTO else None,
         "fallback_mode": fallback_mode.value if fallback_mode else None,
         "fallback_reason": fallback_reason,
+        "routing_query_source": routing_query_source,
     }
 
 

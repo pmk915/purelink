@@ -60,6 +60,22 @@ Fallback is conservative:
 
 `HYBRID_TEXT` is a lightweight local retrieval mode. It is not an Elasticsearch/OpenSearch integration and does not replace vector retrieval; it adds lexical candidates before the existing reranker and citation pipeline.
 
+## Conversation Retrieval
+
+Appending a user message to an existing conversation requests `AUTO`
+retrieval. The request deliberately carries two query values:
+
+- `evidence_query` is the current user question. The deterministic router,
+  evidence profile, reranker, and Evidence Support Gate use this value.
+- `query` is the retrieval query. It may include bounded recent conversation
+  context so follow-up questions can retrieve the right document passages.
+
+Keeping these values separate prevents technical, relation, or overview terms
+from older messages from changing the mode selected for the current question.
+The selected mode can still fall back to another effective mode; for example,
+`graph_vector_mix` can select correctly and execute as `chunk_only` when no
+usable graph candidates exist.
+
 ## Why This Exists
 
 QA generation should not own retrieval details. The QA service asks for evidence and context; the retrieval layer owns candidate retrieval, graph merge, reranking, trace, and citation-ready evidence construction.
