@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from app.services.evidence_support import evaluate_evidence_support
+from app.services.qa import build_query_evidence_profile
 from app.services.retrieval.types import RetrievedEvidence, RetrievalResult
 
 
@@ -84,6 +86,10 @@ class RagEvalCaseResult:
     expected_answerable: bool | None = None
     predicted_answerable: bool | None = None
     answerability_accuracy: bool | None = None
+    evidence_support_score: float | None = None
+    evidence_support_reason: str | None = None
+    evidence_support_query_type: str | None = None
+    evidence_support_signals: dict[str, Any] = field(default_factory=dict)
     failure_reasons: tuple[str, ...] = ()
     error: str | None = None
 
@@ -196,10 +202,13 @@ def evaluate_retrieval_result(
     requested_mode = result.requested_mode.value if result.requested_mode else result.mode.value
     effective_mode = result.effective_mode.value if result.effective_mode else result.mode.value
     router_accuracy = selected_mode == case.expected_mode if requested_mode == "auto" and case.expected_mode else None
-    predicted_answerable = bool(evidences) and has_reliable_evidence(
-        evidences,
-        min_score=retrieval_min_score,
+    support_decision = evaluate_evidence_support(
+        query=case.question,
+        evidence_units=evidences,
+        profile=build_query_evidence_profile(case.question),
+        qa_intent="kb_overview" if effective_mode == "overview" else None,
     )
+    predicted_answerable = support_decision.answerable
     answerability_accuracy = (
         predicted_answerable == case.expected_answerable
         if case.expected_answerable is not None
@@ -285,6 +294,10 @@ def evaluate_retrieval_result(
         expected_answerable=case.expected_answerable,
         predicted_answerable=predicted_answerable,
         answerability_accuracy=answerability_accuracy,
+        evidence_support_score=support_decision.support_score,
+        evidence_support_reason=support_decision.reason,
+        evidence_support_query_type=support_decision.query_type,
+        evidence_support_signals=support_decision.signals,
         failure_reasons=failure_reasons,
     )
 
@@ -330,6 +343,10 @@ def failed_case_result(case: RagEvalCase, *, error: str) -> RagEvalCaseResult:
             if case.expected_answerable is not None
             else None
         ),
+        evidence_support_score=0.0,
+        evidence_support_reason="no_evidence",
+        evidence_support_query_type=None,
+        evidence_support_signals={"has_final_evidence": False},
         failure_reasons=("unexpected_no_answer",) if case.expected_answerable else (),
         error=error,
     )
@@ -674,6 +691,10 @@ def case_result_to_dict(result: RagEvalCaseResult) -> dict[str, Any]:
         "expected_answerable": result.expected_answerable,
         "predicted_answerable": result.predicted_answerable,
         "answerability_accuracy": result.answerability_accuracy,
+        "evidence_support_score": result.evidence_support_score,
+        "evidence_support_reason": result.evidence_support_reason,
+        "evidence_support_query_type": result.evidence_support_query_type,
+        "evidence_support_signals": result.evidence_support_signals,
         "failure_reasons": list(result.failure_reasons),
     }
     if result.error:

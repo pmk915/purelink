@@ -309,15 +309,31 @@ Troubleshooting examples:
 - `char_end`
 - `section_title`
 
-## 12. 可靠来源策略
+## 12. Evidence Support Gate
 
-PureLink Core 使用 `RETRIEVAL_MIN_SCORE` 控制“是否有足够可靠的来源”。
+PureLink Core separates retrieval relevance from answer support. A high-scoring
+chunk can be topically similar but still fail to answer the exact fact requested
+by the user.
 
-规则：
+After final evidence selection and before the answer provider is called, the QA
+service runs a deterministic Evidence Support Gate. The gate uses query-type
+mandatory checks plus soft support signals:
 
-- 如果没有检索到结果，直接返回固定提示
-- 如果最高分低于 `RETRIEVAL_MIN_SCORE`，也返回固定提示
-- 此时 `citations=[]`
+- entity definition questions require entity/concept coverage plus definition,
+  identity, role, or concept-description evidence;
+- entity attribute questions require the requested attribute slot, such as
+  location, birthday, color, weight, processor, responsibility, configuration,
+  or default value;
+- reason questions look for purpose, cause, benefit, or effect signals;
+- relation questions look for relation expressions and entity coverage;
+- exact technical questions look for exact identifiers or their stable parts;
+- overview questions stay looser and require non-empty overview evidence.
+
+The support score is a debugging signal, not a factual correctness score. The
+gate does not call an LLM and is not a semantic entailment model.
+
+Unsupported questions return `citations=[]` and skip the heuristic / DeepSeek /
+OpenAI-compatible answer provider.
 
 固定提示为：
 
@@ -348,7 +364,7 @@ flowchart TD
   G --> RR
   RR --> EC[Build final evidence and context]
   EC --> T[Write retrieval trace]
-  EC --> B{Top score >= RETRIEVAL_MIN_SCORE?}
+  EC --> B{Evidence supports query?}
   B -->|No| N[Return no reliable source answer and empty citations]
   B -->|Yes| P[Build prompt]
   P --> L[Generate answer]

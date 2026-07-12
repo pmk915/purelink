@@ -75,6 +75,28 @@ def finish_retrieval_trace(
     db.flush()
 
 
+def merge_retrieval_trace_metadata(
+    db: Session,
+    *,
+    trace_id: int,
+    metadata: dict[str, object],
+) -> None:
+    trace = db.scalar(select(RetrievalTrace).where(RetrievalTrace.id == trace_id))
+    if trace is None:
+        return
+
+    existing: dict[str, object] = {}
+    if trace.metadata_json:
+        try:
+            payload = json.loads(trace.metadata_json)
+        except json.JSONDecodeError:
+            payload = {}
+        if isinstance(payload, dict):
+            existing = payload
+    trace.metadata_json = _dump_metadata({**existing, **metadata})
+    db.flush()
+
+
 def record_retrieval_trace_items(
     db: Session,
     *,
