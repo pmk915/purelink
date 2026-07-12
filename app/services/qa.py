@@ -162,6 +162,19 @@ ENTITY_RELATION_TERMS = frozenset(
         "上下游",
         "连接",
         "组成",
+        "derived from",
+        "depends on",
+        "works with",
+        "follows",
+        "followed",
+        "leads",
+        "encounters",
+        "produces",
+        "becomes",
+        "creates",
+        "reduces",
+        "supports",
+        "without blocking",
     }
 )
 
@@ -715,6 +728,7 @@ def _has_reliable_retrieval_results(
 def select_context_chunks_for_answer(
     retrieved_chunks: list[RetrievedChunk],
     *,
+    question: str | None = None,
     max_chunks: int = MAX_ASK_CONTEXT_CHUNKS,
     max_total_chars: int = MAX_ASK_CONTEXT_TOTAL_CHARS,
     max_chunks_per_document: int = MAX_ASK_CHUNKS_PER_DOCUMENT,
@@ -726,7 +740,8 @@ def select_context_chunks_for_answer(
     seen_text_fingerprints: set[str] = set()
     total_chars = 0
 
-    for chunk in retrieved_chunks:
+    ranked_chunks = _rank_context_chunks(retrieved_chunks, question=question)
+    for chunk in ranked_chunks:
         if len(selected) >= max_chunks:
             break
         if chunk.chunk_id in seen_chunk_ids:
@@ -757,6 +772,71 @@ def select_context_chunks_for_answer(
         total_chars = next_total_chars
 
     return selected
+
+
+def _rank_context_chunks(
+    chunks: list[RetrievedChunk],
+    *,
+    question: str | None,
+) -> list[RetrievedChunk]:
+    if not question:
+        return chunks
+
+    question_features = _build_query_features(question)
+    profile = _build_query_evidence_profile(question)
+    technical_identifiers = _extract_technical_identifiers(question)
+    technical_intent = _technical_question_intent(question)
+    if (
+        profile.query_type == "generic_factual"
+        and not (technical_identifiers and technical_intent)
+    ):
+        return chunks
+    ranked: list[tuple[float, int, RetrievedChunk]] = []
+    for index, chunk in enumerate(chunks):
+        structured_text = _build_chunk_structured_relevance_text(chunk)
+        lexical_relevance = _lexical_relevance(chunk.text, question_features)
+        structured_relevance = _lexical_relevance(structured_text, question_features)
+        entity_match = _has_entity_exact_match(
+            f"{chunk.text} {structured_text}",
+            profile=profile,
+        )
+        intent_alignment = _intent_alignment(
+            f"{chunk.text} {structured_text}",
+            profile=profile,
+        )
+        structure_phrase_bonus = _structure_phrase_bonus(
+            question=question,
+            structured_text=structured_text,
+        )
+        intent_weight = 0.15 if profile.query_type == "entity_relation" else 0.05
+        score_weight = 0.25 if profile.query_type == "entity_relation" else 0.35
+        priority = (
+            (score_weight * max(0.0, float(chunk.score)))
+            + (0.35 * lexical_relevance)
+            + (0.15 * structured_relevance)
+            + (0.10 if entity_match else 0.0)
+            + (intent_weight if intent_alignment > 0 else 0.0)
+            + structure_phrase_bonus
+        )
+        ranked.append((priority, index, chunk))
+    ranked.sort(key=lambda item: (-item[0], item[1]))
+    return [item[2] for item in ranked]
+
+
+def _build_chunk_structured_relevance_text(chunk: RetrievedChunk) -> str:
+    parts = [str(chunk.section_title or "")]
+    parts.extend(str(item) for item in chunk.heading_path or () if item)
+    if chunk.source_locator and str(chunk.source_locator).casefold().startswith("section:"):
+        parts.append(str(chunk.source_locator))
+    return " ".join(part for part in parts if part)
+
+
+def _structure_phrase_bonus(*, question: str, structured_text: str) -> float:
+    structure_tokens = set(_technical_identifier_tokens(structured_text))
+    if len(structure_tokens) < 2:
+        return 0.0
+    question_tokens = set(_technical_identifier_tokens(question))
+    return 0.10 if structure_tokens.issubset(question_tokens) else 0.0
 
 
 def organize_citations(
@@ -851,6 +931,8 @@ def select_evidence_units(
     use_query_evidence_profile: bool = True,
 ) -> list[CitationUnitCandidate]:
     question_features = _build_query_features(question)
+    technical_identifiers = _extract_technical_identifiers(question)
+    technical_intent = _technical_question_intent(question)
     evidence_profile = (
         _build_query_evidence_profile(question)
         if use_query_evidence_profile
@@ -860,6 +942,12 @@ def select_evidence_units(
             intent_terms=frozenset(),
         )
     )
+    if technical_identifiers and technical_intent:
+        evidence_profile = QueryEvidenceProfile(
+            query_type="generic_factual",
+            entity_terms=frozenset(),
+            intent_terms=frozenset(),
+        )
     per_chunk_limit = (
         1
         if evidence_profile.query_type in ENTITY_PER_CHUNK_LIMIT_TYPES
@@ -869,7 +957,7 @@ def select_evidence_units(
     seen_keys: set[tuple[int, str, int]] = set()
 
     for chunk in retrieved_chunks:
-        if len(selected) >= max_evidence_units:
+        if not use_query_evidence_profile and len(selected) >= max_evidence_units:
             break
         units = chunk_units.get(chunk.chunk_id)
         ranked_units: list[CitationUnitCandidate]
@@ -881,6 +969,8 @@ def select_evidence_units(
                         chunk=chunk,
                         question_features=question_features,
                         evidence_profile=evidence_profile,
+                        technical_identifiers=technical_identifiers,
+                        technical_intent=technical_intent,
                     )
                     for unit in units
                 ),
@@ -905,7 +995,7 @@ def select_evidence_units(
             selected.append(candidate)
             seen_keys.add(candidate_key)
             accepted_count += 1
-            if len(selected) >= max_evidence_units:
+            if not use_query_evidence_profile and len(selected) >= max_evidence_units:
                 break
             if accepted_count >= per_chunk_limit:
                 break
@@ -955,11 +1045,38 @@ def _build_citation_unit_candidate(
     chunk: RetrievedChunk,
     question_features: set[str],
     evidence_profile: QueryEvidenceProfile,
+    technical_identifiers: tuple[str, ...],
+    technical_intent: str | None,
 ) -> CitationUnitCandidate:
     metadata = parse_chunk_metadata(unit.metadata_json, fallback_source_type=chunk.source_type)
-    lexical_relevance = _lexical_relevance(unit.unit_text, question_features)
-    entity_exact_match = _has_entity_exact_match(unit.unit_text, profile=evidence_profile)
-    intent_alignment = _intent_alignment(unit.unit_text, profile=evidence_profile)
+    structured_text = _build_bounded_unit_context_text(
+        unit_text=unit.unit_text,
+        chunk=chunk,
+        metadata=metadata,
+    )
+    lexical_relevance = max(
+        _lexical_relevance(unit.unit_text, question_features),
+        0.85 * _lexical_relevance(structured_text, question_features),
+    )
+    relation_scoring_text = (
+        structured_text
+        if evidence_profile.query_type == "entity_relation"
+        else unit.unit_text
+    )
+    entity_exact_match = _has_entity_exact_match(
+        relation_scoring_text,
+        profile=evidence_profile,
+    )
+    intent_alignment = _intent_alignment(
+        relation_scoring_text,
+        profile=evidence_profile,
+    )
+    technical_alignment = _technical_evidence_alignment(
+        unit_text=unit.unit_text,
+        structured_text=structured_text,
+        identifiers=technical_identifiers,
+        intent=technical_intent,
+    )
     entity_context_match = _has_entity_context_match(
         unit_text=unit.unit_text,
         chunk=chunk,
@@ -975,6 +1092,7 @@ def _build_citation_unit_candidate(
         entity_context_match=entity_context_match,
         intent_alignment=intent_alignment,
         profile=evidence_profile,
+        technical_alignment=technical_alignment,
     )
     return CitationUnitCandidate(
         marker="",
@@ -1076,9 +1194,15 @@ def _score_evidence_candidate(
     entity_context_match: bool,
     intent_alignment: float,
     profile: QueryEvidenceProfile,
+    technical_alignment: float = 0.0,
 ) -> float:
     if not profile.is_entity_query:
-        return (0.6 * chunk_score) + (0.4 * lexical_relevance)
+        return min(
+            1.0,
+            (0.60 * chunk_score)
+            + (0.40 * lexical_relevance)
+            + (0.10 * technical_alignment),
+        )
 
     entity_score = 1.0 if entity_exact_match or entity_context_match else 0.0
     return (
@@ -1287,11 +1411,21 @@ def _extract_relation_entity_terms(question: str) -> tuple[str, ...]:
     return tuple(
         term
         for term in (
-            _normalize_entity_term(relation_match.group(1)),
-            _normalize_entity_term(relation_match.group(2)),
+            _normalize_relation_entity_term(relation_match.group(1)),
+            _normalize_relation_entity_term(relation_match.group(2)),
         )
         if term
     )
+
+
+def _normalize_relation_entity_term(value: str) -> str:
+    cleaned = re.sub(
+        r"(?:的)?(?:情节|故事|剧情|人物|角色)?(?:关系)?(?:是什么|如何)?\s*$",
+        "",
+        value,
+        flags=re.I,
+    )
+    return _normalize_entity_term(cleaned)
 
 
 def _extract_single_entity_terms(question: str, query_type: str) -> tuple[str, ...]:
@@ -1414,6 +1548,98 @@ def _build_structured_entity_context_text(*, chunk: RetrievedChunk, metadata: ob
     if heading_path:
         parts.extend(str(item) for item in heading_path if item)
     return " ".join(parts)
+
+
+def _build_bounded_unit_context_text(
+    *,
+    unit_text: str,
+    chunk: RetrievedChunk,
+    metadata: object,
+) -> str:
+    structured_context = _build_structured_entity_context_text(
+        chunk=chunk,
+        metadata=metadata,
+    )
+    return " ".join(part for part in (unit_text, structured_context) if part)
+
+
+def _extract_technical_identifiers(question: str) -> tuple[str, ...]:
+    identifiers = re.findall(
+        r"`([^`]+)`|\b([A-Z][A-Z0-9]+(?:_[A-Z0-9]+)+)\b|\b([a-z][a-z0-9]+_[a-z0-9_]+)\b",
+        question,
+    )
+    flattened = [next((value for value in match if value), "") for match in identifiers]
+    return tuple(dict.fromkeys(value for value in flattened if value))
+
+
+def _technical_question_intent(question: str) -> str | None:
+    lowered = question.casefold()
+    if any(term in lowered for term in ("默认值", "default value", "default")):
+        return "default_value"
+    if any(term in lowered for term in ("支持哪些值", "哪些值", "supported values", "valid values")):
+        return "supported_values"
+    return None
+
+
+def _technical_evidence_alignment(
+    *,
+    unit_text: str,
+    structured_text: str,
+    identifiers: tuple[str, ...],
+    intent: str | None,
+) -> float:
+    if not identifiers:
+        return 0.0
+    context_tokens = set(_technical_identifier_tokens(structured_text))
+    compact_context = "".join(_technical_identifier_tokens(structured_text))
+    if not all(
+        (
+            set(_technical_identifier_tokens(identifier)).issubset(context_tokens)
+            or "".join(_technical_identifier_tokens(identifier)) in compact_context
+        )
+        for identifier in identifiers
+    ):
+        return 0.0
+    if intent == "default_value":
+        lowered = unit_text.casefold()
+        has_default_label = "default" in lowered or "默认" in lowered
+        has_literal_value = bool(
+            re.search(
+                r"(?:^|[\s:=])(?:-?\d+(?:\.\d+)?|true|false|none|null)(?:$|[\s,.;，。])",
+                lowered,
+            )
+        )
+        return 1.0 if has_default_label and has_literal_value else 0.0
+    if intent == "supported_values":
+        lowered = unit_text.casefold()
+        return 1.0 if any(
+            term in lowered
+            for term in (
+                "supported values",
+                "valid values",
+                "supports",
+                "options",
+                "one of",
+                "支持",
+                "可选值",
+            )
+        ) else 0.0
+    return 0.5
+
+
+def _technical_identifier_tokens(value: str) -> list[str]:
+    unquoted = re.sub(r"[`'\"]", " ", str(value or ""))
+    split_camel = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", unquoted)
+    raw_tokens = re.findall(r"[A-Za-z0-9]+", re.sub(r"[_-]+", " ", split_camel))
+    return [_singularize_technical_token(token.casefold()) for token in raw_tokens if token]
+
+
+def _singularize_technical_token(token: str) -> str:
+    if len(token) > 4 and token.endswith("ies"):
+        return token[:-3] + "y"
+    if len(token) > 4 and token.endswith("s") and not token.endswith("ss"):
+        return token[:-1]
+    return token
 
 
 def _has_local_entity_anchor(
