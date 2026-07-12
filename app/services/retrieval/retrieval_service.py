@@ -148,7 +148,14 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
                             graph_chunks=graph_chunks,
                             top_k=initial_top_k,
                         )
-            context_chunks = raw_chunks if expand_for_reranker else _select_context_chunks(raw_chunks)
+            context_chunks = (
+                raw_chunks
+                if expand_for_reranker
+                else _select_context_chunks(
+                    raw_chunks,
+                    question=request.evidence_query or request.query,
+                )
+            )
             graph_chunk_keys = {
                 (item.document_id, str(item.chunk_id))
                 for item in graph_chunks
@@ -610,10 +617,10 @@ def _coerce_review_status(value: object) -> DocumentReviewStatus:
     return DocumentReviewStatus(str(value))
 
 
-def _select_context_chunks(raw_chunks):
+def _select_context_chunks(raw_chunks, *, question: str | None = None):
     from app.services.qa import select_context_chunks_for_answer
 
-    return select_context_chunks_for_answer(raw_chunks)
+    return select_context_chunks_for_answer(raw_chunks, question=question)
 
 
 def _select_evidence_units(

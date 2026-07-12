@@ -858,6 +858,46 @@ def test_select_context_chunks_for_answer_deduplicates_overlapping_chunks() -> N
     assert selected_ids.count("1:0") == 1
 
 
+def test_select_context_chunks_for_answer_promotes_explicit_relation_fact() -> None:
+    chunks = [
+        _retrieved_chunk(
+            chunk_id="1:0",
+            document_id=1,
+            document_name="alice.md",
+            score=0.96,
+            text="Title: Alice in Wonderland. Type: character reference.",
+            section_title="Source metadata",
+        ),
+        _retrieved_chunk(
+            chunk_id="1:1",
+            document_id=1,
+            document_name="alice.md",
+            score=0.94,
+            text="Alice is the main character in the story.",
+            section_title="Alice",
+        ),
+        _retrieved_chunk(
+            chunk_id="1:2",
+            document_id=1,
+            document_name="alice.md",
+            score=0.84,
+            text="Alice follows the White Rabbit into the rabbit-hole.",
+            section_title="White Rabbit",
+            heading_path=("Characters", "White Rabbit"),
+        ),
+    ]
+
+    selected = select_context_chunks_for_answer(
+        chunks,
+        question="White Rabbit 和 Alice 的情节关系是什么？",
+        max_chunks=2,
+        max_total_chars=4000,
+        max_chunks_per_document=2,
+    )
+
+    assert "1:2" in {item.chunk_id for item in selected}
+
+
 def test_answer_question_returns_empty_citations_when_scores_are_below_threshold(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2379,6 +2419,82 @@ def test_select_evidence_units_max_evidence_units_stops_global_selection(
         )
 
     assert [item.text for item in evidence_units] == ["PureLink 是一个知识库问答系统。"]
+
+
+def test_select_evidence_units_pairs_technical_identifier_with_default_value(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="retrieval-config.md",
+        )
+        role_chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="RETRIEVAL_MIN_SCORE controls minimum-score filtering.",
+        )
+        value_chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=1,
+            chunk_text="## Retrieval Min Score\nDefault value: 0.15.",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=role_chunk.chunk_key,
+            unit_index=0,
+            unit_text="RETRIEVAL_MIN_SCORE controls minimum-score filtering.",
+            metadata={"section_title": "Retrieval configuration"},
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=value_chunk.chunk_key,
+            unit_index=1,
+            unit_text="Default value: 0.15.",
+            metadata={
+                "section_title": "Retrieval Min Score",
+                "heading_path": ["Configuration", "Retrieval Min Score"],
+            },
+        )
+        db.commit()
+
+        role_result = _retrieved_chunk(
+            chunk_id=role_chunk.chunk_key,
+            chunk_db_id=role_chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.95,
+            text=role_chunk.chunk_text,
+            section_title="Retrieval configuration",
+        )
+        value_result = _retrieved_chunk(
+            chunk_id=value_chunk.chunk_key,
+            chunk_db_id=value_chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.88,
+            text=value_chunk.chunk_text,
+            section_title="Retrieval Min Score",
+            heading_path=("Configuration", "Retrieval Min Score"),
+        )
+        evidence_units = select_evidence_units(
+            question="RETRIEVAL_MIN_SCORE 默认值是什么？",
+            retrieved_chunks=[role_result, value_result],
+            chunk_units=load_citation_units_for_chunks(
+                db=db,
+                chunks=[role_result, value_result],
+            ),
+            max_evidence_units=1,
+        )
+
+    assert [item.text for item in evidence_units] == ["Default value: 0.15."]
 
 
 def test_select_evidence_units_mixed_english_entity_config_attribute(
