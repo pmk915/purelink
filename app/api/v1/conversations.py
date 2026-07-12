@@ -30,7 +30,6 @@ from app.services.qa import (
     build_conversation_context,
     build_conversation_retrieval_query,
 )
-from app.services.qa_intent import QAIntent, classify_qa_intent
 from app.services.retrieval import (
     RetrievalMode,
     RetrievalRequest,
@@ -160,12 +159,6 @@ async def append_conversation_message_endpoint(
     )
     team_id = knowledge_base.team_id if scope == KnowledgeBaseScope.TEAM else None
     vector_root = resolve_vector_store_root(settings.vector_store_dir, base_dir=BASE_DIR)
-    intent = classify_qa_intent(payload.content)
-    retrieval_mode = (
-        RetrievalMode.OVERVIEW
-        if intent == QAIntent.KB_OVERVIEW
-        else RetrievalMode.CHUNK_ONLY
-    )
     try:
         retrieval_result = await retrieve_knowledge(
             RetrievalRequest(
@@ -179,7 +172,8 @@ async def append_conversation_message_endpoint(
                 query=retrieval_query,
                 evidence_query=payload.content,
                 top_k=5,
-                mode=retrieval_mode,
+                mode=RetrievalMode.AUTO,
+                conversation_id=conversation.id,
                 required_review_status=required_review_status,
             )
         )
@@ -211,13 +205,17 @@ async def append_conversation_message_endpoint(
         ) from exc
 
     logger.info(
-        "conversation message appended conversation_id=%s knowledge_base_id=%s qa_intent=%s recent_message_count=%s retrieval_query_length=%s citation_count=%s",
+        "conversation message appended conversation_id=%s knowledge_base_id=%s requested_mode=%s selected_mode=%s effective_mode=%s fallback_reason=%s evidence_support_reason=%s citation_count=%s recent_message_count=%s retrieval_query_length=%s",
         conversation.id,
         knowledge_base.id,
-        qa_result.intent,
+        retrieval_result.requested_mode.value if retrieval_result.requested_mode else None,
+        retrieval_result.selected_mode.value if retrieval_result.selected_mode else None,
+        retrieval_result.effective_mode.value if retrieval_result.effective_mode else retrieval_result.mode.value,
+        retrieval_result.fallback_reason,
+        qa_result.evidence_support.reason if qa_result.evidence_support else None,
+        len(qa_result.citations),
         len(conversation_context),
         len(retrieval_query),
-        len(qa_result.citations),
     )
 
     user_message, assistant_message = persist_question_answer_exchange(

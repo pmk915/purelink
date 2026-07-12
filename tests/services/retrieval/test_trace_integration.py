@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.config import get_settings
 from app.db.base import Base, load_all_models
 from app.models.document import Document
+from app.models.conversation import Conversation
 from app.models.enums import (
     DocumentProcessingStatus,
     DocumentReviewStatus,
@@ -22,6 +23,7 @@ from app.models.retrieval_trace import RetrievalTrace, RetrievalTraceItem
 from app.models.user import User
 from app.services.document_embedding import RetrievedChunk
 from app.services.retrieval.retrieval_service import retrieve
+from app.services.retrieval.query_router import route_query as actual_route_query
 from app.services.retrieval.types import RetrievalMode, RetrievalRequest
 
 
@@ -136,6 +138,84 @@ async def test_retrieval_trace_can_be_disabled(
 
     assert result.trace_id is None
     assert trace_count == 0
+
+
+@pytest.mark.anyio
+async def test_auto_routing_uses_evidence_query_while_retrieval_uses_augmented_query(
+    session_factory: sessionmaker,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RERANKER_ENABLED", "false")
+    get_settings.cache_clear()
+    routed_queries: list[str] = []
+    retrieved_queries: list[str] = []
+
+    def capture_route_query(query: str):
+        routed_queries.append(query)
+        return actual_route_query(query)
+
+    def fake_retrieve_chunks_for_documents(**kwargs):  # noqa: ANN003
+        retrieved_queries.append(kwargs["query"])
+        return [
+            _retrieved_chunk(
+                document_id=kwargs["documents"][0].id,
+                chunk_id="chunk-current-question",
+                text="Alice Chen works in Singapore.",
+                score=0.9,
+            )
+        ]
+
+    monkeypatch.setattr(
+        "app.services.retrieval.retrieval_service.route_query",
+        capture_route_query,
+    )
+    monkeypatch.setattr(
+        "app.services.retrieval.retrieval_service.chunk_retriever.retrieve_chunks_for_documents",
+        fake_retrieve_chunks_for_documents,
+    )
+
+    augmented_query = "请总结文档\nRETRIEVAL_MIN_SCORE\nAlice 和 Bob 的关系\nAlice Chen 在哪里办公？"
+    current_question = "Alice Chen 在哪里办公？"
+    with session_factory() as db:
+        user, knowledge_base, document = _create_user_kb_document(db)
+        conversation = Conversation(
+            user_id=user.id,
+            knowledge_base_id=knowledge_base.id,
+            title="Conversation routing",
+        )
+        db.add(conversation)
+        db.flush()
+        result = await retrieve(
+            RetrievalRequest(
+                db=db,
+                documents=[document],
+                vector_root=tmp_path,
+                scope=KnowledgeBaseScope.PERSONAL,
+                knowledge_base_id=knowledge_base.id,
+                user_id=user.id,
+                conversation_id=conversation.id,
+                query=augmented_query,
+                evidence_query=current_question,
+                mode=RetrievalMode.AUTO,
+                include_citations=False,
+                required_review_status=DocumentReviewStatus.NOT_REQUIRED,
+            )
+        )
+        trace = db.scalar(select(RetrievalTrace).where(RetrievalTrace.id == result.trace_id))
+        trace_metadata = json.loads(trace.metadata_json or "{}") if trace else {}
+
+    assert routed_queries == [current_question]
+    assert retrieved_queries == [augmented_query]
+    assert result.query == augmented_query
+    assert result.requested_mode == RetrievalMode.AUTO
+    assert result.selected_mode == RetrievalMode.CHUNK_ONLY
+    assert result.router_confidence == "low"
+    assert result.metadata["routing_query_source"] == "evidence_query"
+    assert trace is not None
+    assert trace.query == augmented_query
+    assert trace.conversation_id == conversation.id
+    assert trace_metadata["routing_query_source"] == "evidence_query"
 
 
 @pytest.mark.anyio
