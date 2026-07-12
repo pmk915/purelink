@@ -336,7 +336,7 @@ def test_router_and_answerability_accuracy_and_failure_reasons() -> None:
     assert "trace_missing" in evaluated.failure_reasons
 
 
-def test_answerability_accuracy_detects_unexpected_answerable() -> None:
+def test_answerability_accuracy_uses_support_gate_for_no_answer() -> None:
     case = RagEvalCase(
         id="no-answer",
         question="Acme CEO?",
@@ -346,38 +346,46 @@ def test_answerability_accuracy_detects_unexpected_answerable() -> None:
     result = RetrievalResult(
         query=case.question,
         mode=RetrievalMode.CHUNK_ONLY,
-        evidences=[_evidence(document_id=1, document_name="policy.txt")],
+        evidences=[_evidence(document_id=1, document_name="policy.txt", text="Acme employee policy covers holidays.")],
         context_text="policy",
         trace_id=1,
     )
 
     evaluated = evaluate_retrieval_result(case, result)
 
-    assert evaluated.predicted_answerable is True
-    assert evaluated.answerability_accuracy is False
-    assert "unexpected_answerable" in evaluated.failure_reasons
+    assert evaluated.predicted_answerable is False
+    assert evaluated.answerability_accuracy is True
+    assert evaluated.evidence_support_reason == "missing_attribute_support"
+    assert "unexpected_answerable" not in evaluated.failure_reasons
 
 
-def test_answerability_requires_reliable_evidence_score() -> None:
+def test_answerability_support_gate_accepts_supported_evidence() -> None:
     case = RagEvalCase(
-        id="low-score",
-        question="Acme CEO?",
+        id="answerable",
+        question="Alice Chen 在哪里办公？",
         knowledge_base_id=1,
-        expected_answerable=False,
+        expected_answerable=True,
     )
     result = RetrievalResult(
         query=case.question,
         mode=RetrievalMode.CHUNK_ONLY,
-        evidences=[_evidence(document_id=1, document_name="policy.txt", final_score=0.05)],
-        context_text="policy",
+        evidences=[
+            _evidence(
+                document_id=1,
+                document_name="roles.txt",
+                text="Alice Chen 的办公地点：Singapore。",
+                final_score=0.05,
+            )
+        ],
+        context_text="Alice Chen 的办公地点：Singapore。",
         trace_id=1,
     )
 
     evaluated = evaluate_retrieval_result(case, result, retrieval_min_score=0.15)
 
-    assert evaluated.predicted_answerable is False
+    assert evaluated.predicted_answerable is True
     assert evaluated.answerability_accuracy is True
-    assert "unexpected_answerable" not in evaluated.failure_reasons
+    assert evaluated.evidence_support_reason == "supported"
 
 
 def test_null_metrics_are_not_failure_reasons() -> None:

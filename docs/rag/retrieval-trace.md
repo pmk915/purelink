@@ -21,6 +21,19 @@ Records:
 - final evidence count
 - duration and metadata
 
+The metadata JSON also records routing and answer-support decisions when
+available:
+
+- `requested_mode`, `selected_mode`, `effective_mode`
+- `router_reason`, `router_confidence`
+- `fallback_mode`, `fallback_reason`
+- `answerable`
+- `evidence_support_score`
+- `evidence_support_reason`
+- `evidence_support_query_type`
+- `evidence_support_signals`
+- `supporting_evidence_ids`
+
 ## Trace Items
 
 Each item can record:
@@ -37,4 +50,6 @@ Each item can record:
 
 ## Debugging Use
 
-Trace helps determine whether a bad answer came from parsing, chunking, retrieval recall, reranking, stale index filtering, citation selection, or answer generation.
+Trace helps determine whether a bad answer came from parsing, chunking,
+retrieval recall, reranking, stale index filtering, citation selection, evidence
+support gating, or answer generation.

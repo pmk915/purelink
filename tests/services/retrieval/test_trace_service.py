@@ -12,6 +12,7 @@ from app.models.enums import RetrievalFilteredReason
 from app.models.retrieval_trace import RetrievalTrace, RetrievalTraceItem
 from app.services.retrieval.trace_service import (
     finish_retrieval_trace,
+    merge_retrieval_trace_metadata,
     record_retrieval_trace_items,
     start_retrieval_trace,
     truncate_candidate_preview,
@@ -74,6 +75,43 @@ def test_start_and_finish_retrieval_trace(session_factory: sessionmaker) -> None
     assert saved.used_reranker is True
     assert saved.completed_at is not None
     assert json.loads(saved.metadata_json)["stage"] == "done"
+
+
+def test_merge_retrieval_trace_metadata_preserves_existing_fields(session_factory: sessionmaker) -> None:
+    with session_factory() as db:
+        trace = start_retrieval_trace(
+            db,
+            user_id=None,
+            knowledge_base_id=None,
+            query="trace query",
+            mode="auto",
+            top_k=3,
+        )
+        finish_retrieval_trace(
+            db,
+            trace_id=trace.id,
+            initial_candidate_count=4,
+            final_evidence_count=2,
+            used_reranker=False,
+            metadata={"selected_mode": "chunk_only", "router_type": "rule_based"},
+        )
+        merge_retrieval_trace_metadata(
+            db,
+            trace_id=trace.id,
+            metadata={
+                "answerable": False,
+                "evidence_support_reason": "missing_attribute_support",
+                "evidence_support_score": 0.42,
+            },
+        )
+        saved = db.scalar(select(RetrievalTrace).where(RetrievalTrace.id == trace.id))
+
+    assert saved is not None
+    metadata = json.loads(saved.metadata_json or "{}")
+    assert metadata["selected_mode"] == "chunk_only"
+    assert metadata["router_type"] == "rule_based"
+    assert metadata["answerable"] is False
+    assert metadata["evidence_support_reason"] == "missing_attribute_support"
 
 
 def test_record_retrieval_trace_items_truncates_preview(session_factory: sessionmaker) -> None:

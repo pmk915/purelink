@@ -26,9 +26,15 @@ from app.schemas.llm import (
 from app.schemas.qa import CitationRead
 from app.services.chunk_metadata import build_chunk_snippet, parse_chunk_metadata
 from app.services.document_embedding import RetrievedChunk, tokenize_text
+from app.services.evidence_support import (
+    OVERVIEW_INTENT,
+    EvidenceSupportDecision,
+    evaluate_evidence_support,
+)
 from app.services.llm import LLMProviderError, generate_openai_compatible_chat_completion
 from app.services.overview_retrieval import collect_overview_chunks
 from app.services.qa_intent import QAIntent, classify_qa_intent
+from app.services.retrieval import trace_service
 from app.services.retrieval.types import RetrievalMode, RetrievalResult
 from app.services.source_locator import (
     build_preview_target_for_chunk,
@@ -179,6 +185,7 @@ class QuestionAnswerResult:
     citations: list[CitationRead]
     prompt: PromptBundle
     intent: str
+    evidence_support: EvidenceSupportDecision | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -339,6 +346,7 @@ def answer_question(
             generator=generator,
             settings=active_settings,
             preselected_evidence_units=evidence_units,
+            retrieval_result=retrieval_result,
         )
 
     if intent == QAIntent.KB_OVERVIEW:
@@ -389,6 +397,7 @@ def _answer_kb_fact_question(
         generator=generator,
         settings=settings,
         preselected_evidence_units=None,
+        retrieval_result=None,
     )
 
 
@@ -462,6 +471,7 @@ def _answer_kb_overview_question(
         generator=generator,
         settings=settings,
         preselected_evidence_units=None,
+        retrieval_result=None,
     )
 
 
@@ -476,7 +486,9 @@ def _answer_with_context_chunks(
     generator: AnswerGenerator | None,
     settings: Settings,
     preselected_evidence_units: list[CitationUnitCandidate] | None,
+    retrieval_result: RetrievalResult | None,
 ) -> QuestionAnswerResult:
+    evidence_profile = _build_query_evidence_profile(question)
     if preselected_evidence_units is None:
         chunk_units = load_citation_units_for_chunks(db=db, chunks=context_chunks) if db is not None else {}
         evidence_units = select_evidence_units(
@@ -496,6 +508,17 @@ def _answer_with_context_chunks(
         len(evidence_units),
         sum(1 for item in evidence_units if item.citation_unit_id is None),
         [len(item.text) for item in evidence_units],
+    )
+    support_decision = evaluate_evidence_support(
+        query=question,
+        evidence_units=evidence_units,
+        profile=evidence_profile,
+        qa_intent=OVERVIEW_INTENT if intent == QAIntent.KB_OVERVIEW else None,
+    )
+    _record_evidence_support_metadata(
+        db=db,
+        retrieval_result=retrieval_result,
+        support_decision=support_decision,
     )
     prompt = (
         build_overview_prompt(
@@ -518,15 +541,21 @@ def _answer_with_context_chunks(
             min_score=settings.retrieval_min_score,
         ) and bool(evidence_units)
     )
-    if not has_reliable_context:
+    if not has_reliable_context or not support_decision.answerable:
         answer = NO_RELIABLE_EVIDENCE_MESSAGE
         citations: list[CitationRead] = []
+        skip_reason = (
+            "insufficient_retrieval_or_evidence"
+            if not has_reliable_context
+            else support_decision.reason
+        )
         logger.info(
-            "qa answer skipped question=%s qa_intent=%s selected_chunk_ids=%s reason=%s",
+            "qa answer skipped question=%s qa_intent=%s selected_chunk_ids=%s reason=%s support_score=%s",
             question,
             intent.value,
             [item.chunk_id for item in context_chunks],
-            "insufficient_retrieval_or_evidence",
+            skip_reason,
+            support_decision.support_score,
         )
     else:
         answer_generator = generator or resolve_answer_generator(settings)
@@ -572,7 +601,29 @@ def _answer_with_context_chunks(
         citations=citations,
         prompt=prompt,
         intent=intent.value,
+        evidence_support=support_decision,
     )
+
+
+def _record_evidence_support_metadata(
+    *,
+    db: Session | None,
+    retrieval_result: RetrievalResult | None,
+    support_decision: EvidenceSupportDecision,
+) -> None:
+    metadata = support_decision.to_metadata()
+    if retrieval_result is not None:
+        retrieval_result.metadata.update(metadata)
+    if db is None or retrieval_result is None or retrieval_result.trace_id is None:
+        return
+    try:
+        trace_service.merge_retrieval_trace_metadata(
+            db,
+            trace_id=int(retrieval_result.trace_id),
+            metadata=metadata,
+        )
+    except Exception:
+        logger.exception("failed to record evidence support metadata trace_id=%s", retrieval_result.trace_id)
 
 
 def build_conversation_context(
@@ -1220,6 +1271,10 @@ def _build_query_evidence_profile(question: str) -> QueryEvidenceProfile:
         entity_terms=frozenset(),
         intent_terms=frozenset(),
     )
+
+
+def build_query_evidence_profile(question: str) -> QueryEvidenceProfile:
+    return _build_query_evidence_profile(question)
 
 
 def _extract_relation_entity_terms(question: str) -> tuple[str, ...]:

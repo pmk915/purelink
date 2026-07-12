@@ -57,10 +57,13 @@ The generalization case file also supports optional fields:
 - `unknown_evidence_count`: evidence that cannot be judged by phrase/doc rules.
 - `evidence_precision`: relevant / (relevant + irrelevant), excluding unknown evidence.
 - `router_accuracy`: selected mode matches `expected_mode` for `auto` cases. Applicable only when the requested mode is `auto` and `expected_mode` is present.
-- `answerability_accuracy`: evidence-gate answerability matches `expected_answerable`. This uses final evidence presence plus `RETRIEVAL_MIN_SCORE`; it does not judge semantic entailment.
+- `answerability_accuracy`: production Evidence Support Gate answerability matches `expected_answerable`. The gate is deterministic and uses query-type mandatory checks such as requested attribute coverage, relation support, exact technical identifier coverage, and reason/definition signals.
+- `evidence_support_score`, `evidence_support_reason`, `evidence_support_query_type`, and `evidence_support_signals`: debugging fields emitted by the production support evaluator.
 - `retrieval_latency_ms` and `total_eval_latency_ms`: in-process retrieval timing values.
 
-The harness is deterministic and does not use LLM-as-judge.
+The harness is deterministic and does not use LLM-as-judge. The support score is
+not a semantic correctness score; it explains why the rule-based production gate
+allowed or rejected the final evidence.
 
 The canonical final evidence source is `RetrievalResult.evidences`. Retrieval metadata such as `initial_chunks`, `context_chunks`, and `evidence_units` is useful for debugging, but summary metrics do not treat raw chunks as final citation evidence. When the reranker is enabled, `RetrievalResult.evidences` contains the aligned final evidence.
 
