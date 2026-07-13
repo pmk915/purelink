@@ -80,9 +80,17 @@ INLINE_WHITESPACE_PATTERN = re.compile(r"[^\S\n]+")
 MARKDOWN_HEADING_PATTERN = re.compile(r"^(#{1,6})\s+(.*)$")
 MARKDOWN_LIST_MARKER_PATTERN = re.compile(r"^\s*([-*+]|\d+[.)])\s+")
 MARKDOWN_LINK_PATTERN = re.compile(r"!?\[([^\]]*)\]\([^)]+\)")
-MARKDOWN_EMPHASIS_PATTERN = re.compile(r"(\*\*|__|\*|_|~~)")
+MARKDOWN_STRONG_PATTERN = re.compile(r"\*\*(?=\S)(.+?)(?<=\S)\*\*")
+MARKDOWN_STRIKE_PATTERN = re.compile(r"~~(?=\S)(.+?)(?<=\S)~~")
+MARKDOWN_ITALIC_ASTERISK_PATTERN = re.compile(
+    r"(?<!\*)\*(?!\*)(?=\S)(.+?)(?<=\S)(?<!\*)\*(?!\*)"
+)
+MARKDOWN_ITALIC_UNDERSCORE_PATTERN = re.compile(
+    r"(?<![\w_])_(?!_)(?=\S)(.+?)(?<=\S)(?<!_)_(?![\w_])"
+)
 FIELD_LIKE_LINE_PATTERN = re.compile(r"^[^：:\n]{1,32}[：:]\s*\S+")
 SENTENCE_ENDING_CHARACTERS = {"。", "！", "？", "；", ".", "!", "?", ";"}
+CLOSING_SENTENCE_CHARACTERS = {'"', "'", "”", "’", ")", "]", "}", "）", "】", "》"}
 CLAUSE_ENDING_CHARACTERS = {"，", ",", "、", "：", ":"}
 LOW_VALUE_CITATION_TEXTS = {
     "概要",
@@ -1053,7 +1061,10 @@ def normalize_markdown_inline_text(text: str) -> str:
     normalized = MARKDOWN_LIST_MARKER_PATTERN.sub("", normalized)
     normalized = MARKDOWN_LINK_PATTERN.sub(r"\1", normalized)
     normalized = normalized.replace("`", "")
-    normalized = MARKDOWN_EMPHASIS_PATTERN.sub("", normalized)
+    normalized = MARKDOWN_STRONG_PATTERN.sub(r"\1", normalized)
+    normalized = MARKDOWN_STRIKE_PATTERN.sub(r"\1", normalized)
+    normalized = MARKDOWN_ITALIC_ASTERISK_PATTERN.sub(r"\1", normalized)
+    normalized = MARKDOWN_ITALIC_UNDERSCORE_PATTERN.sub(r"\1", normalized)
     return normalized
 
 
@@ -2546,9 +2557,20 @@ def split_text_into_sentence_spans(text: str) -> list[SentenceSpan]:
 
     while index < text_length:
         character = text[index]
-        if character in SENTENCE_ENDING_CHARACTERS:
-            flush(start, index + 1)
-            start = index + 1
+        if character in SENTENCE_ENDING_CHARACTERS and not _is_technical_token_dot(
+            text,
+            index=index,
+        ):
+            sentence_end = index + 1
+            while (
+                sentence_end < text_length
+                and text[sentence_end] in CLOSING_SENTENCE_CHARACTERS
+            ):
+                sentence_end += 1
+            flush(start, sentence_end)
+            start = sentence_end
+            index = sentence_end
+            continue
         elif character == "\n":
             newline_start = index
             while index < text_length and text[index] == "\n":
@@ -2561,6 +2583,22 @@ def split_text_into_sentence_spans(text: str) -> list[SentenceSpan]:
 
     flush(start, text_length)
     return spans
+
+
+def _is_technical_token_dot(text: str, *, index: int) -> bool:
+    if text[index] != "." or index <= 0 or index + 1 >= len(text):
+        return False
+    previous = text[index - 1]
+    following = text[index + 1]
+    if previous.isdigit() and following.isdigit():
+        return True
+    return _is_technical_token_character(previous) and _is_technical_token_character(
+        following
+    )
+
+
+def _is_technical_token_character(character: str) -> bool:
+    return character.isalnum() or character in {"_", "-"}
 
 
 def normalize_citation_unit_text(text: str) -> str:

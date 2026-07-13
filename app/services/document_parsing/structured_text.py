@@ -15,7 +15,14 @@ HEADING_PATTERN = re.compile(r"^(#{1,6})\s+(\S.*)$")
 FENCE_PATTERN = re.compile(r"^```([A-Za-z0-9_-]+)?\s*$")
 LIST_MARKER_PATTERN = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
 MARKDOWN_LINK_PATTERN = re.compile(r"!?\[([^\]]*)\]\([^)]+\)")
-MARKDOWN_EMPHASIS_PATTERN = re.compile(r"(\*\*|__|\*|_|~~)")
+MARKDOWN_STRONG_PATTERN = re.compile(r"\*\*(?=\S)(.+?)(?<=\S)\*\*")
+MARKDOWN_STRIKE_PATTERN = re.compile(r"~~(?=\S)(.+?)(?<=\S)~~")
+MARKDOWN_ITALIC_ASTERISK_PATTERN = re.compile(
+    r"(?<!\*)\*(?!\*)(?=\S)(.+?)(?<=\S)(?<!\*)\*(?!\*)"
+)
+MARKDOWN_ITALIC_UNDERSCORE_PATTERN = re.compile(
+    r"(?<![\w_])_(?!_)(?=\S)(.+?)(?<=\S)(?<!_)_(?![\w_])"
+)
 FIELD_LIKE_PATTERN = re.compile(r"^[^：:\n]{1,32}[：:]\s*\S+")
 
 
@@ -246,7 +253,10 @@ def _normalize_markdown_inline_text(text: str) -> str:
     normalized = LIST_MARKER_PATTERN.sub("", normalized)
     normalized = MARKDOWN_LINK_PATTERN.sub(r"\1", normalized)
     normalized = normalized.replace("`", "")
-    normalized = MARKDOWN_EMPHASIS_PATTERN.sub("", normalized)
+    normalized = MARKDOWN_STRONG_PATTERN.sub(r"\1", normalized)
+    normalized = MARKDOWN_STRIKE_PATTERN.sub(r"\1", normalized)
+    normalized = MARKDOWN_ITALIC_ASTERISK_PATTERN.sub(r"\1", normalized)
+    normalized = MARKDOWN_ITALIC_UNDERSCORE_PATTERN.sub(r"\1", normalized)
     return normalized.strip()
 
 

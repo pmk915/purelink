@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.config import get_settings
 from app.db.base import Base, load_all_models
 from app.models.document import Document
+from app.models.document_block import DocumentBlock
 from app.models.document_citation_unit import DocumentCitationUnit
 from app.models.document_chunk import DocumentChunk
 from app.models.enums import (
@@ -22,6 +23,8 @@ from app.models.knowledge_base import KnowledgeBase
 from app.models.user import User
 from app.services.document_embedding import DocumentEmbeddingError, RetrievedChunk
 from app.services.document_embedding import build_index_relative_path
+from app.services.document_processing import process_document
+from app.services.evidence_support import evaluate_evidence_support
 from app.services.overview_retrieval import (
     collect_overview_chunks,
     is_near_duplicate,
@@ -459,6 +462,107 @@ def test_preprocess_retrieval_query_normalizes_whitespace_and_case() -> None:
     assert "purelink" in processed.tokens
     assert "pdf" in processed.unique_tokens
     assert "1" in processed.tokens
+
+
+def test_minimum_score_citation_survives_processing_persistence_and_evidence(
+    session_factory: sessionmaker,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CHUNK_STRATEGY", "block_aware")
+    get_settings.cache_clear()
+    source_path = Path(__file__).parent / "eval/corpus/purelink_retrieval.txt"
+    stored_path = tmp_path / source_path.name
+    stored_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
+
+    try:
+        with session_factory() as db:
+            user, knowledge_base = _create_user_and_kb(db)
+            document = _create_document(
+                db,
+                user=user,
+                knowledge_base=knowledge_base,
+                original_filename=stored_path.name,
+                processing_status=DocumentProcessingStatus.UPLOADED,
+            )
+            document.storage_path = stored_path.name
+            process_document(db, document=document, upload_root=tmp_path)
+            db.commit()
+            document_id = document.id
+
+        with session_factory() as db:
+            blocks = list(
+                db.scalars(
+                    select(DocumentBlock)
+                    .where(DocumentBlock.document_id == document_id)
+                    .order_by(DocumentBlock.order_index.asc())
+                )
+            )
+            canonical_text = "\n\n".join(block.text for block in blocks)
+            unit = next(
+                item
+                for item in db.scalars(
+                    select(DocumentCitationUnit)
+                    .where(DocumentCitationUnit.document_id == document_id)
+                    .order_by(DocumentCitationUnit.unit_index.asc())
+                )
+                if "RETRIEVAL_MIN_SCORE defaults to 0.15" in item.unit_text
+            )
+            chunk = db.get(DocumentChunk, unit.chunk_id)
+            assert chunk is not None
+            unit_metadata = json.loads(unit.metadata_json or "{}")
+            chunk_metadata = json.loads(chunk.metadata_json or "{}")
+            retrieved = _retrieved_chunk(
+                chunk_id=chunk.chunk_key,
+                chunk_db_id=chunk.id,
+                document_id=document_id,
+                document_name=stored_path.name,
+                score=0.95,
+                text=chunk.chunk_text,
+                section_title=chunk_metadata.get("section_title"),
+                heading_path=tuple(chunk_metadata.get("heading_path") or ()),
+                source_type=chunk_metadata.get("source_type"),
+                char_start=chunk_metadata.get("char_start"),
+                char_end=chunk_metadata.get("char_end"),
+                source_locator=chunk_metadata.get("source_locator"),
+            )
+            candidates = build_citation_ready_fallback_units(
+                question="RETRIEVAL_MIN_SCORE 默认值是什么？",
+                retrieved_chunks=[retrieved],
+                chunk_units=load_citation_units_for_chunks(db=db, chunks=[retrieved]),
+            )
+            evidences = build_evidences(candidates)
+            support = evaluate_evidence_support(
+                query="RETRIEVAL_MIN_SCORE 默认值是什么？",
+                evidence_units=evidences,
+            )
+            prompt = build_fact_prompt(
+                question="RETRIEVAL_MIN_SCORE 默认值是什么？",
+                evidence_units=candidates,
+            )
+
+        selected_candidate = next(
+            item for item in candidates if item.citation_unit_id == unit.id
+        )
+        selected_evidence = next(
+            item for item in evidences if item.citation_unit_id == unit.id
+        )
+        assert unit.id is not None
+        assert unit_metadata["section_title"] == "Minimum Score"
+        assert unit_metadata["heading_path"] == ["PureLink Retrieval", "Minimum Score"]
+        assert unit_metadata["source_locator"] == "section:Minimum Score"
+        assert unit.start_char is not None and unit.end_char is not None
+        assert canonical_text[unit.start_char:unit.end_char] == unit.unit_text
+        assert "RETRIEVAL_MIN_SCORE" in unit.unit_text
+        assert "0.15" in unit.unit_text
+        assert "defaults to 0." not in unit.unit_text.replace("0.15", "")
+        assert selected_candidate.text == unit.unit_text
+        assert selected_evidence.text == unit.unit_text
+        assert f"content: {unit.unit_text}" in prompt.user_prompt
+        assert support.answerable is True
+        assert support.reason == "supported"
+    finally:
+        get_settings.cache_clear()
 
 
 def test_search_document_chunks_lexical_returns_keyword_matches(
