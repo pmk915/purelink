@@ -28,6 +28,7 @@ SECRET_PATTERNS = (
     re.compile(r"(?i)(api[_-]?key|password|secret)\s*=\s*['\"]?[A-Za-z0-9_-]{12,}"),
 )
 PLACEHOLDER_TOKENS = ("TODO", "TBD", "lorem ipsum", "placeholder")
+STABLE_ANSWER_MARKER_PATTERN = re.compile(r"S[1-9]\d*")
 
 
 def validate_corpus(corpus_dir: Path, cases: list[RagEvalCase]) -> list[dict[str, Any]]:
@@ -307,6 +308,14 @@ def _sanitize_case_result(item: dict[str, Any]) -> dict[str, Any]:
         "expected_answerable",
         "predicted_answerable",
         "answerability_accuracy",
+        "answer_policy_outcome",
+        "answer_policy_reason",
+        "answer_provider_called",
+        "answer_citation_required",
+        "answer_external_knowledge_allowed",
+        "answer_allowed_evidence_count",
+        "answer_allowed_markers",
+        "answer_unknown_markers_removed",
         "final_evidence_count",
         "top_documents",
         "top_1_doc_hit",
@@ -319,6 +328,18 @@ def _sanitize_case_result(item: dict[str, Any]) -> dict[str, Any]:
         "error",
     }
     sanitized = {key: item.get(key) for key in allowed_keys if key in item}
+    if "answer_allowed_markers" in sanitized:
+        markers = sanitized["answer_allowed_markers"]
+        sanitized["answer_allowed_markers"] = (
+            [
+                marker
+                for marker in markers
+                if isinstance(marker, str)
+                and STABLE_ANSWER_MARKER_PATTERN.fullmatch(marker)
+            ]
+            if isinstance(markers, (list, tuple))
+            else []
+        )
     sanitized["final_evidence_units"] = [
         {
             "document_name": unit.get("document_name"),

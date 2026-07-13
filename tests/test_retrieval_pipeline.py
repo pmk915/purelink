@@ -14,6 +14,7 @@ from app.models.document import Document
 from app.models.document_block import DocumentBlock
 from app.models.document_citation_unit import DocumentCitationUnit
 from app.models.document_chunk import DocumentChunk
+from app.models.retrieval_trace import RetrievalTrace
 from app.models.enums import (
     DocumentProcessingStatus,
     DocumentReviewStatus,
@@ -31,6 +32,7 @@ from app.services.overview_retrieval import (
     overview_score_chunk,
 )
 from app.services.qa import (
+    HeuristicAnswerGenerator,
     MessageContext,
     NO_RELIABLE_EVIDENCE_MESSAGE,
     answer_question,
@@ -70,10 +72,23 @@ class CapturingAnswerGenerator:
     def __init__(self, answer: str) -> None:
         self.answer = answer
         self.last_prompt = None
+        self.last_evidence_units = None
+        self.call_count = 0
 
     def generate(self, *, question: str, evidence_units, prompt) -> str:  # noqa: ANN001
+        self.call_count += 1
         self.last_prompt = prompt
+        self.last_evidence_units = list(evidence_units)
         return self.answer
+
+
+class RaisingAnswerGenerator:
+    def __init__(self) -> None:
+        self.call_count = 0
+
+    def generate(self, *, question: str, evidence_units, prompt) -> str:  # noqa: ANN001
+        self.call_count += 1
+        raise RuntimeError("provider failed")
 
 
 def test_classify_qa_intent_routes_fact_and_overview_questions() -> None:
@@ -1082,9 +1097,21 @@ def test_answer_question_includes_recent_conversation_in_prompt_but_keeps_eviden
     assert "乌萨奇长啥样？" in generator.last_prompt.user_prompt
     assert "Evidence Units:" in generator.last_prompt.user_prompt
     assert "不可作为事实依据" in generator.last_prompt.system_prompt
+    assert "Answer Policy Contract:" in generator.last_prompt.system_prompt
+    assert "External knowledge allowed: false." in generator.last_prompt.system_prompt
+    assert "Allowed evidence markers: [S1]." in generator.last_prompt.system_prompt
+    assert "Do not use model memory or external knowledge" in generator.last_prompt.system_prompt
+    evidence_block = generator.last_prompt.user_prompt.split("Evidence Units:\n", maxsplit=1)[1]
+    assert "乌萨奇长啥样？" not in evidence_block
+    assert "明黄色的小兔子" not in evidence_block
+    assert "user_id" not in generator.last_prompt.rendered_prompt
+    assert "knowledge_base_id" not in generator.last_prompt.rendered_prompt
+    assert "trace_id" not in generator.last_prompt.rendered_prompt
+    assert "api_key" not in generator.last_prompt.rendered_prompt
 
 
 def test_answer_question_does_not_treat_history_as_evidence_without_current_support() -> None:
+    generator = CapturingAnswerGenerator("乌萨奇叫乌萨奇 [S1]。")
     result = answer_question(
         question="那它叫什么名字？",
         retrieved_chunks=[],
@@ -1092,11 +1119,14 @@ def test_answer_question_does_not_treat_history_as_evidence_without_current_supp
             MessageContext(role="user", content="乌萨奇长啥样？"),
             MessageContext(role="assistant", content="乌萨奇叫乌萨奇 [S1]。"),
         ],
-        generator=StaticAnswerGenerator("乌萨奇叫乌萨奇 [S1]。"),
+        generator=generator,
     )
 
     assert result.answer == NO_RELIABLE_EVIDENCE_MESSAGE
     assert result.citations == []
+    assert generator.call_count == 0
+    assert result.answer_policy is not None
+    assert result.answer_policy.outcome.value == "refuse"
 
 
 def test_extract_used_citation_ids_normalizes_multiple_marker_formats() -> None:
@@ -1206,6 +1236,201 @@ def test_answer_question_returns_no_reliable_context_when_answer_has_no_valid_ma
     assert result.answer == NO_RELIABLE_EVIDENCE_MESSAGE
     assert result.citations == []
     assert result.intent == QAIntent.KB_FACT_QA.value
+
+
+def test_answer_policy_passes_only_canonical_final_evidence_and_records_unknown_marker(
+    session_factory: sessionmaker,
+) -> None:
+    generator = CapturingAnswerGenerator("Canonical fact [S1]. Invented [S99].")
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="policy.txt",
+        )
+        first_chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="Canonical fact is grounded.",
+        )
+        second_chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=1,
+            chunk_text="Broad parent chunk must not reach the provider.",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=first_chunk.chunk_key,
+            unit_index=0,
+            unit_text="Canonical fact is grounded.",
+            metadata={"source_type": "text", "source_locator": "section:Canonical"},
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=second_chunk.chunk_key,
+            unit_index=1,
+            unit_text="Unselected private evidence.",
+            metadata={"source_type": "text", "source_locator": "section:Private"},
+        )
+        db.commit()
+        retrieved = [
+            _retrieved_chunk(
+                chunk_id=first_chunk.chunk_key,
+                chunk_db_id=first_chunk.id,
+                document_id=document.id,
+                document_name=document.original_filename,
+                score=0.95,
+                text=first_chunk.chunk_text,
+            ),
+            _retrieved_chunk(
+                chunk_id=second_chunk.chunk_key,
+                chunk_db_id=second_chunk.id,
+                document_id=document.id,
+                document_name=document.original_filename,
+                score=0.90,
+                text=second_chunk.chunk_text,
+            ),
+        ]
+        all_candidates = build_citation_ready_fallback_units(
+            question="What is the canonical fact?",
+            retrieved_chunks=retrieved,
+            chunk_units=load_citation_units_for_chunks(db=db, chunks=retrieved),
+        )
+        selected_candidate = next(
+            item for item in all_candidates if item.chunk_id == first_chunk.chunk_key
+        )
+        final_evidences = build_evidences([selected_candidate])
+        retrieval_result = RetrievalResult(
+            query="What is the canonical fact?",
+            mode=RetrievalMode.CHUNK_ONLY,
+            evidences=final_evidences,
+            context_text="canonical final context",
+            trace_id=None,
+            metadata={
+                "context_chunks": retrieved,
+                "evidence_units": all_candidates,
+            },
+        )
+        trace = RetrievalTrace(
+            user_id=user.id,
+            knowledge_base_id=knowledge_base.id,
+            query="What is the canonical fact?",
+            mode=RetrievalMode.CHUNK_ONLY.value,
+            top_k=2,
+        )
+        db.add(trace)
+        db.flush()
+        retrieval_result.trace_id = trace.id
+
+        result = answer_question(
+            db=db,
+            question="What is the canonical fact?",
+            retrieved_chunks=[],
+            retrieval_result=retrieval_result,
+            generator=generator,
+        )
+        db.refresh(trace)
+        trace_metadata = json.loads(trace.metadata_json or "{}")
+
+    assert generator.call_count == 1
+    assert generator.last_evidence_units == [selected_candidate]
+    assert "Broad parent chunk" not in generator.last_prompt.user_prompt
+    assert "Unselected private evidence" not in generator.last_prompt.user_prompt
+    assert result.answer == "Canonical fact [S1]. Invented ."
+    assert [item.citation_marker for item in result.citations] == ["S1"]
+    assert result.answer_policy is not None
+    assert result.answer_policy.outcome.value == "answer"
+    assert retrieval_result.metadata["answer_provider_called"] is True
+    assert retrieval_result.metadata["answer_allowed_markers"] == ["S1"]
+    assert retrieval_result.metadata["answer_unknown_markers_removed"] == 1
+    assert trace_metadata["answer_policy_outcome"] == "answer"
+    assert trace_metadata["answer_provider_called"] is True
+    assert trace_metadata["answer_unknown_markers_removed"] == 1
+
+
+def test_answer_policy_records_provider_exception_without_fabricating_result(
+    session_factory: sessionmaker,
+) -> None:
+    generator = RaisingAnswerGenerator()
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="provider-error.txt",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="Provider error fact is grounded.",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=0,
+            unit_text="Provider error fact is grounded.",
+            metadata={"source_type": "text", "source_locator": "section:Provider"},
+        )
+        db.commit()
+        retrieved = _retrieved_chunk(
+            chunk_id=chunk.chunk_key,
+            chunk_db_id=chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.95,
+            text=chunk.chunk_text,
+        )
+        candidates = build_citation_ready_fallback_units(
+            question="What is the provider error fact?",
+            retrieved_chunks=[retrieved],
+            chunk_units=load_citation_units_for_chunks(db=db, chunks=[retrieved]),
+        )
+        retrieval_result = RetrievalResult(
+            query="What is the provider error fact?",
+            mode=RetrievalMode.CHUNK_ONLY,
+            evidences=build_evidences(candidates),
+            context_text="provider error final context",
+            metadata={"context_chunks": [retrieved], "evidence_units": candidates},
+        )
+
+        with pytest.raises(RuntimeError, match="provider failed"):
+            answer_question(
+                db=db,
+                question="What is the provider error fact?",
+                retrieved_chunks=[],
+                retrieval_result=retrieval_result,
+                generator=generator,
+            )
+
+    assert generator.call_count == 1
+    assert retrieval_result.metadata["answer_provider_called"] is True
+    assert retrieval_result.metadata["answer_policy_outcome"] == "answer"
+
+
+def test_heuristic_provider_uses_only_supplied_final_evidence_markers() -> None:
+    evidence = type(
+        "Evidence",
+        (),
+        {"text": "RETRIEVAL_MIN_SCORE defaults to 0.15.", "marker": "S1"},
+    )()
+
+    answer = HeuristicAnswerGenerator().generate(
+        question="RETRIEVAL_MIN_SCORE 默认值是什么？",
+        evidence_units=[evidence],
+        prompt=None,  # type: ignore[arg-type]
+    )
+
+    assert answer == "根据当前知识库证据，RETRIEVAL_MIN_SCORE defaults to 0.15. [S1]"
+    assert "S2" not in answer
 
 
 def test_answer_question_routes_overview_questions_to_indexed_document_chunks(
@@ -3298,7 +3523,7 @@ def test_answer_question_supports_same_document_multiple_chunk_citations(
     assert {item.chunk_id for item in result.citations[:2]} == {f"{document.id}:0", f"{document.id}:1"}
 
 
-def test_answer_question_falls_back_to_chunk_level_citation_when_units_are_missing() -> None:
+def test_answer_question_refuses_chunk_fallback_when_citation_units_are_missing() -> None:
     result = answer_question(
         question="What does the runbook say?",
         retrieved_chunks=[
@@ -3312,14 +3537,13 @@ def test_answer_question_falls_back_to_chunk_level_citation_when_units_are_missi
         ],
     )
 
-    assert result.citations
-    citation = result.citations[0]
-    assert citation.citation_unit_id is None
-    assert citation.chunk_id == "1:0"
-    assert citation.snippet == "Fallback chunk snippet remains available when units are missing."
+    assert result.answer == NO_RELIABLE_EVIDENCE_MESSAGE
+    assert result.citations == []
+    assert result.answer_policy is not None
+    assert result.answer_policy.reason == "no_citation_ready_evidence"
 
 
-def test_answer_question_chunk_level_fallback_uses_sentence_aligned_snippet() -> None:
+def test_answer_question_does_not_fabricate_sentence_citation_for_chunk_fallback() -> None:
     result = answer_question(
         question="乌萨奇长啥样？",
         retrieved_chunks=[
@@ -3346,9 +3570,7 @@ def test_answer_question_chunk_level_fallback_uses_sentence_aligned_snippet() ->
         ],
     )
 
-    assert result.citations
-    citation = result.citations[0]
-    assert citation.citation_unit_id is None
-    assert citation.snippet.endswith("。")
-    assert "粉色内耳" in citation.snippet
-    assert "圆眼睛" in citation.snippet
+    assert result.answer == NO_RELIABLE_EVIDENCE_MESSAGE
+    assert result.citations == []
+    assert result.answer_policy is not None
+    assert result.answer_policy.reason == "no_citation_ready_evidence"

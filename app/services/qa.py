@@ -24,6 +24,15 @@ from app.schemas.llm import (
     OPENAI_COMPATIBLE_PROVIDER,
 )
 from app.schemas.qa import CitationRead
+from app.services.answer_policy import (
+    AnswerPolicyDecision,
+    REASON_NO_VALID_CITATION_MARKERS,
+    REASON_NO_VALID_CITATIONS,
+    decide_answer_policy,
+    extract_citation_markers,
+    refuse_answer_policy,
+    validate_provider_markers,
+)
 from app.services.chunk_metadata import build_chunk_snippet, parse_chunk_metadata
 from app.services.document_embedding import RetrievedChunk, tokenize_text
 from app.services.evidence_support import (
@@ -35,6 +44,7 @@ from app.services.llm import LLMProviderError, generate_openai_compatible_chat_c
 from app.services.overview_retrieval import collect_overview_chunks
 from app.services.qa_intent import QAIntent, classify_qa_intent
 from app.services.retrieval import trace_service
+from app.services.retrieval.citation_builder import build_evidences
 from app.services.retrieval.types import RetrievalMode, RetrievalResult
 from app.services.source_locator import (
     build_preview_target_for_chunk,
@@ -199,6 +209,7 @@ class QuestionAnswerResult:
     prompt: PromptBundle
     intent: str
     evidence_support: EvidenceSupportDecision | None = None
+    answer_policy: AnswerPolicyDecision | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -513,6 +524,14 @@ def _answer_with_context_chunks(
         )
     else:
         evidence_units = preselected_evidence_units
+    if retrieval_result is not None:
+        evidence_units = _align_evidence_units_to_final_evidences(
+            evidence_units=evidence_units,
+            final_evidences=retrieval_result.evidences,
+        )
+        final_evidences = list(retrieval_result.evidences)
+    else:
+        final_evidences = build_evidences(evidence_units)
     logger.info(
         "qa evidence selected question=%s qa_intent=%s selected_chunk_ids=%s candidate_evidence_unit_count=%s fallback_chunk_citation_count=%s evidence_content_lengths=%s",
         question,
@@ -533,19 +552,6 @@ def _answer_with_context_chunks(
         retrieval_result=retrieval_result,
         support_decision=support_decision,
     )
-    prompt = (
-        build_overview_prompt(
-            question=question,
-            evidence_units=evidence_units,
-            conversation_context=conversation_context,
-        )
-        if intent == QAIntent.KB_OVERVIEW
-        else build_fact_prompt(
-            question=question,
-            evidence_units=evidence_units,
-            conversation_context=conversation_context,
-        )
-    )
     has_reliable_context = (
         bool(evidence_units)
         if intent == QAIntent.KB_OVERVIEW
@@ -554,37 +560,77 @@ def _answer_with_context_chunks(
             min_score=settings.retrieval_min_score,
         ) and bool(evidence_units)
     )
-    if not has_reliable_context or not support_decision.answerable:
+    policy_decision = decide_answer_policy(
+        support_answerable=support_decision.answerable,
+        support_reason=support_decision.reason,
+        final_evidences=final_evidences,
+        retrieval_context_reliable=has_reliable_context,
+    )
+    allowed_markers = set(policy_decision.evidence_markers)
+    allowed_evidence_units = [
+        item for item in evidence_units if item.marker in allowed_markers
+    ]
+    prompt = (
+        build_overview_prompt(
+            question=question,
+            evidence_units=allowed_evidence_units,
+            conversation_context=conversation_context,
+            policy_decision=policy_decision,
+        )
+        if intent == QAIntent.KB_OVERVIEW
+        else build_fact_prompt(
+            question=question,
+            evidence_units=allowed_evidence_units,
+            conversation_context=conversation_context,
+            policy_decision=policy_decision,
+        )
+    )
+    provider_called = False
+    unknown_markers_removed = 0
+    if not policy_decision.allow_provider_call:
         answer = NO_RELIABLE_EVIDENCE_MESSAGE
         citations: list[CitationRead] = []
-        skip_reason = (
-            "insufficient_retrieval_or_evidence"
-            if not has_reliable_context
-            else support_decision.reason
-        )
         logger.info(
-            "qa answer skipped question=%s qa_intent=%s selected_chunk_ids=%s reason=%s support_score=%s",
+            "qa answer skipped question=%s qa_intent=%s selected_chunk_ids=%s policy_reason=%s support_reason=%s support_score=%s",
             question,
             intent.value,
             [item.chunk_id for item in context_chunks],
-            skip_reason,
+            policy_decision.reason,
+            support_decision.reason,
             support_decision.support_score,
         )
     else:
         answer_generator = generator or resolve_answer_generator(settings)
-        answer = answer_generator.generate(
-            question=question,
-            evidence_units=evidence_units,
-            prompt=prompt,
-        )
-        used_markers = extract_used_citation_ids(answer)
-        answer = normalize_answer_citation_markers(
+        provider_called = True
+        try:
+            answer = answer_generator.generate(
+                question=question,
+                evidence_units=allowed_evidence_units,
+                prompt=prompt,
+            )
+        except Exception:
+            _record_answer_policy_metadata(
+                db=db,
+                retrieval_result=retrieval_result,
+                policy_decision=policy_decision,
+                provider_called=True,
+                unknown_markers_removed=0,
+            )
+            raise
+        marker_validation = validate_provider_markers(
             answer_text=answer,
-            allowed_markers={item.marker for item in evidence_units},
+            allowed_markers=policy_decision.evidence_markers,
         )
+        answer = marker_validation.answer_text
+        used_markers = list(marker_validation.used_markers)
+        unknown_markers_removed = marker_validation.unknown_markers_removed
         if not used_markers:
             answer = NO_RELIABLE_EVIDENCE_MESSAGE
             citations = []
+            policy_decision = refuse_answer_policy(
+                policy_decision,
+                reason=REASON_NO_VALID_CITATION_MARKERS,
+            )
             logger.info(
                 "qa answer rejected question=%s qa_intent=%s used_marker_ids=%s reason=%s",
                 question,
@@ -594,12 +640,16 @@ def _answer_with_context_chunks(
             )
         else:
             citations = build_answer_citations(
-                evidence_units=evidence_units,
+                evidence_units=allowed_evidence_units,
                 used_markers=used_markers,
                 max_citations=settings.max_citations,
             )
             if not citations:
                 answer = NO_RELIABLE_EVIDENCE_MESSAGE
+                policy_decision = refuse_answer_policy(
+                    policy_decision,
+                    reason=REASON_NO_VALID_CITATIONS,
+                )
             logger.info(
                 "qa citations resolved question=%s qa_intent=%s used_marker_ids=%s used_citation_unit_ids=%s fallback_chunk_citation_count=%s returned_citation_count=%s",
                 question,
@@ -609,12 +659,45 @@ def _answer_with_context_chunks(
                 sum(1 for item in citations if item.citation_unit_id is None),
                 len(citations),
             )
+    _record_answer_policy_metadata(
+        db=db,
+        retrieval_result=retrieval_result,
+        policy_decision=policy_decision,
+        provider_called=provider_called,
+        unknown_markers_removed=unknown_markers_removed,
+    )
     return QuestionAnswerResult(
         answer=answer,
         citations=citations,
         prompt=prompt,
         intent=intent.value,
         evidence_support=support_decision,
+        answer_policy=policy_decision,
+    )
+
+
+def _align_evidence_units_to_final_evidences(
+    *,
+    evidence_units: list[CitationUnitCandidate],
+    final_evidences: Sequence[object],
+) -> list[CitationUnitCandidate]:
+    units_by_key = {
+        _answer_evidence_key(item): item
+        for item in evidence_units
+    }
+    return [
+        unit
+        for evidence in final_evidences
+        if (unit := units_by_key.get(_answer_evidence_key(evidence))) is not None
+    ]
+
+
+def _answer_evidence_key(item: object) -> tuple[int, str, int | None, str]:
+    return (
+        int(getattr(item, "document_id")),
+        str(getattr(item, "chunk_id")),
+        getattr(item, "citation_unit_id", None),
+        " ".join(str(getattr(item, "text", "") or "").split()),
     )
 
 
@@ -637,6 +720,32 @@ def _record_evidence_support_metadata(
         )
     except Exception:
         logger.exception("failed to record evidence support metadata trace_id=%s", retrieval_result.trace_id)
+
+
+def _record_answer_policy_metadata(
+    *,
+    db: Session | None,
+    retrieval_result: RetrievalResult | None,
+    policy_decision: AnswerPolicyDecision,
+    provider_called: bool,
+    unknown_markers_removed: int,
+) -> None:
+    metadata = policy_decision.to_trace_metadata(
+        provider_called=provider_called,
+        unknown_markers_removed=unknown_markers_removed,
+    )
+    if retrieval_result is not None:
+        retrieval_result.metadata.update(metadata)
+    if db is None or retrieval_result is None or retrieval_result.trace_id is None:
+        return
+    try:
+        trace_service.merge_retrieval_trace_metadata(
+            db,
+            trace_id=int(retrieval_result.trace_id),
+            metadata=metadata,
+        )
+    except Exception:
+        logger.exception("failed to record answer policy metadata trace_id=%s", retrieval_result.trace_id)
 
 
 def build_conversation_context(
@@ -2021,16 +2130,19 @@ def build_fact_prompt(
     question: str,
     evidence_units: list[CitationUnitCandidate],
     conversation_context: Sequence[MessageContext] | None = None,
+    policy_decision: AnswerPolicyDecision | None = None,
 ) -> PromptBundle:
+    policy_block = _build_answer_policy_prompt_block(
+        evidence_units=evidence_units,
+        policy_decision=policy_decision,
+    )
     system_prompt = (
         "你是 PureLink 的知识库问答助手。"
         "以下最近对话上下文仅用于理解用户当前问题中的指代关系，不可作为事实依据。"
         "你只能根据给定的 evidence units 回答。"
         "每个事实性结论后必须标注来源编号，例如 [S1] 或 [S1][S2]。"
+        f"\n\nAnswer Policy Contract:\n{policy_block}"
         f"如果证据不足，请直接回答：{NO_RELIABLE_EVIDENCE_MESSAGE}"
-        "不要使用证据之外的知识。"
-        "不要编造来源编号。"
-        "不要引用未提供的编号。"
     )
     conversation_block = _build_conversation_context_block(conversation_context)
     context_block = _build_evidence_context_block(evidence_units)
@@ -2054,17 +2166,20 @@ def build_overview_prompt(
     question: str,
     evidence_units: list[CitationUnitCandidate],
     conversation_context: Sequence[MessageContext] | None = None,
+    policy_decision: AnswerPolicyDecision | None = None,
 ) -> PromptBundle:
+    policy_block = _build_answer_policy_prompt_block(
+        evidence_units=evidence_units,
+        policy_decision=policy_decision,
+    )
     system_prompt = (
         "你是 PureLink 的知识库总结助手。"
         "以下最近对话上下文仅用于理解用户当前问题中的指代关系，不可作为事实依据。"
         "你只能根据提供的 evidence units 总结当前知识库。"
-        "请用 3 到 6 个要点概括主要内容。"
         "每个要点后必须标注来源编号，例如 [S1] 或 [S1][S2]。"
+        f"\n\nAnswer Policy Contract:\n{policy_block}"
+        "请用 3 到 6 个要点概括主要内容。"
         "如果资料不足，请明确说明当前知识库内容有限。"
-        "不要使用 evidence units 之外的信息。"
-        "不要编造来源编号。"
-        "不要引用未提供的编号。"
     )
     conversation_block = _build_conversation_context_block(conversation_context)
     context_block = _build_evidence_context_block(evidence_units)
@@ -2105,6 +2220,34 @@ def _build_evidence_context_block(evidence_units: list[CitationUnitCandidate]) -
         context_lines.append("")
 
     return "\n".join(context_lines).strip() if context_lines else "[no evidence]"
+
+
+def _build_answer_policy_prompt_block(
+    *,
+    evidence_units: list[CitationUnitCandidate],
+    policy_decision: AnswerPolicyDecision | None,
+) -> str:
+    allowed_markers = (
+        policy_decision.evidence_markers
+        if policy_decision is not None
+        else tuple(item.marker for item in evidence_units)
+    )
+    instructions = (
+        policy_decision.policy_instructions
+        if policy_decision is not None
+        else decide_answer_policy(
+            support_answerable=bool(evidence_units),
+            support_reason="prompt_only",
+            final_evidences=evidence_units,
+        ).policy_instructions
+    )
+    marker_text = ", ".join(f"[{marker}]" for marker in allowed_markers) or "none"
+    lines = [
+        "External knowledge allowed: false.",
+        f"Allowed evidence markers: {marker_text}.",
+        *[f"- {instruction}" for instruction in instructions],
+    ]
+    return "\n".join(lines) + "\n"
 
 
 def _build_conversation_context_block(
@@ -2215,16 +2358,7 @@ def _build_text_features(text: str) -> set[str]:
 
 
 def extract_used_citation_ids(answer_text: str) -> list[str]:
-    used_markers: list[str] = []
-    seen_markers: set[str] = set()
-    for match in CITATION_MARKER_PATTERN.finditer(answer_text):
-        for raw_token in match.group(1).split(","):
-            normalized = _normalize_citation_marker(raw_token)
-            if normalized is None or normalized in seen_markers:
-                continue
-            seen_markers.add(normalized)
-            used_markers.append(normalized)
-    return used_markers
+    return list(extract_citation_markers(answer_text))
 
 
 def normalize_answer_citation_markers(
@@ -2232,25 +2366,15 @@ def normalize_answer_citation_markers(
     answer_text: str,
     allowed_markers: set[str],
 ) -> str:
-    def _replace(match: re.Match[str]) -> str:
-        normalized_tokens: list[str] = []
-        seen_tokens: set[str] = set()
-        for raw_token in match.group(1).split(","):
-            normalized = _normalize_citation_marker(raw_token)
-            if normalized is None or normalized not in allowed_markers or normalized in seen_tokens:
-                continue
-            normalized_tokens.append(f"[{normalized}]")
-            seen_tokens.add(normalized)
-        return "".join(normalized_tokens)
-
-    return CITATION_MARKER_PATTERN.sub(_replace, answer_text)
+    return validate_provider_markers(
+        answer_text=answer_text,
+        allowed_markers=tuple(allowed_markers),
+    ).answer_text
 
 
 def _normalize_citation_marker(value: str) -> str | None:
-    digits = re.sub(r"[^0-9]", "", value)
-    if not digits:
-        return None
-    return f"S{int(digits)}"
+    markers = extract_citation_markers(f"[{value}]")
+    return markers[0] if markers else None
 
 
 def _shares_locator_context(left: RetrievedChunk, right: RetrievedChunk) -> bool:

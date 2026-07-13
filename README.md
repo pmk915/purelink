@@ -220,6 +220,7 @@ The full documentation index is [docs/README.md](docs/README.md).
 - [Document Blocks](docs/ingestion/document-blocks.md)
 - [Retrieval Layer](docs/rag/retrieval-layer.md)
 - [Retrieval and Citations](docs/retrieval-and-citations.md)
+- [Answer Policy Contract](docs/rag/answer-policy.md)
 - [Lightweight GraphRAG](docs/rag/lightweight-graphrag.md)
 - [RAG Evaluation](docs/rag/rag-evaluation.md)
 - [KB Workspace](docs/product/kb-workspace.md)

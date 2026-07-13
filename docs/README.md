@@ -18,6 +18,7 @@ This page is the main map for PureLink's product, RAG architecture, ingestion, G
 - [RAG Pipeline](rag/rag-pipeline.md): ingestion-to-retrieval flow.
 - [Retrieval Layer](rag/retrieval-layer.md): retrieval modes, router, and service boundary.
 - [Retrieval and Citations](retrieval-and-citations.md): evidence selection and citation grounding.
+- [Answer Policy](rag/answer-policy.md): support-to-provider contract, refusal rules, marker validation, and trace metadata.
 - [Retrieval Trace](rag/retrieval-trace.md): trace metadata for debugging retrieval.
 - [Model Providers](rag/model-providers.md): embedding, reranker, and LLM provider boundaries.
 - [Optional Reranker](rag/reranker.md): reranker configuration and behavior.

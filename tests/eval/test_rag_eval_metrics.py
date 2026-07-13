@@ -12,7 +12,9 @@ from scripts.eval.rag_eval import (
     calculate_keyword_coverage,
     calculate_retrieval_hit,
     classify_evidence_units,
+    case_result_to_dict,
     evaluate_retrieval_result,
+    failed_case_result,
     get_final_evidences,
     load_cases,
     parse_case,
@@ -388,6 +390,92 @@ def test_answerability_support_gate_accepts_supported_evidence() -> None:
     assert evaluated.evidence_support_reason == "supported"
 
 
+def test_answer_policy_observability_is_extracted_and_serialized() -> None:
+    case = RagEvalCase(
+        id="answer-policy-supported",
+        question="What is supported?",
+        knowledge_base_id=1,
+        expected_answerable=True,
+    )
+    result = RetrievalResult(
+        query=case.question,
+        mode=RetrievalMode.CHUNK_ONLY,
+        evidences=[_evidence(document_id=1, document_name="doc.md")],
+        context_text="supported evidence",
+        trace_id=1,
+        metadata={
+            "answer_policy_outcome": "answer",
+            "answer_policy_reason": "supported",
+            "answer_provider_called": True,
+            "answer_citation_required": True,
+            "answer_external_knowledge_allowed": False,
+            "answer_allowed_evidence_count": 2,
+            "answer_allowed_markers": ["S1", "S2"],
+            "answer_unknown_markers_removed": 3,
+        },
+    )
+
+    evaluated = evaluate_retrieval_result(case, result)
+    payload = case_result_to_dict(evaluated)
+
+    assert evaluated.answer_policy_outcome == "answer"
+    assert evaluated.answer_policy_reason == "supported"
+    assert evaluated.answer_provider_called is True
+    assert evaluated.answer_citation_required is True
+    assert evaluated.answer_external_knowledge_allowed is False
+    assert evaluated.answer_allowed_evidence_count == 2
+    assert evaluated.answer_allowed_markers == ["S1", "S2"]
+    assert evaluated.answer_unknown_markers_removed == 3
+    assert payload["answer_policy_outcome"] == "answer"
+    assert payload["answer_policy_reason"] == "supported"
+    assert payload["answer_provider_called"] is True
+    assert payload["answer_citation_required"] is True
+    assert payload["answer_external_knowledge_allowed"] is False
+    assert payload["answer_allowed_evidence_count"] == 2
+    assert payload["answer_allowed_markers"] == ["S1", "S2"]
+    assert payload["answer_unknown_markers_removed"] == 3
+
+
+def test_answer_policy_observability_handles_refusal_missing_and_invalid_metadata() -> None:
+    refusal_case = RagEvalCase(
+        id="answer-policy-refusal",
+        question="Missing fact?",
+        knowledge_base_id=1,
+        expected_answerable=False,
+    )
+    refusal = evaluate_retrieval_result(
+        refusal_case,
+        RetrievalResult(
+            query=refusal_case.question,
+            mode=RetrievalMode.CHUNK_ONLY,
+            evidences=[],
+            context_text="",
+            trace_id=1,
+            metadata={
+                "answer_policy_outcome": "refuse",
+                "answer_policy_reason": "evidence_support_rejected",
+                "answer_provider_called": False,
+                "answer_citation_required": False,
+                "answer_external_knowledge_allowed": False,
+                "answer_allowed_evidence_count": 0,
+                "answer_allowed_markers": "S1",
+                "answer_unknown_markers_removed": 0,
+            },
+        ),
+    )
+    legacy = failed_case_result(refusal_case, error="legacy failure")
+
+    assert refusal.answer_policy_outcome == "refuse"
+    assert refusal.answer_provider_called is False
+    assert refusal.answer_citation_required is False
+    assert refusal.answer_allowed_markers == []
+    assert refusal.answer_unknown_markers_removed == 0
+    legacy_payload = case_result_to_dict(legacy)
+    assert legacy_payload["answer_policy_outcome"] is None
+    assert legacy_payload["answer_provider_called"] is None
+    assert legacy_payload["answer_allowed_markers"] == []
+
+
 def test_null_metrics_are_not_failure_reasons() -> None:
     case = RagEvalCase(
         id="no-answer",
@@ -632,8 +720,19 @@ def test_sanitized_snapshot_removes_live_ids_paths_and_secrets() -> None:
                 "id": "case",
                 "question": "q",
                 "trace_id": 123,
+                "user_id": 7,
+                "knowledge_base_id": 8,
+                "local_path": "/tmp/private/result.json",
                 "retrieval_hit": True,
                 "citation_hit": True,
+                "answer_policy_outcome": "answer",
+                "answer_policy_reason": "supported",
+                "answer_provider_called": True,
+                "answer_citation_required": True,
+                "answer_external_knowledge_allowed": False,
+                "answer_allowed_evidence_count": 2,
+                "answer_allowed_markers": ["S1", "S2", "/tmp/private/S3", "invalid"],
+                "answer_unknown_markers_removed": 4,
                 "final_evidence_units": [
                     {
                         "document_id": 9,
@@ -659,7 +758,53 @@ def test_sanitized_snapshot_removes_live_ids_paths_and_secrets() -> None:
     assert "document_id" not in combined
     assert "citation_unit_id" not in combined
     assert "chunk_id" not in combined
+    assert "user_id" not in combined
+    assert "knowledge_base_id" not in combined
+    assert "local_path" not in combined
+    assert sanitized_results["cases"][0]["answer_policy_outcome"] == "answer"
+    assert sanitized_results["cases"][0]["answer_policy_reason"] == "supported"
+    assert sanitized_results["cases"][0]["answer_provider_called"] is True
+    assert sanitized_results["cases"][0]["answer_citation_required"] is True
+    assert sanitized_results["cases"][0]["answer_external_knowledge_allowed"] is False
+    assert sanitized_results["cases"][0]["answer_allowed_evidence_count"] == 2
+    assert sanitized_results["cases"][0]["answer_allowed_markers"] == ["S1", "S2"]
+    assert sanitized_results["cases"][0]["answer_unknown_markers_removed"] == 4
     assert "evidence" in combined
+
+
+def test_sanitized_snapshot_preserves_no_answer_policy_contract() -> None:
+    sanitized = sanitize_results_payload(
+        {
+            "case_count": 1,
+            "cases": [
+                {
+                    "id": "no-answer",
+                    "answer_policy_outcome": "refuse",
+                    "answer_policy_reason": "evidence_support_rejected",
+                    "answer_provider_called": False,
+                    "answer_citation_required": False,
+                    "answer_external_knowledge_allowed": False,
+                    "answer_allowed_evidence_count": 0,
+                    "answer_allowed_markers": [],
+                    "answer_unknown_markers_removed": 0,
+                    "trace_id": 123,
+                    "document_id": 456,
+                }
+            ],
+        }
+    )
+
+    case = sanitized["cases"][0]
+    assert case["answer_policy_outcome"] == "refuse"
+    assert case["answer_policy_reason"] == "evidence_support_rejected"
+    assert case["answer_provider_called"] is False
+    assert case["answer_citation_required"] is False
+    assert case["answer_external_knowledge_allowed"] is False
+    assert case["answer_allowed_evidence_count"] == 0
+    assert case["answer_allowed_markers"] == []
+    assert case["answer_unknown_markers_removed"] == 0
+    assert "trace_id" not in case
+    assert "document_id" not in case
 
 
 def _evidence(
