@@ -15,6 +15,10 @@ PureLink is a local-first, self-hosted RAG knowledge workspace with structured d
 
 </div>
 
+<p align="center">
+  <img src="docs/assets/screenshots/citation-drawer.png" alt="PureLink answer with an inline citation and the citation provenance drawer" width="100%">
+</p>
+
 PureLink is built for developers who want to inspect how a text-based RAG system processes documents, retrieves evidence, decides whether an answer is supportable, and maps provider output back to source locations. It combines personal and team knowledge workspaces with backend-generated citations, processing diagnostics, retrieval traces, and reproducible evaluation.
 
 The project addresses a gap common in small RAG demos: retrieval and answer generation often work as an opaque request, while parser decisions, chunk boundaries, evidence sufficiency, citation provenance, and failure states remain hidden. PureLink keeps those boundaries explicit and testable. It is an engineering-oriented reference project, not a production-audited SaaS platform or a claim of state-of-the-art retrieval quality.
@@ -46,6 +50,26 @@ The latest committed generalization baseline uses 50 deterministic cases over a 
 Source: [committed answer-policy baseline](tests/eval/baselines/answer-policy-auto-block-aware/summary.md). Metric definitions and reproduction details are in [RAG Evaluation](docs/rag/rag-evaluation.md).
 
 This is a reproducible regression baseline, not a production-scale benchmark. The snapshot also records `forbidden_evidence_clean` at 7 / 9 and expected evidence at 32 / 45. Overview retrieval is the weakest category at 3 / 5 retrieval hits and 2 / 5 expected-evidence hits. These remaining precision and recall failures are kept visible in the committed report rather than removed from the corpus.
+
+## Product Walkthrough
+
+### Retrieval Trace and Routed Evidence
+
+An `auto` technical query routes to keyword + vector hybrid retrieval with an explicit reason, trace id, reranker status, and scored source evidence. The current frontend exposes routing and candidate details; Evidence Support and Answer Policy decisions remain backend trace metadata rather than fields in this panel.
+
+![PureLink Retrieval Debug showing AUTO routing, the selected hybrid mode, router reason, trace id, and evidence](docs/assets/screenshots/retrieval-trace.png)
+
+### Document Processing Inspector
+
+The document-level inspector shows an indexed, RAG-ready document and the persisted blocks, chunks, citation units, vector index, and graph index checks used to diagnose readiness without reading worker logs.
+
+![PureLink Document Processing Inspector showing ready pipeline checks and index status](docs/assets/screenshots/processing-inspector.png)
+
+### Graph Explorer
+
+The lightweight Graph Explorer supports entity search and one-hop inspection. Relation sources retain the public document name, chunk and citation-unit references, and the grounded source snippet.
+
+![PureLink Graph Explorer showing an entity relation and document source provenance](docs/assets/screenshots/graph-explorer.png)
 
 ## Architecture and Request Flow
 
