@@ -34,7 +34,19 @@ The project addresses a gap common in small RAG demos: retrieval and answer gene
 
 ## Evaluation Snapshot
 
+### Deterministic Regression Baseline
+
 The latest committed generalization baseline uses 50 deterministic cases over a small cross-domain corpus: 45 answerable questions and 5 no-answer questions. It does not use an LLM as judge.
+
+The committed run uses a deliberately reproducible configuration rather than the default Docker model stack:
+
+```env
+CHUNK_STRATEGY=block_aware
+EMBEDDING_PROVIDER=local_hashed_bow
+EMBEDDING_MODEL=hashed_bow_v1
+RERANKER_ENABLED=false
+RERANKER_PROVIDER=noop
+```
 
 | Metric | Result |
 |---|---:|
@@ -44,12 +56,28 @@ The latest committed generalization baseline uses 50 deterministic cases over a 
 | Expected evidence hit | 32 / 45 |
 | Router accuracy | 50 / 50 |
 | Answerability accuracy | 50 / 50 |
+| Forbidden evidence clean | 7 / 9 |
+| Mean evidence precision | 30.9% (46 applicable cases) |
 | No-answer cases | 5 / 5 |
 | Trace available | 50 / 50 |
 
 Source: [committed answer-policy baseline](tests/eval/baselines/answer-policy-auto-block-aware/summary.md). Metric definitions and reproduction details are in [RAG Evaluation](docs/rag/rag-evaluation.md).
 
-This is a reproducible regression baseline, not a production-scale benchmark. The snapshot also records `forbidden_evidence_clean` at 7 / 9 and expected evidence at 32 / 45. Overview retrieval is the weakest category at 3 / 5 retrieval hits and 2 / 5 expected-evidence hits. These remaining precision and recall failures are kept visible in the committed report rather than removed from the corpus.
+This baseline emphasizes repeatability for CI and local regression checks. It is not a production-scale benchmark, does not use LLM-as-judge, and is not the default Docker runtime configuration. Overview retrieval is the weakest category at 3 / 5 retrieval hits and 2 / 5 expected-evidence hits. Expected evidence and forbidden-evidence scores also show that final evidence selection still has known precision and recall failures; those failures remain visible in the committed report.
+
+### Default Runtime Stack
+
+The default local Docker path follows [`.env.example`](.env.example):
+
+```env
+CHUNK_STRATEGY=fixed
+EMBEDDING_PROVIDER=fastembed
+EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
+RERANKER_ENABLED=false
+RERANKER_PROVIDER=noop
+```
+
+This is the normal user-facing local runtime path. The repository does not yet contain a directly comparable committed generalization baseline for this exact FastEmbed configuration, so no quality metrics are claimed here; a separately reproduced runtime-stack evaluation can be added later.
 
 ## Product Walkthrough
 
@@ -81,7 +109,7 @@ flowchart LR
     Web --> API[FastAPI API]
     API --> DB[(PostgreSQL)]
     API --> Redis[(Redis)]
-    Redis --> Worker[Processing worker]
+    Redis --> Worker[Python processing worker]
     Worker --> DB
     API --> Retrieval[Retrieval layer]
     Retrieval --> DB
@@ -130,25 +158,7 @@ flowchart TD
 
 The detailed ingestion and retrieval diagrams live in [RAG Pipeline](docs/rag/rag-pipeline.md) and [RAG v2 Architecture](docs/architecture/rag-v2-architecture.md).
 
-## Product Walkthrough
-
-### Retrieval Trace and Routed Evidence
-
-An `auto` technical query routes to keyword + vector hybrid retrieval with an explicit reason, trace id, reranker status, and scored source evidence. The current frontend exposes routing and candidate details; Evidence Support and Answer Policy decisions remain backend trace metadata rather than fields in this panel.
-
-![PureLink Retrieval Debug showing AUTO routing, the selected hybrid mode, router reason, trace id, and evidence](docs/assets/screenshots/retrieval-trace.png)
-
-### Document Processing Inspector
-
-The document-level inspector shows an indexed, RAG-ready document and the persisted blocks, chunks, citation units, vector index, and graph index checks used to diagnose readiness without reading worker logs.
-
-![PureLink Document Processing Inspector showing ready pipeline checks and index status](docs/assets/screenshots/processing-inspector.png)
-
-### Graph Explorer
-
-The lightweight Graph Explorer supports entity search and one-hop inspection. Relation sources retain the public document name, chunk and citation-unit references, and the grounded source snippet.
-
-![PureLink Graph Explorer showing an entity relation and document source provenance](docs/assets/screenshots/graph-explorer.png)
+Docker Compose runs the Python worker entry point at [`app/workers/processing_worker_main.py`](app/workers/processing_worker_main.py). The separate [`worker-go`](worker-go/) implementation is experimental and is not feature-equivalent to, or used by, the default Compose stack. See [Docker Deployment](docs/development/docker-deployment.md#python-and-go-worker-positioning).
 
 ## Quick Start
 
@@ -218,6 +228,7 @@ The generalization runner creates a temporary local evaluation knowledge base an
 The complete map is [docs/README.md](docs/README.md). Recommended entry points:
 
 - [PureLink Code Tour](docs/interview/code-tour.md)
+- [Technical Deep Dives](docs/interview/deep-dives/README.md)
 - [Project Storyline](docs/interview/project-storyline.md)
 - [RAG Pipeline](docs/rag/rag-pipeline.md)
 - [File Processing Pipeline](docs/ingestion/file-processing-pipeline.md)

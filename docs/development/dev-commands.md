@@ -331,7 +331,9 @@ scripts/e2e/03_permissions_flow.sh
 scripts/e2e/04_worker_flow.sh
 ```
 
-## 8. Go worker
+## 8. Experimental Go worker
+
+`worker-go` is retained as an experimental/early implementation. The supported Docker Compose runtime uses the Python processing worker, and the Go worker is not feature-equivalent to that path. See [Docker Deployment](docker-deployment.md#python-and-go-worker-positioning) before running it.
 
 ### 本地启动 Go worker
 

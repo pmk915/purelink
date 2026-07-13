@@ -34,7 +34,10 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
-        description="Minimal backend foundation for the PureLink platform.",
+        description=(
+            "Personal and team knowledge bases with structured document processing, "
+            "hybrid retrieval, citation grounding, retrieval traces, and lightweight evaluation."
+        ),
         debug=settings.app_debug,
         lifespan=lifespan,
     )

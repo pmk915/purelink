@@ -111,6 +111,18 @@ The API and worker reuse the same backend Docker image. The API runs Alembic mig
 alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
+### Python and Go Worker Positioning
+
+The supported Docker Compose processing path uses the Python `worker` service:
+
+```text
+python -m app.workers.processing_worker_main
+```
+
+This worker consumes the Redis processing queue and runs the current parser registry, `DocumentBlock` persistence, fixed or block-aware chunking, citation-unit generation, vector indexing, and lightweight graph indexing.
+
+The repository also retains [`worker-go`](../../worker-go/) as an experimental/early implementation. It is not started by `docker-compose.yml` or `docker-compose.prod.yml`, is not the default supported deployment worker, and should not be assumed to have feature parity with the Python processing path. Go tests remain in CI to keep that experimental implementation buildable and maintainable; passing those tests does not establish behavioral equivalence between both workers.
+
 ## 5. Data Directories and Volumes
 
 Local compose mounts host directories into API and worker containers:
