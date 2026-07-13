@@ -1,0 +1,21 @@
+# Northstar Operations
+
+Source basis: synthetic operations handbook for independent PureLink holdout evaluation
+Edition: current operating guide
+
+## Maya Ortiz
+
+Maya Ortiz is the release coordinator for the Northstar service. Her role is Release Coordinator, and her office location is Lisbon. Her primary responsibility is approving production release windows after the test report and rollback plan have been reviewed. She also keeps the release calendar synchronized with customer maintenance notices. Maya does not own database capacity planning or payroll approvals.
+
+## Sam Lee
+
+Sam Lee is the incident analyst in the current Northstar team. His office location is Singapore. His responsibility is collecting incident timelines, confirming customer impact, and preparing the first incident review draft. The current guide supersedes the archived handbook for active team assignments.
+
+## Release Workflow
+
+Northstar releases move through readiness review, approval, deployment, and observation. The readiness review checks automated tests, schema compatibility, and the rollback procedure. Maya records the approved window, while the on-call engineer runs the deployment. During observation, the team watches request errors and queue depth before closing the release.
+
+## Incident Practice
+
+An incident review separates detection, mitigation, recovery, and prevention work. Sam gathers timestamps from service logs and operator notes. The review avoids assigning blame and instead records concrete follow-up owners. High-severity actions must have an owner and a target date before the review is considered complete.
+

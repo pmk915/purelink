@@ -1,0 +1,20 @@
+# Kestrel Device Guide
+
+Source basis: synthetic hardware guide for independent PureLink holdout evaluation
+Model family: Kestrel
+
+## Kestrel Edge
+
+Kestrel Edge uses the Meridian M4 processor. Its enclosure color is graphite, and its status light is soft white. The device is intended for local telemetry aggregation in small offices. It sends validated measurements through an Ethernet connection and stores a short local buffer during network interruptions.
+
+## Kestrel Hub
+
+Kestrel Hub uses the Meridian H2 processor. Its enclosure color is frost white. The hub coordinates up to sixteen Edge devices and forwards validated summaries to the configured service. Edge and Hub are separate products, so processor and color attributes must remain attached to the requested model.
+
+## Installation
+
+Install Kestrel Edge on a ventilated shelf near the monitored equipment. Connect Ethernet before power, wait for the white status light, and then register the device through the local console. Registration records a device identifier and workspace assignment but does not change the hardware model.
+
+## Operations
+
+Operators review telemetry delivery, storage pressure, and clock synchronization each week. A failed delivery check should be investigated before restarting the device. The operations section contains no warranty duration or pricing information; those topics are outside this technical guide.

@@ -1,0 +1,21 @@
+# Northstar Operations Archive
+
+Source basis: synthetic archived handbook for independent PureLink holdout evaluation
+Edition: retired 2024 operating guide
+
+## Historical Assignment
+
+This archived handbook describes an earlier Northstar organization and is not the current source for active assignments. In the archived team, Sam Lee worked as a support coordinator from the Dublin office. He organized support rotations and summarized customer tickets for the service team. The assignment ended when the operating model changed, so current location questions should use the current Northstar Operations guide.
+
+## Retired Release Process
+
+The retired process required a weekly release meeting and a manually maintained spreadsheet. A support coordinator collected approvals before an operator started deployment. This process did not include the current readiness review, explicit rollback-plan check, or structured observation period.
+
+## Archive Use
+
+The archive is retained for historical comparisons and audit context. It can explain why old reports use different role names, but it must not override the current operating guide. Readers should distinguish this file from `northstar-operations.txt`, especially when asking about a present role, responsibility, or office location.
+
+## Record Retention
+
+Archived meeting records are kept for eighteen months. The archive contains process history only; it does not define the current incident policy, current release coordinator, or active team ownership. Any new operational decision belongs in the current handbook.
+

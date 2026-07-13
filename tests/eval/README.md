@@ -66,6 +66,19 @@ The generalization corpus covers entity definition, entity attribute, entity
 reason, entity relation, technical, overview, and no-answer cases. It uses
 phrase/document checks only; it does not use LLM-as-judge.
 
+The 50-case file is the deterministic development regression set. Run the
+independent holdout corpus separately:
+
+```bash
+make eval-rag-generalization-holdout
+```
+
+The holdout command ingests `tests/eval/holdout_corpus/` and runs
+`tests/eval/rag_generalization_holdout_cases.jsonl`. Holdout cases use separate
+documents, entities, values, and technical identifiers. They are intended to
+check generalization after production-rule changes, not to provide another set
+of examples for per-case tuning.
+
 To generate a sanitized local snapshot preview:
 
 ```bash
@@ -155,9 +168,19 @@ Local cases and generated reports depend on local KB IDs and should not be commi
 - `keyword_coverage`: expected keyword substring matches in `RetrievalResult.context_text`.
 - `used_reranker`: whether retrieval used the reranker for that case.
 - `trace_available`: whether `RetrievalResult.trace_id` was populated.
+- `failure_stage`: the earliest observed stage where expected evidence was
+  lost: raw retrieval, raw candidate content, final context, final evidence
+  selection, or support-gate rejection. Successful and genuine no-answer cases
+  are labeled separately.
 - Generalization summaries show `passed / applicable (percentage)` and skip `null` values from denominators.
 - Evidence-gate answerability means final evidence is present and reaches `RETRIEVAL_MIN_SCORE`; it is not semantic QA accuracy.
 - Final evidence metrics use `RetrievalResult.evidences`, not raw `initial_chunks` or intermediate `context_chunks`.
+
+Expected evidence phrases use lightweight presentation normalization for
+Markdown backticks/emphasis, repeated whitespace, case, quotes, Unicode
+punctuation, and terminal punctuation. The matcher does not remove or rewrite
+numbers, underscores, path separators, hyphens, API paths, or CLI flags, so
+different technical facts remain different expectations.
 
 This harness is intended for local/manual RAG quality checks and regression comparison. Metric unit tests live in `tests/eval/test_rag_eval_metrics.py` and are safe for the default test suite.
 

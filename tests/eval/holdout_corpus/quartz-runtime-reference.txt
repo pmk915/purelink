@@ -1,0 +1,21 @@
+# Quartz Runtime Reference
+
+Source basis: synthetic runtime reference for independent PureLink holdout evaluation
+Version: 2
+
+## Pipeline Profile
+
+The environment variable `PIPELINE_PROFILE` supports `safe` and `rapid` values. The safe profile performs every validation step, while the rapid profile skips optional preview generation but keeps integrity checks. Values outside this pair are rejected during startup; the runtime does not silently choose a third profile.
+
+## Request Timeout
+
+`REQUEST_TIMEOUT_SECONDS` defaults to `45`. It controls how long the Quartz client waits for one remote request before reporting a timeout. Increasing the value can help slow private networks, but it does not change the retry count or the worker job deadline.
+
+## Synchronization Command
+
+The command `quartz sync --dry-run` validates synchronization inputs and prints the planned changes without writing them. Running `quartz sync` without `--dry-run` applies the accepted changes. The flag therefore distinguishes inspection from mutation and must remain part of an exact command expectation.
+
+## Runtime Sections
+
+The reference is organized around pipeline profiles, request timeout behavior, and synchronization commands. Profile selection controls optional processing, timeout configuration controls a single remote request, and the synchronization section explains safe preview versus applied changes. These settings are independent and should not be combined into one inferred default.
+

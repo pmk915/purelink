@@ -31,13 +31,19 @@ PLACEHOLDER_TOKENS = ("TODO", "TBD", "lorem ipsum", "placeholder")
 STABLE_ANSWER_MARKER_PATTERN = re.compile(r"S[1-9]\d*")
 
 
-def validate_corpus(corpus_dir: Path, cases: list[RagEvalCase]) -> list[dict[str, Any]]:
+def validate_corpus(
+    corpus_dir: Path,
+    cases: list[RagEvalCase],
+    *,
+    required_files: tuple[str, ...] | None = None,
+) -> list[dict[str, Any]]:
     if not corpus_dir.is_dir():
         raise FileNotFoundError(f"Corpus directory not found: {corpus_dir}")
 
     manifest = build_corpus_manifest(corpus_dir)
     names = {item["name"] for item in manifest}
-    missing = [name for name in REQUIRED_CORPUS_FILES if name not in names]
+    required = REQUIRED_CORPUS_FILES if required_files is None else required_files
+    missing = [name for name in required if name not in names]
     if missing:
         raise ValueError(f"Missing corpus files: {', '.join(missing)}")
     if len(names) != len(manifest):
@@ -55,14 +61,13 @@ def validate_corpus(corpus_dir: Path, cases: list[RagEvalCase]) -> list[dict[str
         if any(pattern.search(text) for pattern in SECRET_PATTERNS):
             raise ValueError(f"{item['path']} appears to contain a secret.")
 
-    corpus_paths = {f"tests/eval/corpus/{name}" for name in names}
-    referenced = {
+    corpus_paths = {Path(item["path"]).resolve() for item in manifest}
+    unknown = sorted(
         doc_name
         for case in cases
         for doc_name in case.expected_doc_names
-        if doc_name.startswith("tests/eval/corpus/")
-    }
-    unknown = sorted(referenced - corpus_paths)
+        if Path(doc_name).resolve() not in corpus_paths
+    )
     if unknown:
         raise ValueError(f"Cases reference missing corpus docs: {', '.join(unknown)}")
     return manifest
@@ -75,7 +80,7 @@ def build_corpus_manifest(corpus_dir: Path) -> list[dict[str, Any]]:
         manifest.append(
             {
                 "name": path.name,
-                "path": f"tests/eval/corpus/{path.name}",
+                "path": path.as_posix(),
                 "char_count": len(text),
                 "heading_count": len(re.findall(r"(?m)^#{1,6}\s+", text)),
                 "sha256": _sha256_text(text),
@@ -191,6 +196,7 @@ def render_summary_markdown(*, run_metadata: dict[str, Any], results: list[RagEv
     by_mode = _group_metrics(results, key=lambda item: item.selected_mode or "unknown")
     no_answer = [item for item in results if item.category == "no_answer"]
     failed = [item for item in results if item.failure_reasons or item.error]
+    failure_stages = Counter(item.failure_stage or "unclassified" for item in results)
     latency = summarize_latencies(
         item.total_eval_latency_ms if item.total_eval_latency_ms is not None else item.latency_ms
         for item in results
@@ -237,7 +243,13 @@ def render_summary_markdown(*, run_metadata: dict[str, Any], results: list[RagEv
         f"- p95: {_number(latency['p95'])} ms",
         f"- max: {_number(latency['max'])} ms",
         "",
-        "## 7. Failed Cases",
+        "## 7. Failure Diagnostics",
+        "",
+        "### Stage Distribution",
+        "",
+        _failure_stage_table(failure_stages),
+        "",
+        "### Failed Cases",
         "",
         _failed_cases_table(failed),
         "",
@@ -245,6 +257,7 @@ def render_summary_markdown(*, run_metadata: dict[str, Any], results: list[RagEv
         "",
         "- This baseline is deterministic and does not use LLM-as-judge.",
         "- Evidence precision is approximated with expected/forbidden phrases and expected document names.",
+        "- Expected evidence phrase matching removes presentation-only Markdown and punctuation differences, but preserves numbers, identifiers, paths, and CLI flags.",
         "- Evidence-gate answerability uses the production deterministic Evidence Support Gate, including query-type mandatory checks and support signals.",
         "- Evidence support score is a debugging signal, not a semantic correctness score or LLM-as-judge result.",
         "- No-answer failures expose limitations of the production support gate, not full QA accuracy.",
@@ -316,6 +329,13 @@ def _sanitize_case_result(item: dict[str, Any]) -> dict[str, Any]:
         "answer_allowed_evidence_count",
         "answer_allowed_markers",
         "answer_unknown_markers_removed",
+        "expected_document_in_raw_candidates",
+        "expected_evidence_in_raw_candidates",
+        "expected_document_in_final_context",
+        "expected_evidence_in_final_context",
+        "expected_document_in_final_selection",
+        "expected_evidence_in_final_selection",
+        "failure_stage",
         "final_evidence_count",
         "top_documents",
         "top_1_doc_hit",
@@ -436,14 +456,14 @@ def _no_answer_table(results: list[RagEvalCaseResult]) -> str:
     if not results:
         return "No no-answer cases."
     lines = [
-        "| Case | retrieval_hit | citation_hit | expected_evidence_hit | predicted_answerable | evidence-gate answerability | forbidden_evidence_hit | failure_reasons |",
-        "|---|---:|---:|---:|---:|---:|---:|---|",
+        "| Case | predicted_answerable | evidence-gate answerability | forbidden_evidence_hit | failure_stage | failure_reasons |",
+        "|---|---:|---:|---:|---|---|",
     ]
     for item in results:
         lines.append(
-            f"| `{item.id}` | {_bool_or_na(item.retrieval_hit)} | {_bool_or_na(item.citation_hit)} | "
-            f"{_bool_or_na(item.expected_evidence_hit)} | {item.predicted_answerable} | "
+            f"| `{item.id}` | {item.predicted_answerable} | "
             f"{_bool_or_na(item.answerability_accuracy)} | {_bool_or_na(item.forbidden_evidence_hit)} | "
+            f"`{item.failure_stage or 'unclassified'}` | "
             f"{', '.join(item.failure_reasons) or '-'} |"
         )
     return "\n".join(lines)
@@ -452,7 +472,10 @@ def _no_answer_table(results: list[RagEvalCaseResult]) -> str:
 def _failed_cases_table(results: list[RagEvalCaseResult]) -> str:
     if not results:
         return "No failed cases."
-    lines = ["| Case | Question | Expected | Actual | Selected Mode | Failure Reason |", "|---|---|---|---|---|---|"]
+    lines = [
+        "| Case | Question | Expected | Actual | Selected Mode | Failure Stage | Failure Reason |",
+        "|---|---|---|---|---|---|---|",
+    ]
     for item in results:
         expected = ", ".join(item.expected_evidence_phrases or item.expected_doc_names or ())
         actual = "; ".join(
@@ -461,8 +484,16 @@ def _failed_cases_table(results: list[RagEvalCaseResult]) -> str:
         )
         lines.append(
             f"| `{item.id}` | {item.question or ''} | {expected or '-'} | {actual or '-'} | "
-            f"`{item.selected_mode or 'unknown'}` | {', '.join(item.failure_reasons) or item.error or '-'} |"
+            f"`{item.selected_mode or 'unknown'}` | `{item.failure_stage or 'unclassified'}` | "
+            f"{', '.join(item.failure_reasons) or item.error or '-'} |"
         )
+    return "\n".join(lines)
+
+
+def _failure_stage_table(stages: Counter[str]) -> str:
+    lines = ["| Failure Stage | Cases |", "|---|---:|"]
+    for stage, count in sorted(stages.items()):
+        lines.append(f"| `{stage}` | {count} |")
     return "\n".join(lines)
 
 

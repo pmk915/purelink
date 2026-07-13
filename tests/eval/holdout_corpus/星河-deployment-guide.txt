@@ -1,0 +1,21 @@
+# 星河 Deployment Guide
+
+Source basis: synthetic bilingual deployment reference for independent PureLink holdout evaluation
+Status: active local deployment guide
+
+## 支持的输入文件
+
+星河导入工具支持 `.txt`, `.md`, `.pdf`, and `.docx` files. The upload validator checks the extension before creating a processing job. Spreadsheet and presentation files are not listed as supported inputs in this guide. A valid upload is parsed, divided into structured blocks, and then indexed for retrieval.
+
+## Catalog Refresh
+
+The function `refresh_catalog()` reloads the deployment catalog after a validated configuration change. It reads the current service entries, rejects duplicate identifiers, and publishes one consistent catalog snapshot. Operators call the function through the maintenance command; they do not edit the generated catalog file directly.
+
+## Job API
+
+`GET /api/v2/jobs` returns the visible deployment jobs for the authenticated workspace. Each item includes a job identifier, status, requested timestamp, and a short failure code when processing did not complete. The endpoint does not expose secret configuration values or another workspace's jobs.
+
+## 部署检查
+
+部署前检查包括数据库连接、队列可用性和磁盘空间。The operator confirms that the worker is healthy before starting a catalog refresh. If a job fails, the diagnostic view should be used to inspect its step and error code before retrying. 该流程强调可追踪的状态，不要求手工修改数据库记录。
+

@@ -36,6 +36,7 @@ from scripts.eval.rag_eval import (
     load_cases,
 )
 from scripts.eval.rag_generalization import (
+    REQUIRED_CORPUS_FILES,
     build_run_id,
     build_run_metadata,
     category_counts,
@@ -63,7 +64,17 @@ def main() -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
 
     cases = load_cases(args.cases)
-    corpus_manifest = validate_corpus(args.corpus_dir, cases)
+    default_corpus_dir = ROOT / "tests/eval/corpus"
+    required_files = (
+        REQUIRED_CORPUS_FILES
+        if args.corpus_dir.resolve() == default_corpus_dir.resolve()
+        else ()
+    )
+    corpus_manifest = validate_corpus(
+        args.corpus_dir,
+        cases,
+        required_files=required_files,
+    )
     source_paths = tuple(item["path"] for item in corpus_manifest)
 
     started = time.perf_counter()
@@ -125,7 +136,7 @@ def main() -> None:
     print(json.dumps(output_payload, ensure_ascii=False, indent=2))
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run PureLink cross-domain RAG generalization eval.")
     parser.add_argument("--cases", type=Path, default=Path("tests/eval/rag_generalization_cases.jsonl"))
     parser.add_argument("--corpus-dir", type=Path, default=Path("tests/eval/corpus"))
@@ -134,7 +145,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mode", default=os.environ.get("EVAL_MODE", "auto"))
     parser.add_argument("--chunk-strategy", default=os.environ.get("EVAL_CHUNK_STRATEGY", "block_aware"))
     parser.add_argument("--run-id")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 async def run_generalization_cases(
