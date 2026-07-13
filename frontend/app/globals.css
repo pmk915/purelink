@@ -41,3 +41,21 @@ a {
 ::selection {
   background: rgba(99, 102, 241, 0.18);
 }
+
+@keyframes citation-drawer-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes citation-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

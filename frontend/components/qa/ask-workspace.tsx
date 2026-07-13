@@ -7,6 +7,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { ErrorState } from "@/components/common/error-state";
+import { CitationAwareAnswer } from "@/components/qa/citation-aware-answer";
 import { EvidencePanel } from "@/components/qa/evidence-panel";
 import { RetrievalDetails } from "@/components/qa/retrieval-details";
 import { Button } from "@/components/ui/button";
@@ -156,9 +157,11 @@ export function AskWorkspace({
               <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
                 {messages.qa.answerTitle}
               </p>
-              <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-foreground">
-                {latestAnswer.answer}
-              </p>
+              <CitationAwareAnswer
+                answer={latestAnswer.answer}
+                citations={latestAnswer.citations}
+                className="mt-2 text-sm leading-7 text-foreground"
+              />
             </div>
             <RetrievalDetails
               retrievalMode={latestAnswer.retrieval_mode}
