@@ -53,13 +53,14 @@ This page is the main map for PureLink's product, RAG architecture, ingestion, G
 
 ## Interview
 
-- [PureLink Interview Demo Guide](interview/purelink-demo-guide.md): step-by-step demo runbook.
+- **Recommended start:** [PureLink Code Tour](interview/code-tour.md): a verified ten-minute path through processing, retrieval, answer control, citations, trace, and eval code.
 - [Project Storyline](interview/project-storyline.md): problem, solution, engineering decisions, timeline, and talk tracks.
+- [PureLink Interview Demo Guide](interview/purelink-demo-guide.md): step-by-step demo runbook.
 - [Feature Map](interview/feature-map.md): feature-to-code-to-docs-to-tests mapping.
 - [Eval Talking Points](interview/eval-talking-points.md): how to explain the RAG baseline honestly.
-- [RAG Project Story](interview/purelink-rag-project-story.md): earlier RAG v2 project narrative.
 - [RAG Resume Description](interview/purelink-rag-resume-description.md): resume-oriented summary.
-- [RAG v2 Demo Guide](interview/rag-v2-demo-guide.md): older RAG v2 focused demo flow.
+- **Historical:** [RAG Project Story](interview/purelink-rag-project-story.md): earlier RAG v2 project narrative retained for project history.
+- **Historical:** [RAG v2 Demo Guide](interview/rag-v2-demo-guide.md): older RAG v2 focused demo flow retained for reference.
 
 ## Roadmap and Historical Notes
 

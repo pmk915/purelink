@@ -2,7 +2,7 @@
 
 # PureLink
 
-PureLink is a self-hosted RAG knowledge workspace with traceable retrieval, grounded citations, and document-processing observability.
+PureLink is a local-first, self-hosted RAG knowledge workspace with structured document processing, routed retrieval, deterministic answer controls, traceable citations, and retrieval observability.
 
 [![CI](https://github.com/pmk915/purelink/actions/workflows/ci.yml/badge.svg)](https://github.com/pmk915/purelink/actions/workflows/ci.yml)
 [![Smoke](https://github.com/pmk915/purelink/actions/workflows/smoke.yml/badge.svg)](https://github.com/pmk915/purelink/actions/workflows/smoke.yml)
@@ -11,75 +11,104 @@ PureLink is a self-hosted RAG knowledge workspace with traceable retrieval, grou
 [![Next.js](https://img.shields.io/badge/Next.js-14-black.svg?logo=next.js)](frontend/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg?logo=docker&logoColor=white)](docker-compose.yml)
 
-[Quick start](#quick-start) · [Features](#features) · [Architecture](#architecture) · [Documentation](#documentation) · [Contributing](#contributing)
+[Engineering highlights](#engineering-highlights) · [Evaluation](#evaluation-snapshot) · [Architecture](#architecture-and-request-flow) · [Code tour](#where-to-start) · [Quick start](#quick-start) · [Documentation](#documentation)
 
 </div>
 
-## Overview
+PureLink is built for developers who want to inspect how a text-based RAG system processes documents, retrieves evidence, decides whether an answer is supportable, and maps provider output back to source locations. It combines personal and team knowledge workspaces with backend-generated citations, processing diagnostics, retrieval traces, and reproducible evaluation.
 
-PureLink is a local-first, self-hosted knowledge workspace for building and inspecting text-based RAG systems. It supports personal and team knowledge bases, document upload and processing, semantic retrieval, citation-grounded Q&A, retrieval traces, and reproducible evaluation runs.
+The project addresses a gap common in small RAG demos: retrieval and answer generation often work as an opaque request, while parser decisions, chunk boundaries, evidence sufficiency, citation provenance, and failure states remain hidden. PureLink keeps those boundaries explicit and testable. It is an engineering-oriented reference project, not a production-audited SaaS platform or a claim of state-of-the-art retrieval quality.
 
-The project is designed for developers who want a practical RAG stack they can run, inspect, test, and adapt. It is not a complete production SaaS platform, and it does not try to replace a managed enterprise search product or a dedicated graph database.
+## Engineering Highlights
 
-## Why PureLink?
+1. **[Structured document processing](docs/ingestion/file-processing-pipeline.md)** routes supported files through typed parsers, persists `DocumentBlock` records, and uses queued processing/indexing jobs with retry and failure states.
+2. **[Block-aware chunking](docs/ingestion/document-blocks.md)** carries heading paths and source spans forward, keeps small tables and code blocks intact, and has bounded fallback behavior for oversized content.
+3. **[Hybrid and routed retrieval](docs/rag/retrieval-layer.md)** provides vector, keyword, overview, and lightweight graph candidates behind one retrieval contract; `auto` uses a transparent rule-based query router.
+4. **[Evidence Support Gate](docs/retrieval-and-citations.md)** evaluates whether final evidence covers the entity and requested intent before an answer provider is allowed to run, including deterministic no-answer control.
+5. **[Deterministic Answer Policy](docs/rag/answer-policy.md)** aligns the provider call decision, evidence-only instructions, allowed markers, and post-generation marker validation. External knowledge is disabled for grounded answers.
+6. **[Citation and retrieval observability](docs/rag/retrieval-trace.md)** connects persisted citation units to a clickable Citation Drawer, records candidate and policy decisions in Retrieval Trace, and exposes document processing readiness in the workspace.
 
-Many RAG demos hide the operational details that make a system trustworthy: which parser ran, how text was chunked, whether citations came from the retrieved context, why a query used one retrieval mode over another, and where document processing failed.
+## Evaluation Snapshot
 
-PureLink makes those surfaces visible:
+The latest committed generalization baseline uses 50 deterministic cases over a small cross-domain corpus: 45 answerable questions and 5 no-answer questions. It does not use an LLM as judge.
 
-- Documents move through an observable processing pipeline.
-- Answers are grounded in citation units rather than unsupported model output.
-- Retrieval traces expose mode selection, scores, context assembly, and evidence.
-- RAG readiness can be checked from the UI without reading backend logs.
-- Evaluation scripts compare retrieval behavior across chunking and retrieval modes.
+| Metric | Result |
+|---|---:|
+| Cases | 50 |
+| Retrieval hit | 42 / 45 |
+| Citation hit | 42 / 45 |
+| Expected evidence hit | 32 / 45 |
+| Router accuracy | 50 / 50 |
+| Answerability accuracy | 50 / 50 |
+| No-answer cases | 5 / 5 |
+| Trace available | 50 / 50 |
 
-## Features
+Source: [committed answer-policy baseline](tests/eval/baselines/answer-policy-auto-block-aware/summary.md). Metric definitions and reproduction details are in [RAG Evaluation](docs/rag/rag-evaluation.md).
 
-### Stable Core
+This is a reproducible regression baseline, not a production-scale benchmark. The snapshot also records `forbidden_evidence_clean` at 7 / 9 and expected evidence at 32 / 45. Overview retrieval is the weakest category at 3 / 5 retrieval hits and 2 / 5 expected-evidence hits. These remaining precision and recall failures are kept visible in the committed report rather than removed from the corpus.
 
-- Personal and team knowledge base workspaces.
-- Authentication and permission boundaries for personal and team resources.
-- Upload support for `.txt`, `.md`, `.docx`, and text-based `.pdf` files.
-- Upload validation for size, extension, and MIME type.
-- Redis-backed document processing jobs.
-- Processing retry, failure details, and timeout handling.
-- Parser routing and `DocumentBlock` persistence.
-- Fixed and block-aware chunking.
-- FastEmbed semantic embeddings.
-- Citation-grounded Q&A.
-- Document Processing Inspector for RAG readiness checks.
-- Knowledge base health summary.
-- Alembic database migrations.
-- Docker Compose local deployment.
-- Python, Go, frontend, smoke, E2E, and documentation checks.
+## Architecture and Request Flow
 
-### Experimental RAG Capabilities
+### System Context
 
-These features are available for inspection and iteration, but the current eval baseline has not proved that they generally outperform `block_aware + chunk_only`:
+```mermaid
+flowchart LR
+    User[User] --> Web[Next.js workspace]
+    Web --> API[FastAPI API]
+    API --> DB[(PostgreSQL)]
+    API --> Redis[(Redis)]
+    Redis --> Worker[Processing worker]
+    Worker --> DB
+    API --> Retrieval[Retrieval layer]
+    Retrieval --> DB
+    Retrieval --> Index[(Vector and graph indexes)]
+    Worker --> Index
+```
 
-- `hybrid_text` retrieval for keyword plus vector matching.
-- `graph_vector_mix` retrieval for lightweight GraphRAG candidates plus vector search.
-- `auto` retrieval mode with a rule-based query router.
-- Lightweight PostgreSQL-backed GraphRAG data model and lifecycle cleanup.
-- Graph Explorer for inspecting entities, relations, and sources.
-- Optional rerankers.
-- Retrieval trace inspection.
+### Document Processing
 
-### Out of Scope
+```mermaid
+flowchart LR
+    Upload[Upload] --> Job[Processing Job]
+    Job --> Parser[Parser Registry]
+    Parser --> Blocks[DocumentBlock]
+    Blocks --> Strategy{Chunk strategy}
+    Strategy --> Fixed[Fixed chunking]
+    Strategy --> Aware[Block-aware chunking]
+    Fixed --> Units[Chunks and Citation Units]
+    Aware --> Units
+    Units --> Vector[Vector Index]
+    Units --> Graph[Lightweight Graph Index]
+```
 
-- OCR for scanned PDFs.
-- Audio or video transcription.
-- General multimodal understanding.
-- Neo4j, Memgraph, or another dedicated graph database.
-- Complex multi-hop graph reasoning.
-- Billing, enterprise administration, and SaaS operations.
-- Production hardening for direct public internet exposure.
+### Answer Flow
+
+```mermaid
+flowchart TD
+    Question[Question] --> Requested{Requested mode}
+    Requested -->|auto| Router[AUTO Rule-based Router]
+    Requested -->|manual| Mode[Retrieval Mode]
+    Router --> Mode
+    Mode --> Candidates[Candidate Merge / Optional Rerank]
+    Candidates --> Evidence[Final Evidence]
+    Evidence --> Gate[Evidence Support Gate]
+    Gate --> Policy[Answer Policy]
+    Policy -->|supported| Provider[Answer Provider]
+    Policy -->|unsupported| Refusal[No-answer response]
+    Provider --> Validation[Marker Validation]
+    Validation --> Citation[CitationRead]
+    Citation --> Drawer[Clickable Citation Drawer]
+    Router -. metadata .-> Trace[Retrieval Trace]
+    Candidates -. candidates .-> Trace
+    Gate -. support decision .-> Trace
+    Policy -. provider decision .-> Trace
+```
+
+The detailed ingestion and retrieval diagrams live in [RAG Pipeline](docs/rag/rag-pipeline.md) and [RAG v2 Architecture](docs/architecture/rag-v2-architecture.md).
 
 ## Quick Start
 
-Docker is the primary way to run PureLink locally. You only need Docker Engine or Docker Desktop with Docker Compose v2.
-
-Python, Node.js, and Go are only required when running host-side development checks outside Docker.
+Docker Compose is the primary local runtime. The default heuristic answer provider requires no external API key; FastEmbed downloads its model on first use and caches it under `./models`.
 
 ```bash
 git clone https://github.com/pmk915/purelink.git
@@ -96,161 +125,70 @@ Open:
 - OpenAPI: `http://localhost:8000/docs`
 - Health: `http://localhost:8000/api/v1/health`
 
-The default configuration uses the heuristic LLM provider, so no external API key is required for a local text demo. FastEmbed downloads the embedding model on first use and caches model files under `./models`.
+Register a local user, create a personal knowledge base, upload a file from `sample_docs/`, wait for processing, and ask a question. Source citations, retrieval details, and document readiness are available from the workspace.
 
-A minimal demo flow:
+For provider settings and operational setup, use [.env.example](.env.example), [Model Providers](docs/rag/model-providers.md), [Docker Deployment](docs/development/docker-deployment.md), and [Troubleshooting](docs/troubleshooting.md).
 
-1. Register a local user.
-2. Create a personal knowledge base.
-3. Upload files from `sample_docs/` or your own text documents.
-4. Wait for processing to finish.
-5. Ask a question and inspect the cited sources.
-6. Open the document status inspector from the document list.
+## Where to Start
 
-Useful commands:
+The full [PureLink Code Tour](docs/interview/code-tour.md) follows the request path with verified functions, tests, and design notes. The shortest reading path is:
 
-```bash
-docker compose logs -f api worker frontend
-docker compose restart api worker frontend
-docker compose down
-```
+| Area | Entry point |
+|---|---|
+| Document processing | [`app/services/document_processing.py`](app/services/document_processing.py) |
+| Parser routing | [`app/services/document_parsing/parser_registry.py`](app/services/document_parsing/parser_registry.py) |
+| Block-aware chunking | [`app/services/document_chunking/block_aware_chunker.py`](app/services/document_chunking/block_aware_chunker.py) |
+| Retrieval orchestration | [`app/services/retrieval/retrieval_service.py`](app/services/retrieval/retrieval_service.py) |
+| AUTO query router | [`app/services/retrieval/query_router.py`](app/services/retrieval/query_router.py) |
+| QA orchestration | [`app/services/qa.py`](app/services/qa.py) |
+| Answer Policy | [`app/services/answer_policy.py`](app/services/answer_policy.py) |
+| Evaluation harness | [`scripts/eval/run_rag_generalization_eval.py`](scripts/eval/run_rag_generalization_eval.py) |
 
-`docker compose down` keeps the PostgreSQL volume. `docker compose down -v` deletes the database volume and resets local data.
+## Implemented Scope
 
-## Architecture
+- Personal and team knowledge bases with ownership, membership, and admin boundaries.
+- `.txt`, `.md`, `.docx`, and text-based `.pdf` ingestion with processing diagnostics.
+- Fixed and block-aware chunking, persisted citation units, vector index metadata, and lightweight graph data.
+- `chunk_only`, `overview`, `hybrid_text`, `graph_vector_mix`, and rule-based `auto` retrieval modes.
+- Evidence-gated Q&A, deterministic Answer Policy, clickable citations, Retrieval Trace, and eval tooling.
 
-```mermaid
-flowchart LR
-    U[User] --> FE[Next.js frontend]
-    FE --> API[FastAPI API]
-    API --> PG[(PostgreSQL)]
-    API --> REDIS[(Redis)]
-    API --> RET[Retrieval Layer]
-    API --> TRACE[Retrieval Traces]
-    API --> LLM[LLM Provider]
-    REDIS --> W[Worker]
-    W --> PARSE[Parser and DocumentBlock]
-    PARSE --> CC[Chunks and Citation Units]
-    CC --> VEC[Vector Index]
-    CC --> KG[Knowledge Graph]
-    RET --> PG
-    RET --> VEC
-    RET --> KG
-    RET --> TRACE
-    RET --> LLM
-```
+Hybrid retrieval, lightweight GraphRAG, the rule-based router, and optional rerankers remain experimental engineering surfaces. The graph layer uses PostgreSQL and local extraction rules; it is not a dedicated graph database or a complex multi-hop reasoning engine.
 
-The backend is a FastAPI service with PostgreSQL for application state and Redis for processing jobs. The worker parses documents, persists document blocks, creates chunks and citation units, writes vector index metadata, and maintains the lightweight graph index. The frontend provides knowledge base management, document diagnostics, Q&A, retrieval details, and graph inspection.
+Current non-goals include OCR for scanned PDFs, audio/video transcription, general multimodal understanding, billing, enterprise administration, and direct public-internet production hardening.
 
-## Retrieval Modes
-
-Retrieval and answer generation are separate. Retrieval selects and ranks evidence; answer generation uses that evidence to produce a citation-grounded response. If retrieved evidence falls below `RETRIEVAL_MIN_SCORE`, the API returns an insufficient-evidence response instead of fabricating a citation.
-
-| Mode | Status | Purpose |
-|---|---|---|
-| `chunk_only` | Stable | Semantic retrieval over indexed chunks and citation units. |
-| `overview` | Stable | Broad document-level or knowledge-base overview retrieval. |
-| `hybrid_text` | Experimental | Combines keyword-style text matching with vector retrieval. |
-| `graph_vector_mix` | Experimental | Mixes lightweight graph candidates with vector retrieval. |
-| `auto` | Experimental | Uses a transparent rule-based router to select a retrieval mode. |
-
-## Configuration
-
-Local defaults live in `.env.example`. The most commonly adjusted variables are:
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `EMBEDDING_PROVIDER` | `fastembed` | Embedding backend for local semantic retrieval. |
-| `EMBEDDING_MODEL` | `BAAI/bge-small-zh-v1.5` | Default FastEmbed model. |
-| `CHUNK_STRATEGY` | `fixed` | Document chunking strategy. |
-| `LLM_PROVIDER` | `heuristic` | Default local answer provider for demos. |
-| `RERANKER_ENABLED` | `false` | Enables optional reranking. |
-| `RETRIEVAL_MIN_SCORE` | `0.15` | Minimum evidence score before answering. |
-| `MAX_UPLOAD_SIZE_MB` | `25` | Maximum upload size per file. |
-| `CORS_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | Allowed frontend origins. |
-| `AUTH_SECRET_KEY` | `purelink-dev-secret-key-change-me` | Development signing key; replace outside local demo use. |
-
-Example OpenAI-compatible provider configuration:
-
-```env
-LLM_PROVIDER=openai_compatible
-LLM_API_BASE_URL=https://api.example.com/v1
-LLM_API_KEY=replace-with-your-key
-LLM_MODEL=example-chat-model
-```
-
-Do not commit real API keys, `.env`, database dumps, uploads, logs, vector indexes, or model caches.
-
-## Testing
+## Reproduce and Verify
 
 ```bash
 make test
-cd frontend && npm run lint
-cd frontend && npm run build
+cd frontend && npm run lint && npm run build
+cd ..
 make docs-check
 make smoke
-make e2e
-make eval-rag-baseline
 make eval-rag-generalization
 ```
 
-`make eval-rag-baseline` is a regression baseline over repository documentation. It is useful for comparing retrieval behavior across modes, but it is not a large statistical benchmark.
-`make eval-rag-generalization` builds a temporary local eval KB from small cross-domain text documents and writes deterministic retrieval/evidence reports under `data/eval_runs/`.
-
-## Project Structure
-
-| Path | Purpose |
-|---|---|
-| `app/` | FastAPI app, API routes, schemas, services, models, configuration, and database wiring. |
-| `frontend/` | Next.js web application. |
-| `alembic/` | Database migrations. |
-| `scripts/` | Smoke, E2E, documentation, and eval utilities. |
-| `tests/` | Backend and integration tests. |
-| `docs/` | Product, architecture, RAG, ingestion, development, and roadmap documentation. |
-| `sample_docs/` | Small local documents for demo uploads. |
-| `docker-compose.yml` | Local Compose stack. |
-| `docker-compose.prod.yml` | Production-like single-host Compose override. |
+The generalization runner creates a temporary local evaluation knowledge base and writes run artifacts under `data/eval_runs/`. See [Testing and Smoke](docs/development/testing-and-smoke.md) before running Docker or evaluation workflows.
 
 ## Documentation
 
-The full documentation index is [docs/README.md](docs/README.md).
+The complete map is [docs/README.md](docs/README.md). Recommended entry points:
 
-- [RAG v2 Architecture](docs/architecture/rag-v2-architecture.md)
+- [PureLink Code Tour](docs/interview/code-tour.md)
+- [Project Storyline](docs/interview/project-storyline.md)
+- [RAG Pipeline](docs/rag/rag-pipeline.md)
 - [File Processing Pipeline](docs/ingestion/file-processing-pipeline.md)
-- [Document Blocks](docs/ingestion/document-blocks.md)
-- [Retrieval Layer](docs/rag/retrieval-layer.md)
 - [Retrieval and Citations](docs/retrieval-and-citations.md)
-- [Answer Policy Contract](docs/rag/answer-policy.md)
-- [Lightweight GraphRAG](docs/rag/lightweight-graphrag.md)
+- [Answer Policy](docs/rag/answer-policy.md)
 - [RAG Evaluation](docs/rag/rag-evaluation.md)
-- [KB Workspace](docs/product/kb-workspace.md)
-- [Testing and Smoke](docs/development/testing-and-smoke.md)
-- [Docker Deployment](docs/development/docker-deployment.md)
+- [Knowledge Base Workspace](docs/product/kb-workspace.md)
 
-## Deployment Notes
+## Security and Deployment
 
-The default Compose stack is suitable for local development and controlled self-hosted environments. Before exposing a deployment beyond your machine:
-
-- Replace `AUTH_SECRET_KEY`.
-- Replace the database password.
-- Restrict `CORS_ORIGINS` to trusted frontend origins.
-- Put TLS, host routing, and request limits behind a reverse proxy.
-- Do not expose PostgreSQL or Redis directly to the public internet.
-- Back up the database and vector store together.
-- Review upload directory permissions and disk capacity.
-- Configure external provider keys through environment variables, not committed files.
-
-## Project Status and Roadmap
-
-PureLink has a working local-first RAG core with document ingestion, retrieval, citations, diagnostics, and evaluation tooling. The experimental RAG features are intentionally visible and testable, but they should be treated as engineering surfaces rather than claims of state-of-the-art retrieval quality.
-
-Near-term work focuses on improving reliability, documentation, evaluation coverage, and the boundaries between stable workspace features and experimental retrieval features.
+The default stack is intended for local development and controlled self-hosting. Before broader exposure, replace development secrets and passwords, restrict CORS, use TLS and a reverse proxy, protect PostgreSQL and Redis from public access, and establish backup and upload-storage controls. See [SECURITY.md](SECURITY.md) and [Docker Deployment](docs/development/docker-deployment.md).
 
 ## Contributing
 
-Contributions are welcome when they are focused and testable. Good first contributions include bug reports, small documentation fixes, targeted tests, and narrow proposals that improve the local developer experience.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup notes, quality checks, and pull request guidance.
+Focused bug reports, documentation fixes, tests, and narrow engineering proposals are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and pull request checks.
 
 ## License
 
