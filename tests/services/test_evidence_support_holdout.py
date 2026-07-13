@@ -142,6 +142,81 @@ def test_relation_support_rejects_entity_cooccurrence_without_relation_semantics
     assert decision.answerable is False
 
 
+@pytest.mark.parametrize(
+    ("question", "evidence"),
+    [
+        (
+            "DEPLOYMENT_PROFILE 支持哪些值？",
+            "DEPLOYMENT_PROFILE supports cautious, standard, and rapid values.",
+        ),
+        (
+            "RENDER_MODE 支持哪些值？",
+            "RENDER_MODE 可设置为 draft、balanced 或 precise。",
+        ),
+    ],
+)
+def test_exact_technical_supported_values_accepts_explicit_enumeration(
+    question: str,
+    evidence: str,
+) -> None:
+    decision = _decision(question, evidence)
+
+    assert decision.answerable is True
+    assert decision.signals["exact_identifier_match"] is True
+    assert decision.signals["support_intent_match"] is True
+
+
+@pytest.mark.parametrize(
+    ("question", "evidence"),
+    [
+        (
+            "DEPLOYMENT_PROFILE 支持哪些值？",
+            "DEPLOYMENT_PROFILE controls deployment behavior.",
+        ),
+        (
+            "DEPLOYMENT_PROFILE 支持哪些值？",
+            "DEPLOYMENT_PROFILES supports cautious and rapid values.",
+        ),
+        (
+            "DEPLOYMENT_PROFILE 支持哪些值？",
+            "DEPLOYMENT_PROFILE defaults to cautious.",
+        ),
+    ],
+)
+def test_exact_technical_supported_values_rejects_missing_direct_support(
+    question: str,
+    evidence: str,
+) -> None:
+    assert _decision(question, evidence).answerable is False
+
+
+def test_cli_support_requires_full_command_flag_and_action() -> None:
+    decision = _decision(
+        "`atlas deploy --preview` 会发生什么？",
+        "`atlas deploy --preview` validates the manifest and prints planned changes without writing files.",
+    )
+
+    assert decision.answerable is True
+    assert decision.signals["cli_command_match"] is True
+    assert decision.signals["support_intent_match"] is True
+
+
+@pytest.mark.parametrize(
+    "evidence",
+    [
+        "`atlas deploy` validates the manifest and prints planned changes.",
+        "`atlas deploy --previews` validates the manifest and prints planned changes.",
+        "Use `atlas deploy --preview` during maintenance windows.",
+    ],
+)
+def test_cli_support_rejects_missing_flag_similar_command_or_no_explanation(
+    evidence: str,
+) -> None:
+    decision = _decision("`atlas deploy --preview` 会发生什么？", evidence)
+
+    assert decision.answerable is False
+
+
 def _decision(question: str, evidence: str):
     return _multi_decision(question, [_evidence(evidence)])
 

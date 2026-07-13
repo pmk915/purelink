@@ -51,6 +51,7 @@ from app.services.query_analysis import (
     EvidenceQueryAnalysis,
     analyze_evidence_query,
     evidence_attribute_aliases,
+    evidence_text_has_attribute,
 )
 from app.services.qa_intent import QAIntent, classify_qa_intent
 from app.services.retrieval import trace_service
@@ -262,6 +263,7 @@ class CitationUnitCandidate:
     entity_context_match: bool = False
     intent_alignment: float = 0.0
     attribute_match: bool = False
+    matched_attributes: tuple[str, ...] = ()
     identifier_match: bool = False
     direct_support: bool = False
     cross_entity_collision: bool = False
@@ -1112,14 +1114,31 @@ def select_evidence_units(
     chunk_units: dict[str, list[DocumentCitationUnit]],
     max_evidence_units: int,
     use_query_evidence_profile: bool = True,
+    target_document_ids: Sequence[int] = (),
+    target_document_terms: Sequence[str] = (),
     diagnostics: dict[str, object] | None = None,
 ) -> list[CitationUnitCandidate]:
-    analysis = analyze_evidence_query(question)
+    analysis = analyze_evidence_query(
+        question,
+        target_document_terms=target_document_terms,
+    )
+    target_ids = {int(document_id) for document_id in target_document_ids}
+    cross_document_collision = bool(
+        target_ids
+        and any(chunk.document_id not in target_ids for chunk in retrieved_chunks)
+    )
+    if target_ids:
+        retrieved_chunks = [
+            chunk for chunk in retrieved_chunks if chunk.document_id in target_ids
+        ]
     question_features = _build_query_features(question)
     technical_identifiers = analysis.technical_identifiers or _extract_technical_identifiers(question)
     technical_intent = _technical_question_intent(question)
     evidence_profile = (
-        _build_query_evidence_profile(question)
+        _build_query_evidence_profile(
+            question,
+            target_document_terms=target_document_terms,
+        )
         if use_query_evidence_profile
         else QueryEvidenceProfile(
             query_type="generic_factual",
@@ -1127,7 +1146,7 @@ def select_evidence_units(
             intent_terms=frozenset(),
         )
     )
-    if technical_identifiers and technical_intent:
+    if analysis.query_type == EVIDENCE_QUERY_TECHNICAL:
         evidence_profile = QueryEvidenceProfile(
             query_type="generic_factual",
             entity_terms=frozenset(),
@@ -1141,7 +1160,7 @@ def select_evidence_units(
         max_evidence_units
         if overview_coverage
         else
-        1
+        max(1, len(analysis.requested_attributes))
         if evidence_profile.query_type in ENTITY_PER_CHUNK_LIMIT_TYPES
         else MAX_EVIDENCE_UNITS_PER_CHUNK
     )
@@ -1198,12 +1217,13 @@ def select_evidence_units(
             if candidate_key in seen_keys:
                 rejection_reason_counts["duplicate"] += 1
                 continue
+            if accepted_count >= per_chunk_limit:
+                rejection_reason_counts["lower_rank"] += 1
+                continue
             selected.append(candidate)
             seen_keys.add(candidate_key)
             accepted_count += 1
             if not use_query_evidence_profile and not overview_coverage and len(selected) >= max_evidence_units:
-                break
-            if accepted_count >= per_chunk_limit:
                 break
 
     if overview_coverage:
@@ -1221,6 +1241,27 @@ def select_evidence_units(
         )
         selected = selected[:max_evidence_units]
 
+    supported_attributes = tuple(
+        attribute
+        for attribute in analysis.requested_attributes
+        if any(attribute in item.matched_attributes for item in selected)
+    )
+    missing_attributes = tuple(
+        attribute
+        for attribute in analysis.requested_attributes
+        if attribute not in supported_attributes
+    )
+    attribute_to_evidence_ids = {
+        attribute: [
+            _candidate_evidence_id(item)
+            for item in selected
+            if attribute in item.matched_attributes
+        ]
+        for attribute in supported_attributes
+    }
+    if analysis.query_type == EVIDENCE_QUERY_ATTRIBUTE and missing_attributes:
+        selected = []
+
     if diagnostics is not None:
         selected_keys = {
             (item.document_id, item.chunk_id, item.citation_unit_id or -1)
@@ -1232,12 +1273,36 @@ def select_evidence_units(
         diagnostics.update(
             {
                 "requested_attributes": list(analysis.requested_attributes),
+                "target_entity_terms": sorted(evidence_profile.entity_terms),
+                "target_document_ids": sorted(target_ids),
+                "supported_requested_attributes": list(supported_attributes),
+                "missing_requested_attributes": list(missing_attributes),
+                "attribute_to_evidence_ids": attribute_to_evidence_ids,
+                "cross_entity_collision": bool(
+                    rejection_reason_counts.get("cross_entity_binding")
+                ),
+                "cross_document_collision": cross_document_collision,
+                "exact_identifier_match": any(item.identifier_match for item in selected),
+                "cli_command_match": bool(
+                    analysis.technical_identifiers
+                    and any(item.identifier_match for item in selected)
+                    and any(
+                        re.search(r"(?:^|\s)--?[a-z0-9]", identifier.casefold())
+                        for identifier in analysis.technical_identifiers
+                    )
+                ),
+                "support_intent_match": any(item.direct_support for item in selected),
                 "technical_identifiers": list(analysis.technical_identifiers),
                 "evidence_selection": {
                     "candidate_count": candidate_count,
                     "selected_count": len(selected),
                     "rejected_count": max(0, candidate_count - len(selected)),
                     "rejection_reason_counts": dict(sorted(rejection_reason_counts.items())),
+                    "final_rejection_reason": (
+                        "missing_requested_attribute"
+                        if missing_attributes
+                        else None
+                    ),
                 },
             }
         )
@@ -1261,7 +1326,7 @@ def build_citation_ready_fallback_units(
     technical_identifiers = analysis.technical_identifiers or _extract_technical_identifiers(question)
     technical_intent = _technical_question_intent(question)
     evidence_profile = _build_query_evidence_profile(question)
-    if technical_identifiers and technical_intent:
+    if analysis.query_type == EVIDENCE_QUERY_TECHNICAL:
         evidence_profile = QueryEvidenceProfile(
             query_type="generic_factual",
             entity_terms=frozenset(),
@@ -1419,6 +1484,14 @@ def _citation_candidate_text_key(
     )
 
 
+def _candidate_evidence_id(candidate: CitationUnitCandidate) -> str:
+    if candidate.citation_unit_id is not None:
+        return f"citation_unit:{candidate.citation_unit_id}"
+    if candidate.chunk_db_id is not None:
+        return f"chunk_db:{candidate.chunk_db_id}"
+    return f"chunk:{candidate.document_id}:{candidate.chunk_id}"
+
+
 def _fits_evidence_context_budget(
     candidates: list[CitationUnitCandidate],
     candidate: CitationUnitCandidate,
@@ -1461,6 +1534,7 @@ def _assign_evidence_markers(
             entity_context_match=item.entity_context_match,
             intent_alignment=item.intent_alignment,
             attribute_match=item.attribute_match,
+            matched_attributes=item.matched_attributes,
             identifier_match=item.identifier_match,
             direct_support=item.direct_support,
             cross_entity_collision=item.cross_entity_collision,
@@ -1517,6 +1591,10 @@ def _build_citation_unit_candidate(
         identifiers=analysis.technical_identifiers,
     )
     attribute_alignment = _requested_attribute_alignment(
+        structured_text,
+        requested_attributes=analysis.requested_attributes,
+    )
+    matched_attributes = _matched_requested_attributes(
         structured_text,
         requested_attributes=analysis.requested_attributes,
     )
@@ -1604,6 +1682,7 @@ def _build_citation_unit_candidate(
         entity_context_match=entity_context_match,
         intent_alignment=intent_alignment,
         attribute_match=attribute_alignment > 0,
+        matched_attributes=matched_attributes,
         identifier_match=identifier_match,
         direct_support=direct_support,
         cross_entity_collision=cross_entity_collision,
@@ -1636,6 +1715,10 @@ def _build_chunk_fallback_candidate(
         identifiers=analysis.technical_identifiers,
     )
     attribute_alignment = _requested_attribute_alignment(
+        structured_text,
+        requested_attributes=analysis.requested_attributes,
+    )
+    matched_attributes = _matched_requested_attributes(
         structured_text,
         requested_attributes=analysis.requested_attributes,
     )
@@ -1692,6 +1775,7 @@ def _build_chunk_fallback_candidate(
         entity_exact_match=entity_exact_match,
         intent_alignment=intent_alignment,
         attribute_match=attribute_alignment > 0,
+        matched_attributes=matched_attributes,
         identifier_match=identifier_match,
         direct_support=direct_support,
         boilerplate=boilerplate,
@@ -1783,11 +1867,8 @@ def _technical_identifiers_match(
 ) -> bool:
     if not identifiers:
         return False
-    context_tokens = set(_technical_identifier_tokens(text))
-    compact_context = "".join(_technical_identifier_tokens(text))
     return all(
-        set(_technical_identifier_tokens(identifier)).issubset(context_tokens)
-        or "".join(_technical_identifier_tokens(identifier)) in compact_context
+        _technical_identifier_matches_context(identifier, text)
         for identifier in identifiers
     )
 
@@ -1799,21 +1880,33 @@ def _requested_attribute_alignment(
 ) -> float:
     if not requested_attributes:
         return 0.0
+    matched = _matched_requested_attributes(
+        text,
+        requested_attributes=requested_attributes,
+    )
+    return len(matched) / max(1, len(requested_attributes))
+
+
+def _matched_requested_attributes(
+    text: str,
+    *,
+    requested_attributes: tuple[str, ...],
+) -> tuple[str, ...]:
+    matched: list[str] = []
     lowered = text.casefold()
-    matched = 0
     for attribute in requested_attributes:
-        aliases = evidence_attribute_aliases(attribute)
-        has_match = any(alias.casefold() in lowered for alias in aliases)
+        has_match = evidence_text_has_attribute(text, attribute)
         if attribute == "supported_values" and not has_match:
             has_match = bool(
                 re.search(
-                    r"\b(?:supports?|supported|options?|one of)\b|支持|可选",
+                    r"\b(?:supports?|supported|options?|one of|valid values?|accepted values?|allowed values?)\b|"
+                    r"支持|可选|允许|可设置为",
                     lowered,
                 )
             )
         if has_match:
-            matched += 1
-    return matched / max(1, len(requested_attributes))
+            matched.append(attribute)
+    return tuple(matched)
 
 
 def _unrelated_attribute_penalty(
@@ -1823,7 +1916,6 @@ def _unrelated_attribute_penalty(
 ) -> float:
     if not requested_attributes:
         return 0.0
-    lowered = text.casefold()
     unrelated = sum(
         1
         for attribute in (
@@ -1841,7 +1933,7 @@ def _unrelated_attribute_penalty(
             "date",
         )
         if attribute not in requested_attributes
-        and any(alias.casefold() in lowered for alias in evidence_attribute_aliases(attribute))
+        and evidence_text_has_attribute(text, attribute)
     )
     return min(1.0, unrelated / 2)
 
@@ -1903,8 +1995,6 @@ def _has_cross_entity_collision(
 ) -> bool:
     if analysis.query_type != EVIDENCE_QUERY_ATTRIBUTE or not profile.entity_terms:
         return False
-    if not _has_structured_entity_fields(chunk.text):
-        return False
     section_title = getattr(metadata, "section_title", None) or chunk.section_title
     heading_path = getattr(metadata, "heading_path", None) or chunk.heading_path
     local_heading = str(section_title or (heading_path[-1] if heading_path else "") or "").strip()
@@ -1913,14 +2003,6 @@ def _has_cross_entity_collision(
     if _has_entity_exact_match(local_heading, profile=profile):
         return False
     return not _has_entity_exact_match(unit_text, profile=profile)
-
-
-def _has_structured_entity_fields(text: str) -> bool:
-    field_lines = re.findall(
-        r"(?m)^\s*[^\n:：]{1,32}\s*[:：]\s*\S+",
-        str(text or ""),
-    )
-    return len(field_lines) >= 2
 
 
 def _looks_like_local_entity_heading(value: str) -> bool:
@@ -1938,6 +2020,12 @@ def _looks_like_local_entity_heading(value: str) -> bool:
         "职责",
         "办公信息",
     }:
+        return False
+    if re.search(
+        r"\b(?:overview|summary|configuration|details|files?|inputs?|outputs?|workflow|guide|policy|settings?)\b|"
+        r"概述|总结|配置|详情|文件|输入|输出|支持|上传|处理|安装|流程|指南|规则|属性|外观|颜色|处理器|重量|位置|地点",
+        lowered,
+    ):
         return False
     latin_words = re.findall(r"\b[A-Z][A-Za-z0-9_-]*\b", value)
     if len(latin_words) >= 2:
@@ -2035,6 +2123,11 @@ def _should_filter_entity_candidate(
         profile.query_type in {"entity_attribute", "entity_reason"}
         and candidate.citation_unit_id is not None
         and candidate.intent_alignment <= 0
+        and not (
+            profile.query_type == "entity_attribute"
+            and candidate.attribute_match
+            and candidate.direct_support
+        )
         and not (
             profile.query_type == "entity_reason"
             and _has_direct_reason_support(candidate)
@@ -2169,10 +2262,17 @@ def _lexical_relevance(text: str, query_features: set[str]) -> float:
     return len(text_features & query_features) / max(1, len(query_features))
 
 
-def _build_query_evidence_profile(question: str) -> QueryEvidenceProfile:
+def _build_query_evidence_profile(
+    question: str,
+    *,
+    target_document_terms: Sequence[str] = (),
+) -> QueryEvidenceProfile:
     normalized = _normalize_text(question)
     lowered = normalized.lower()
-    analysis = analyze_evidence_query(question)
+    analysis = analyze_evidence_query(
+        question,
+        target_document_terms=target_document_terms,
+    )
 
     relation_terms = _extract_relation_entity_terms(normalized)
     if relation_terms:
@@ -2444,13 +2544,8 @@ def _technical_evidence_alignment(
 ) -> float:
     if not identifiers:
         return 0.0
-    context_tokens = set(_technical_identifier_tokens(structured_text))
-    compact_context = "".join(_technical_identifier_tokens(structured_text))
     if not all(
-        (
-            set(_technical_identifier_tokens(identifier)).issubset(context_tokens)
-            or "".join(_technical_identifier_tokens(identifier)) in compact_context
-        )
+        _technical_identifier_matches_context(identifier, structured_text)
         for identifier in identifiers
     ):
         return 0.0
@@ -2486,6 +2581,42 @@ def _technical_identifier_tokens(value: str) -> list[str]:
     split_camel = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", unquoted)
     raw_tokens = re.findall(r"[A-Za-z0-9]+", re.sub(r"[_-]+", " ", split_camel))
     return [_singularize_technical_token(token.casefold()) for token in raw_tokens if token]
+
+
+def _technical_identifier_matches_context(identifier: str, context: str) -> bool:
+    strict_identifier = _strict_technical_identifier(identifier)
+    if strict_identifier:
+        context_identifiers = {
+            match.group(0).casefold()
+            for pattern in (
+                r"\b[A-Z][A-Z0-9]+(?:_[A-Z0-9]+)+\b",
+                r"\b[a-z][a-z0-9]+_[a-z0-9_]+\b",
+            )
+            for match in re.finditer(pattern, context)
+        }
+        near_matches = {
+            candidate
+            for candidate in context_identifiers
+            if set(candidate.split("_")) & set(strict_identifier.split("_"))
+        }
+        if near_matches:
+            return strict_identifier in near_matches
+
+    context_tokens = set(_technical_identifier_tokens(context))
+    identifier_tokens = set(_technical_identifier_tokens(identifier))
+    compact_context = "".join(_technical_identifier_tokens(context))
+    return identifier_tokens.issubset(context_tokens) or "".join(
+        _technical_identifier_tokens(identifier)
+    ) in compact_context
+
+
+def _strict_technical_identifier(value: str) -> str | None:
+    normalized = str(value or "").strip("`'\" ")
+    if re.fullmatch(r"[A-Z][A-Z0-9]+(?:_[A-Z0-9]+)+", normalized):
+        return normalized.casefold()
+    if re.fullmatch(r"[a-z][a-z0-9]+_[a-z0-9_]+", normalized):
+        return normalized.casefold()
+    return None
 
 
 def _singularize_technical_token(token: str) -> str:

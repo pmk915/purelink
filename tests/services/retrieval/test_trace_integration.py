@@ -162,6 +162,14 @@ async def test_retrieval_trace_records_evidence_selection_signals(
     trace_metadata = json.loads(trace.metadata_json or "{}")
     item_metadata = json.loads(item.metadata_json or "{}")
     assert trace_metadata["requested_attributes"] == ["processor"]
+    assert trace_metadata["target_entity_terms"] == ["Aurora Mini"]
+    assert trace_metadata["target_document_ids"] == []
+    assert trace_metadata["supported_requested_attributes"] == ["processor"]
+    assert trace_metadata["missing_requested_attributes"] == []
+    assert list(trace_metadata["attribute_to_evidence_ids"]) == ["processor"]
+    assert trace_metadata["cross_entity_collision"] is False
+    assert trace_metadata["cross_document_collision"] is False
+    assert trace_metadata["support_intent_match"] is True
     assert trace_metadata["technical_identifiers"] == []
     assert trace_metadata["evidence_selection"]["candidate_count"] == 1
     assert trace_metadata["evidence_selection"]["selected_count"] == 1

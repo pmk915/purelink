@@ -96,6 +96,8 @@ EVIDENCE_ATTRIBUTE_ALIASES: dict[str, tuple[str, ...]] = {
     ),
     "processor": ("处理器", "cpu", "gpu", "芯片", "processor", "chipset"),
     "color": ("颜色", "配色", "color", "colour", "finish"),
+    "weight": ("重量", "多重", "weight"),
+    "height": ("身高", "height"),
     "role": ("角色", "职位", "职务", "role", "position", "title"),
     "responsibility": ("负责", "职责", "责任", "responsibility", "responsibilities", "owns"),
     "group": ("隶属", "属于哪个组", "属于哪个团队", "group", "team", "belongs to"),
@@ -112,15 +114,26 @@ EVIDENCE_ATTRIBUTE_ALIASES: dict[str, tuple[str, ...]] = {
     "file_types": (
         "文件类型",
         "文件格式",
+        "输入文件",
         "文本格式",
         "扩展名",
         "file types",
         "file formats",
+        "input files",
         "formats",
         "extensions",
     ),
     "version": ("版本", "version", "release"),
     "date": ("日期", "时间", "哪一年", "什么时候", "date", "year", "when"),
+    "leave_entitlement": (
+        "休假额度",
+        "休假天数",
+        "多少天休假",
+        "假期天数",
+        "leave entitlement",
+        "vacation allowance",
+        "leave days",
+    ),
 }
 
 _TECHNICAL_IDENTIFIER_PATTERNS = (
@@ -162,15 +175,35 @@ class TargetDocumentDecision:
     target_requested: bool
 
 
-def analyze_evidence_query(query: str) -> EvidenceQueryAnalysis:
+def analyze_evidence_query(
+    query: str,
+    *,
+    target_document_terms: Sequence[str] = (),
+) -> EvidenceQueryAnalysis:
     normalized = " ".join(str(query or "").split())
     lowered = normalized.casefold()
     requested_attributes = tuple(
         name
         for name, aliases in EVIDENCE_ATTRIBUTE_ALIASES.items()
-        if any(alias.casefold() in lowered for alias in aliases)
+        if any(_contains_attribute_alias(lowered, alias) for alias in aliases)
     )
+    if (
+        "configuration" in requested_attributes
+        and "location" in requested_attributes
+        and re.search(r"配置(?:在)?哪里|where\s+(?:is\s+\w+\s+)?configur", lowered)
+    ):
+        requested_attributes = tuple(
+            attribute for attribute in requested_attributes if attribute != "location"
+        )
     technical_identifiers = extract_technical_identifiers(normalized)
+    if (
+        technical_identifiers
+        and "date" in requested_attributes
+        and re.search(r"调用|执行|运行|阶段|\b(?:call|invoke|execute|run|stage)\b", lowered)
+    ):
+        requested_attributes = tuple(
+            attribute for attribute in requested_attributes if attribute != "date"
+        )
     overview_requested = bool(
         re.search(
             r"总结|概括|归纳|综述|主要内容|\boverview\b|\bsummary\b|\bsummarize\b",
@@ -195,7 +228,7 @@ def analyze_evidence_query(query: str) -> EvidenceQueryAnalysis:
     return EvidenceQueryAnalysis(
         query_type=query_type,
         entities=_extract_evidence_entities(
-            normalized,
+            _remove_target_document_terms(normalized, target_document_terms),
             query_type=query_type,
             requested_attributes=requested_attributes,
             technical_identifiers=technical_identifiers,
@@ -220,6 +253,24 @@ def extract_technical_identifiers(query: str) -> tuple[str, ...]:
 
 def evidence_attribute_aliases(attribute: str) -> tuple[str, ...]:
     return EVIDENCE_ATTRIBUTE_ALIASES.get(attribute, (attribute,))
+
+
+def evidence_text_has_attribute(text: str, attribute: str) -> bool:
+    lowered = str(text or "").casefold()
+    return any(
+        _contains_attribute_alias(lowered, alias)
+        for alias in evidence_attribute_aliases(attribute)
+    )
+
+
+def _contains_attribute_alias(lowered_text: str, alias: str) -> bool:
+    normalized_alias = alias.casefold()
+    if re.search(r"[a-z0-9_]", normalized_alias):
+        return re.search(
+            rf"(?<![a-z0-9_]){re.escape(normalized_alias)}(?![a-z0-9_])",
+            lowered_text,
+        ) is not None
+    return normalized_alias in lowered_text
 
 
 def _evidence_query_type(
@@ -288,7 +339,7 @@ def _extract_evidence_entities(
         for alias in evidence_attribute_aliases(attribute):
             cleaned = re.sub(re.escape(alias), " ", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(
-        r"为什么|是谁|是什么|是多少|在哪里|在哪|位于哪里|有什么|什么|如何|怎么|请问|请|的|型号|作用|用途|特点|特征|支持|使用|调用|保存|办公|文本|哪些值|哪些|值|列出所有|全部|所有|总结|概括|归纳|"
+        r"为什么|是谁|是什么|是多少|在哪里|在哪|位于哪里|有什么|什么|如何|怎么|请问|请|的|型号|作用|用途|特点|特征|支持|使用|调用|保存|办公|文本|哪些值|哪些|值|列出所有|全部|所有|总结|概括|归纳|当前|中的|和外壳|分别|"
         r"\b(?:why|what|where|when|how|does|do|is|are|the|a|an|please|list|all)\b",
         " ",
         cleaned,
@@ -296,6 +347,20 @@ def _extract_evidence_entities(
     )
     entity = _clean_entity_text(cleaned)
     return (entity,) if entity else ()
+
+
+def _remove_target_document_terms(
+    query: str,
+    target_document_terms: Sequence[str],
+) -> str:
+    cleaned = query
+    for term in sorted((str(item) for item in target_document_terms if item), key=len, reverse=True):
+        tokens = _WORD_PATTERN.findall(_normalize_text(term))
+        if not tokens:
+            continue
+        pattern = r"[\s_-]+".join(re.escape(token) for token in tokens)
+        cleaned = re.sub(pattern, " ", cleaned, flags=re.IGNORECASE)
+    return " ".join(cleaned.split())
 
 
 def _clean_entity_text(value: str) -> str:
@@ -323,7 +388,11 @@ def resolve_target_documents(
     candidates = _build_document_candidates(documents)
     high_matches = [candidate for candidate in candidates if _is_high_confidence_match(normalized_query, candidate)]
     if high_matches:
-        return _matched_decision(high_matches, confidence=CONFIDENCE_HIGH, reason="filename_stem_match")
+        return _matched_decision(
+            _remove_shadowed_document_matches(normalized_query, high_matches),
+            confidence=CONFIDENCE_HIGH,
+            reason="filename_stem_match",
+        )
 
     medium_matches = _medium_confidence_matches(normalized_query, candidates)
     if medium_matches:
@@ -396,6 +465,32 @@ def _medium_confidence_matches(
     return [candidate for score, candidate in scored if score == best_score]
 
 
+def _remove_shadowed_document_matches(
+    query: str,
+    candidates: Sequence[_DocumentNameCandidate],
+) -> list[_DocumentNameCandidate]:
+    retained: list[_DocumentNameCandidate] = []
+    for candidate in candidates:
+        shadowed_by = [
+            other
+            for other in candidates
+            if other is not candidate
+            and _contains_normalized_phrase(
+                other.normalized_stem,
+                candidate.normalized_stem,
+            )
+        ]
+        if not shadowed_by:
+            retained.append(candidate)
+            continue
+        remaining_query = query
+        for other in shadowed_by:
+            remaining_query = remaining_query.replace(other.normalized_stem, " ", 1)
+        if _contains_normalized_phrase(" ".join(remaining_query.split()), candidate.normalized_stem):
+            retained.append(candidate)
+    return retained or list(candidates)
+
+
 def _matched_decision(
     candidates: Sequence[_DocumentNameCandidate],
     *,
@@ -427,6 +522,18 @@ def _is_kb_wide_request(query: str) -> bool:
 
 
 def _looks_like_document_request(query: str) -> bool:
+    if re.search(
+        r"(?:这个|这份|该)文档|\b(?:this|the)\s+document\b",
+        query,
+        re.IGNORECASE,
+    ):
+        return False
+    if re.search(
+        r"文件(?:类型|格式|扩展名)|\bfile\s+(?:types?|formats?|extensions?)\b",
+        query,
+        re.IGNORECASE,
+    ):
+        return False
     return bool(_SUPPORTED_EXTENSION_PATTERN.search(query)) or any(
         pattern.search(query) for pattern in _DOCUMENT_REQUEST_PATTERNS
     )
@@ -481,6 +588,7 @@ __all__ = [
     "TargetDocumentDecision",
     "analyze_evidence_query",
     "evidence_attribute_aliases",
+    "evidence_text_has_attribute",
     "extract_technical_identifiers",
     "resolve_target_documents",
 ]

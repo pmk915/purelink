@@ -88,6 +88,50 @@ def test_resolve_target_documents_does_not_select_similar_longer_filename() -> N
     assert decision.matched_terms == ("deployment guide",)
 
 
+def test_resolve_target_documents_prefers_explicit_archive_over_shadowed_stem() -> None:
+    decision = resolve_target_documents(
+        "Summarize the atlas operations archive document",
+        _documents("atlas-operations.txt", "atlas-operations-archive.txt"),
+    )
+
+    assert decision.target_document_ids == (2,)
+    assert decision.matched_terms == ("atlas operations archive",)
+
+
+def test_resolve_target_documents_keeps_current_and_archive_distinct() -> None:
+    documents = _documents("orion-operations.txt", "orion-operations-archive.txt")
+
+    current = resolve_target_documents("Use the Orion Operations document", documents)
+    archive = resolve_target_documents(
+        "Use the Orion Operations Archive document",
+        documents,
+    )
+    unspecified = resolve_target_documents("Where does Jordan Lee work?", documents)
+
+    assert current.target_document_ids == (1,)
+    assert archive.target_document_ids == (2,)
+    assert unspecified.target_requested is False
+
+
+def test_resolve_target_documents_does_not_treat_file_type_attribute_as_document_name() -> None:
+    decision = resolve_target_documents(
+        "Atlas 导入工具支持哪些文件类型？",
+        _documents("atlas-deployment-guide.txt", "operations.md"),
+    )
+
+    assert decision.target_requested is False
+    assert decision.target_document_ids == ()
+
+
+def test_resolve_target_documents_keeps_generic_document_reference_kb_wide() -> None:
+    decision = resolve_target_documents(
+        "这个文档说了什么结论？",
+        _documents("atlas-guide.txt", "operations.md"),
+    )
+
+    assert decision.target_requested is False
+
+
 def test_resolve_target_documents_supports_multiple_explicit_targets() -> None:
     decision = resolve_target_documents(
         "总结 deployment guide 和 operations handbook 文档",
@@ -160,3 +204,28 @@ def test_analyze_evidence_query_extracts_contextual_framework_identifier() -> No
     analysis = analyze_evidence_query("FastAPI 中 Depends 的作用是什么？")
 
     assert analysis.technical_identifiers == ("Depends",)
+
+
+def test_analyze_evidence_query_does_not_treat_function_call_timing_as_calendar_date() -> None:
+    analysis = analyze_evidence_query("__init__ 在什么时候调用？")
+
+    assert analysis.technical_identifiers == ("__init__",)
+    assert "date" not in analysis.requested_attributes
+
+
+def test_analyze_evidence_query_removes_target_document_from_attribute_entity() -> None:
+    analysis = analyze_evidence_query(
+        "当前 Atlas Operations 中的 Jordan Lee 在哪里办公？",
+        target_document_terms=("Atlas Operations",),
+    )
+
+    assert analysis.entities == ("Jordan Lee",)
+
+
+def test_analyze_evidence_query_keeps_multiple_attributes_distinct() -> None:
+    analysis = analyze_evidence_query(
+        "Orion Edge 的处理器和外壳颜色分别是什么？"
+    )
+
+    assert analysis.entities == ("Orion Edge",)
+    assert analysis.requested_attributes == ("processor", "color")

@@ -40,6 +40,7 @@ from app.services.retrieval.trace_types import RetrievalTraceCandidate
 from app.services.retrieval.types import RetrievalMode, RetrievalRequest, RetrievalResult
 from app.services.query_analysis import (
     EVIDENCE_QUERY_ATTRIBUTE,
+    EVIDENCE_QUERY_TECHNICAL,
     TargetDocumentDecision,
     analyze_evidence_query,
     resolve_target_documents,
@@ -79,16 +80,31 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
         request=request,
         settings=active_settings,
     )
-    overview_target_decision: TargetDocumentDecision | None = None
+    target_document_decision = resolve_target_documents(
+        request.evidence_query or request.query,
+        request.documents,
+    )
+    target_metadata = _build_target_document_metadata(target_document_decision)
+    retrieval_documents = _documents_for_target(
+        documents,
+        decision=target_document_decision,
+        enforce_missing_target=resolved_mode == RetrievalMode.OVERVIEW,
+    )
+    keyword_documents = _documents_for_target(
+        request.documents,
+        decision=target_document_decision,
+        enforce_missing_target=resolved_mode == RetrievalMode.OVERVIEW,
+    )
     overview_metadata: dict[str, object] = {}
+    if resolved_mode == RetrievalMode.OVERVIEW:
+        overview_metadata["overview_scope"] = (
+            "document_targeted"
+            if target_document_decision.target_requested
+            else "knowledge_base"
+        )
 
     try:
         if resolved_mode == RetrievalMode.OVERVIEW:
-            overview_target_decision = resolve_target_documents(
-                request.evidence_query or request.query,
-                request.documents,
-            )
-            overview_metadata = _build_overview_metadata(overview_target_decision)
             raw_chunks = retrieve_overview_chunks(
                 db=request.db,
                 documents=request.documents,
@@ -99,12 +115,12 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
                 settings=active_settings,
                 query=request.evidence_query or request.query,
                 target_document_ids=(
-                    overview_target_decision.target_document_ids
-                    if overview_target_decision.target_requested
+                    target_document_decision.target_document_ids
+                    if target_document_decision.target_requested
                     else None
                 ),
                 overview_scope=str(overview_metadata["overview_scope"]),
-                target_document_requested=overview_target_decision.target_requested,
+                target_document_requested=target_document_decision.target_requested,
             )
             context_chunks = raw_chunks
         else:
@@ -112,8 +128,8 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
             if effective_mode == RetrievalMode.HYBRID_TEXT:
                 raw_chunks, hybrid_metadata = retrieve_hybrid_text_chunks(
                     db=request.db,
-                    documents=documents,
-                    keyword_documents=request.documents,
+                    documents=retrieval_documents,
+                    keyword_documents=keyword_documents,
                     vector_root=request.vector_root,
                     scope=scope,
                     knowledge_base_id=request.knowledge_base_id,
@@ -131,7 +147,7 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
             else:
                 raw_chunks = chunk_retriever.retrieve_chunks_for_documents(
                     db=request.db,
-                    documents=documents,
+                    documents=retrieval_documents,
                     vector_root=request.vector_root,
                     scope=scope,
                     knowledge_base_id=request.knowledge_base_id,
@@ -145,7 +161,7 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
                 try:
                     graph_chunks = retrieve_graph_chunks(
                         db=request.db,
-                        documents=documents,
+                        documents=retrieval_documents,
                         knowledge_base_id=request.knowledge_base_id,
                         query=request.query,
                         scope=scope.value,
@@ -193,6 +209,12 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
                 db=request.db,
                 query=request.evidence_query or request.query,
                 context_chunks=context_chunks,
+                target_document_ids=target_document_decision.target_document_ids,
+                target_document_terms=(
+                    target_document_decision.matched_terms
+                    if target_document_decision.target_document_ids
+                    else ()
+                ),
                 max_evidence_units=(
                     initial_top_k
                     if expand_for_reranker
@@ -258,6 +280,7 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
                     fallback_reason=fallback_reason,
                     routing_query_source=routing_query_source,
                 ),
+                **target_metadata,
                 **overview_metadata,
                 **evidence_selection_metadata,
                 "context_chunk_count": len(context_chunks),
@@ -313,6 +336,7 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
                     fallback_reason=fallback_reason,
                     routing_query_source=routing_query_source,
                 ),
+                **target_metadata,
                 **overview_metadata,
                 **evidence_selection_metadata,
                 "retrieved_chunks": retrieved_chunks,
@@ -342,6 +366,7 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
                     fallback_reason=fallback_reason,
                     routing_query_source=routing_query_source,
                 ),
+                **target_metadata,
                 **overview_metadata,
                 "error": f"{type(exc).__name__}: {exc}",
             },
@@ -383,17 +408,28 @@ def _build_router_metadata(
     }
 
 
-def _build_overview_metadata(decision: TargetDocumentDecision) -> dict[str, object]:
+def _build_target_document_metadata(decision: TargetDocumentDecision) -> dict[str, object]:
     return {
-        "overview_scope": (
-            "document_targeted" if decision.target_requested else "knowledge_base"
-        ),
         "target_document_requested": decision.target_requested,
         "target_document_ids": list(decision.target_document_ids),
         "target_document_terms": list(decision.matched_terms),
         "target_document_confidence": decision.confidence,
         "target_document_reason": decision.reason,
     }
+
+
+def _documents_for_target(
+    documents,
+    *,
+    decision: TargetDocumentDecision,
+    enforce_missing_target: bool,
+):
+    if not decision.target_requested:
+        return documents
+    if not decision.target_document_ids and not enforce_missing_target:
+        return documents
+    target_ids = set(decision.target_document_ids)
+    return [document for document in documents if int(document.id) in target_ids]
 
 
 def _graph_fallback_reason(*, graph_chunks, min_score: float) -> str | None:
@@ -689,6 +725,8 @@ def _select_evidence_units(
     context_chunks,
     max_evidence_units: int,
     use_query_evidence_profile: bool = True,
+    target_document_ids=(),
+    target_document_terms=(),
 ):
     from app.services.qa import (
         build_citation_ready_fallback_units,
@@ -704,13 +742,33 @@ def _select_evidence_units(
         chunk_units=chunk_units,
         max_evidence_units=max_evidence_units,
         use_query_evidence_profile=use_query_evidence_profile,
+        target_document_ids=target_document_ids,
+        target_document_terms=target_document_terms,
         diagnostics=diagnostics,
     )
     if selected:
         return selected, diagnostics
 
-    analysis = analyze_evidence_query(query)
-    if analysis.query_type == EVIDENCE_QUERY_ATTRIBUTE:
+    analysis = analyze_evidence_query(
+        query,
+        target_document_terms=target_document_terms,
+    )
+    if analysis.query_type in {
+        EVIDENCE_QUERY_ATTRIBUTE,
+        EVIDENCE_QUERY_TECHNICAL,
+    }:
+        selection = diagnostics.get("evidence_selection")
+        if isinstance(selection, dict):
+            selection["fallback_used"] = False
+            selection["fallback_suppressed"] = True
+            selection.setdefault(
+                "final_rejection_reason",
+                (
+                    "missing_requested_attribute"
+                    if analysis.query_type == EVIDENCE_QUERY_ATTRIBUTE
+                    else "similar_identifier_only"
+                ),
+            )
         return [], diagnostics
 
     fallback = build_citation_ready_fallback_units(

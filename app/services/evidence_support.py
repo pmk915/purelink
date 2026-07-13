@@ -4,7 +4,11 @@ from dataclasses import dataclass, field
 import re
 from typing import Any, Sequence
 
-from app.services.query_analysis import analyze_evidence_query, evidence_attribute_aliases
+from app.services.query_analysis import (
+    analyze_evidence_query,
+    evidence_attribute_aliases,
+    evidence_text_has_attribute,
+)
 
 
 REASON_SUPPORTED = "supported"
@@ -72,11 +76,20 @@ ATTRIBUTE_ALIASES: dict[str, tuple[str, ...]] = {
     "height": ("身高", "height", "tall"),
     "role": ("角色", "职位", "role"),
     "responsibility": ("负责", "职责", "responsibility", "owns", "maintains", "focuses"),
-    "group": ("隶属", "属于", "组", "团队", "group", "belongs"),
+    "group": ("隶属", "属于哪个组", "属于哪个团队", "group", "belongs to"),
     "configuration": ("配置", "在哪里配置", "environment variable", "环境变量", "config"),
     "default_value": ("默认值", "default value", "default"),
     "remote_work_policy": ("远程办公", "remote work"),
     "invention_date": ("哪一年", "发明", "created", "invented", "founded"),
+    "leave_entitlement": (
+        "休假额度",
+        "休假天数",
+        "多少天休假",
+        "假期天数",
+        "leave entitlement",
+        "vacation allowance",
+        "leave days",
+    ),
 }
 
 DEFINITION_TERMS = (
@@ -216,7 +229,21 @@ def evaluate_evidence_support(
             support_score=0.0,
             reason=reason,
             query_type=support_query.query_type,
-            signals={"has_final_evidence": False},
+            signals={
+                "has_final_evidence": False,
+                "requested_attributes": list(support_query.requested_attributes),
+                "supported_requested_attributes": [],
+                "missing_requested_attributes": list(
+                    support_query.requested_attributes
+                ),
+                "attribute_to_evidence_ids": {},
+                "exact_identifiers": list(support_query.exact_identifiers),
+                "entity_terms": list(support_query.entity_terms),
+                "exact_identifier_match": False,
+                "cli_command_match": False,
+                "support_intent_match": False,
+                "final_rejection_reason": reason,
+            },
         )
 
     contexts = [_evidence_context(item) for item in evidence_list]
@@ -237,7 +264,12 @@ def evaluate_evidence_support(
         support_query,
         evidence_list,
     )
-    attribute_coverage = _attribute_coverage(support_query.requested_attributes, aggregate_context)
+    (
+        supported_attributes,
+        missing_attributes,
+        attribute_to_evidence_ids,
+    ) = _attribute_support(support_query, evidence_list)
+    attribute_coverage = not missing_attributes
     exact_identifier_coverage, technical_intent_coverage, technical_supporting_ids = _technical_support(
         support_query,
         evidence_list,
@@ -265,6 +297,19 @@ def evaluate_evidence_support(
             for evidence_id in (_evidence_id(item) for item in evidence_list)
             if evidence_id not in supporting_ids
         )
+    elif support_query.query_type == QUERY_TYPE_ENTITY_ATTRIBUTE:
+        supporting_ids = tuple(
+            dict.fromkeys(
+                evidence_id
+                for evidence_ids in attribute_to_evidence_ids.values()
+                for evidence_id in evidence_ids
+            )
+        )
+        rejected_ids = tuple(
+            evidence_id
+            for evidence_id in (_evidence_id(item) for item in evidence_list)
+            if evidence_id not in supporting_ids
+        )
     lexical_support = _lexical_support(support_query.keywords, aggregate_context)
     retrieval_score_support = _max_score(evidence_list) >= 0.15
     structured_context_support = any(_structured_context_text(item) for item in evidence_list)
@@ -280,8 +325,22 @@ def evaluate_evidence_support(
         "retrieval_score_support": retrieval_score_support,
         "structured_context_support": structured_context_support,
         "requested_attributes": list(support_query.requested_attributes),
+        "supported_requested_attributes": list(supported_attributes),
+        "missing_requested_attributes": list(missing_attributes),
+        "attribute_to_evidence_ids": {
+            attribute: list(evidence_ids)
+            for attribute, evidence_ids in attribute_to_evidence_ids.items()
+        },
         "exact_identifiers": list(support_query.exact_identifiers),
         "entity_terms": list(support_query.entity_terms),
+        "exact_identifier_match": bool(support_query.exact_identifiers)
+        and exact_identifier_coverage,
+        "cli_command_match": (
+            exact_identifier_coverage
+            if _has_cli_identifier(support_query.exact_identifiers)
+            else False
+        ),
+        "support_intent_match": requested_intent_coverage,
     }
     score = _support_score(signals)
     reason = _unsupported_reason(
@@ -293,6 +352,9 @@ def evaluate_evidence_support(
         requested_intent_coverage=requested_intent_coverage,
         lexical_support=lexical_support,
         supporting_ids=supporting_ids,
+    )
+    signals["final_rejection_reason"] = (
+        None if reason == REASON_SUPPORTED else reason
     )
     return EvidenceSupportDecision(
         answerable=reason == REASON_SUPPORTED,
@@ -405,7 +467,7 @@ def _unsupported_reason(
     if support_query.query_type == QUERY_TYPE_OVERVIEW:
         return REASON_SUPPORTED if supporting_ids else REASON_INSUFFICIENT_QUERY_COVERAGE
     if support_query.query_type == QUERY_TYPE_EXACT_TECHNICAL:
-        if not exact_identifier_coverage and not lexical_support:
+        if not exact_identifier_coverage:
             return REASON_MISSING_EXACT_IDENTIFIER_SUPPORT
         if not requested_intent_coverage:
             return REASON_INSUFFICIENT_QUERY_COVERAGE
@@ -566,9 +628,19 @@ def _extract_exact_identifiers(query: str) -> tuple[str, ...]:
 def _requested_attributes(lowered_query: str) -> tuple[str, ...]:
     found: list[str] = []
     for name, aliases in ATTRIBUTE_ALIASES.items():
-        if any(alias.casefold() in lowered_query for alias in aliases):
+        if any(_contains_attribute_alias(lowered_query, alias) for alias in aliases):
             found.append(name)
     return tuple(dict.fromkeys(found))
+
+
+def _contains_attribute_alias(lowered_text: str, alias: str) -> bool:
+    normalized_alias = alias.casefold()
+    if re.search(r"[a-z0-9_]", normalized_alias):
+        return re.search(
+            rf"(?<![a-z0-9_]){re.escape(normalized_alias)}(?![a-z0-9_])",
+            lowered_text,
+        ) is not None
+    return normalized_alias in lowered_text
 
 
 def _extract_attribute_entity_terms(query: str, requested_attributes: tuple[str, ...]) -> tuple[str, ...]:
@@ -753,32 +825,125 @@ def _local_structure_scope(item: Any) -> str:
 def _attribute_coverage(requested_attributes: tuple[str, ...], context: str) -> bool:
     if not requested_attributes:
         return True
-    lowered = context.casefold()
     return all(
-        any(
-            alias.casefold() in lowered
-            for alias in tuple(
-                dict.fromkeys(
-                    (
-                        *ATTRIBUTE_ALIASES.get(attribute, ()),
-                        *evidence_attribute_aliases(attribute),
-                    )
-                )
+        _context_has_attribute(context, attribute)
+        for attribute in requested_attributes
+    )
+
+
+def _context_has_attribute(context: str, attribute: str) -> bool:
+    if attribute == "supported_values" and _has_explicit_supported_values(
+        context.casefold()
+    ):
+        return True
+    aliases = tuple(
+        dict.fromkeys(
+            (
+                *ATTRIBUTE_ALIASES.get(attribute, ()),
+                *evidence_attribute_aliases(attribute),
             )
         )
-        for attribute in requested_attributes
+    )
+    return evidence_text_has_attribute(context, attribute) or any(
+        _contains_attribute_alias(context.casefold(), alias)
+        for alias in aliases
+    )
+
+
+def _attribute_support(
+    support_query: _SupportQuery,
+    evidence_units: Sequence[Any],
+) -> tuple[tuple[str, ...], tuple[str, ...], dict[str, tuple[str, ...]]]:
+    if not support_query.requested_attributes:
+        return (), (), {}
+
+    mapping: dict[str, tuple[str, ...]] = {}
+    for attribute in support_query.requested_attributes:
+        evidence_ids: list[str] = []
+        for item in evidence_units:
+            context = _attribute_context_text(item)
+            if not _context_has_attribute(context, attribute):
+                continue
+            if support_query.entity_terms and not _entity_coverage(
+                support_query.entity_terms,
+                context,
+            ):
+                continue
+            evidence_ids.append(_evidence_id(item))
+        if evidence_ids:
+            mapping[attribute] = tuple(dict.fromkeys(evidence_ids))
+
+    supported = tuple(
+        attribute
+        for attribute in support_query.requested_attributes
+        if attribute in mapping
+    )
+    missing = tuple(
+        attribute
+        for attribute in support_query.requested_attributes
+        if attribute not in mapping
+    )
+    return supported, missing, mapping
+
+
+def _attribute_context_text(item: Any) -> str:
+    heading_path = getattr(item, "heading_path", None)
+    return _normalize_text(
+        " ".join(
+            part
+            for part in (
+                str(getattr(item, "text", "") or ""),
+                str(getattr(item, "section_title", "") or ""),
+                " ".join(str(value) for value in heading_path or () if value),
+            )
+            if part
+        )
     )
 
 
 def _exact_identifier_coverage(identifiers: tuple[str, ...], context: str) -> bool:
     if not identifiers:
         return True
-    normalized_context = _identifier_compare_text(context)
     return all(
-        _identifier_compare_text(identifier) in normalized_context
-        or _identifier_parts_covered(identifier, context)
+        _identifier_covered(identifier, context)
         for identifier in identifiers
     )
+
+
+def _identifier_covered(identifier: str, context: str) -> bool:
+    strict_identifier = _strict_technical_identifier(identifier)
+    if strict_identifier:
+        context_identifiers = {
+            match.group(0).casefold()
+            for pattern in (
+                r"\b[A-Z][A-Z0-9]+(?:_[A-Z0-9]+)+\b",
+                r"\b[a-z][a-z0-9]+_[a-z0-9_]+\b",
+            )
+            for match in re.finditer(pattern, context)
+        }
+        query_parts = set(strict_identifier.split("_"))
+        near_matches = {
+            candidate
+            for candidate in context_identifiers
+            if query_parts & set(candidate.split("_"))
+        }
+        if near_matches:
+            return strict_identifier in near_matches
+
+    normalized_context = _identifier_compare_text(context)
+    return (
+        _identifier_compare_text(identifier) in normalized_context
+        or _identifier_parts_covered(identifier, context)
+    )
+
+
+def _strict_technical_identifier(value: str) -> str | None:
+    normalized = str(value or "").strip("`'\" ")
+    if re.fullmatch(r"[A-Z][A-Z0-9]+(?:_[A-Z0-9]+)+", normalized):
+        return normalized.casefold()
+    if re.fullmatch(r"[a-z][a-z0-9]+_[a-z0-9_]+", normalized):
+        return normalized.casefold()
+    return None
 
 
 def _technical_support(
@@ -788,6 +953,20 @@ def _technical_support(
     if support_query.query_type != QUERY_TYPE_EXACT_TECHNICAL:
         aggregate = "\n".join(_evidence_context(item) for item in evidence_units)
         return _exact_identifier_coverage(support_query.exact_identifiers, aggregate), True, ()
+
+    if _has_cli_identifier(support_query.exact_identifiers):
+        identifier_seen = False
+        for item in evidence_units:
+            context = _technical_context_text(item)
+            if not _exact_cli_identifier_coverage(
+                support_query.exact_identifiers,
+                context,
+            ):
+                continue
+            identifier_seen = True
+            if _technical_intent_coverage(support_query, context):
+                return True, True, (_evidence_id(item),)
+        return identifier_seen, False, ()
 
     by_document: dict[str, list[Any]] = {}
     for item in evidence_units:
@@ -804,26 +983,118 @@ def _technical_support(
     return identifier_seen, False, ()
 
 
+def _exact_cli_identifier_coverage(
+    identifiers: tuple[str, ...],
+    context: str,
+) -> bool:
+    lowered_context = context.casefold()
+    return all(
+        re.search(
+            rf"(?<![a-z0-9_-]){re.escape(identifier.casefold().strip())}(?![a-z0-9_-])",
+            lowered_context,
+        )
+        is not None
+        for identifier in identifiers
+    )
+
+
 def _technical_intent_coverage(support_query: _SupportQuery, context: str) -> bool:
     lowered_query = " ".join(support_query.keywords).casefold()
     lowered_context = context.casefold()
     if _contains_any(lowered_query, ("支持哪些值", "哪些值", "supported values", "valid values", "options")):
-        normalized_tokens = set(_identifier_tokens(context))
-        has_known_values = "fixed" in normalized_tokens and (
-            "blockaware" in normalized_tokens
-            or {"block", "aware"}.issubset(normalized_tokens)
-        )
-        return has_known_values or _contains_any(
-            lowered_context,
-            ("supported values", "valid values", "可选值", "支持的值"),
-        )
+        return _has_explicit_supported_values(lowered_context)
     if _contains_any(lowered_query, ("默认值", "default value", "default")):
         return _contains_any(lowered_context, ("默认值", "default")) and bool(
             re.search(r"(?:^|[\s:=])(?:-?\d+(?:\.\d+)?|true|false|none|null)(?:$|[\s,.;，。])", lowered_context)
         )
     if _contains_any(lowered_query, ("作者", "author", "created by", "maintainer")):
         return _contains_any(lowered_context, ("作者", "author", "created by", "maintainer"))
+    if _has_cli_identifier(support_query.exact_identifiers):
+        return _has_cli_action_explanation(lowered_context)
     return _intent_coverage(support_query, context)
+
+
+def _has_explicit_supported_values(context: str) -> bool:
+    if _contains_any(
+        context,
+        (
+            "supported values",
+            "valid values",
+            "accepted values",
+            "allowed values",
+            "可选值",
+            "允许值",
+            "支持的值",
+            "可设置为",
+        ),
+    ):
+        return True
+    return bool(
+        re.search(
+            r"\b(?:supports?|accepts?|allows?|options?\s+(?:are|include))\b"
+            r"[^.;。\n]{0,120}(?:,|\band\b|\bor\b|/|、|，)",
+            context,
+        )
+        or re.search(
+            r"(?:支持|允许|可选)[^。\n]{0,120}(?:、|，|或|和)",
+            context,
+        )
+    )
+
+
+def _has_cli_identifier(identifiers: tuple[str, ...]) -> bool:
+    return any(
+        bool(re.search(r"(?:^|\s)--?[a-z0-9]", identifier.casefold()))
+        for identifier in identifiers
+    )
+
+
+def _has_cli_action_explanation(context: str) -> bool:
+    return _contains_any(
+        context,
+        (
+            "validates",
+            "validate",
+            "prints",
+            "print",
+            "shows",
+            "show",
+            "lists",
+            "list",
+            "writes",
+            "write",
+            "creates",
+            "create",
+            "removes",
+            "remove",
+            "deletes",
+            "delete",
+            "preserves",
+            "preserve",
+            "starts",
+            "start",
+            "stops",
+            "stop",
+            "applies",
+            "apply",
+            "checks",
+            "check",
+            "outputs",
+            "output",
+            "验证",
+            "检查",
+            "输出",
+            "打印",
+            "写入",
+            "创建",
+            "删除",
+            "移除",
+            "保留",
+            "启动",
+            "停止",
+            "应用",
+        ),
+    )
 
 
 def _intent_coverage(support_query: _SupportQuery, context: str) -> bool:
@@ -835,6 +1106,8 @@ def _intent_coverage(support_query: _SupportQuery, context: str) -> bool:
     if support_query.query_type == QUERY_TYPE_ENTITY_RELATION:
         return _contains_any(lowered, RELATION_TERMS)
     if support_query.query_type == QUERY_TYPE_EXACT_TECHNICAL:
+        if _has_cli_identifier(support_query.exact_identifiers):
+            return _has_cli_action_explanation(lowered)
         if _contains_any(_normalize_text(" ".join(support_query.keywords)).casefold(), ("影响", "发生什么", "what happens")):
             return _contains_any(lowered, ("remove", "delete", "preserve", "删除", "移除", "保留", "happens", "会"))
         return True

@@ -3696,6 +3696,271 @@ def test_select_evidence_units_file_types_rejects_retrieval_modes() -> None:
     ]
 
 
+def test_select_evidence_units_uses_structured_attribute_heading_for_clean_unit(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="import-guide.md",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="## Atlas 导入工具\n### 支持的输入文件\nAtlas 导入工具支持 .txt、.md 和 .pdf。",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=0,
+            unit_text="Atlas 导入工具支持 .txt、.md 和 .pdf。",
+            metadata={
+                "section_title": "支持的输入文件",
+                "heading_path": ["Atlas 导入工具", "支持的输入文件"],
+            },
+        )
+        db.commit()
+        retrieved = _retrieved_chunk(
+            chunk_id=chunk.chunk_key,
+            chunk_db_id=chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.9,
+            text=chunk.chunk_text,
+        )
+        evidence_units = select_evidence_units(
+            question="Atlas 导入工具支持哪些文件类型？",
+            retrieved_chunks=[retrieved],
+            chunk_units=load_citation_units_for_chunks(db=db, chunks=[retrieved]),
+            max_evidence_units=4,
+        )
+
+    assert [item.text for item in evidence_units] == [
+        "Atlas 导入工具支持 .txt、.md 和 .pdf。"
+    ]
+
+
+def test_select_evidence_units_respects_explicit_target_document() -> None:
+    diagnostics: dict[str, object] = {}
+    evidence_units = select_evidence_units(
+        question="当前 Atlas Operations 中的 Jordan Lee 在哪里办公？",
+        retrieved_chunks=[
+            _retrieved_chunk(
+                chunk_id="1:0",
+                document_id=1,
+                document_name="atlas-operations.txt",
+                score=0.8,
+                text="Jordan Lee 的办公地点是 Singapore。",
+                section_title="Jordan Lee",
+            ),
+            _retrieved_chunk(
+                chunk_id="2:0",
+                document_id=2,
+                document_name="atlas-operations-archive.txt",
+                score=0.95,
+                text="Jordan Lee 的办公地点是 London。",
+                section_title="Jordan Lee",
+            ),
+        ],
+        chunk_units={},
+        max_evidence_units=4,
+        target_document_ids=(1,),
+        target_document_terms=("Atlas Operations",),
+        diagnostics=diagnostics,
+    )
+
+    assert [item.document_id for item in evidence_units] == [1]
+    assert "Singapore" in evidence_units[0].text
+    assert diagnostics["cross_document_collision"] is True
+
+
+def test_select_evidence_units_rejects_conflicting_local_entity_in_shared_chunk(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="devices.md",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="## Atlas Mini\n颜色：银色\n## Atlas Pro\n颜色：黑色",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=0,
+            unit_text="颜色：银色",
+            metadata={"section_title": "Atlas Mini"},
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=1,
+            unit_text="颜色：黑色",
+            metadata={"section_title": "Atlas Pro"},
+        )
+        db.commit()
+        retrieved = _retrieved_chunk(
+            chunk_id=chunk.chunk_key,
+            chunk_db_id=chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.9,
+            text=chunk.chunk_text,
+        )
+        diagnostics: dict[str, object] = {}
+        evidence_units = select_evidence_units(
+                question="Atlas Pro 的颜色是什么？",
+            retrieved_chunks=[retrieved],
+            chunk_units=load_citation_units_for_chunks(db=db, chunks=[retrieved]),
+            max_evidence_units=4,
+            diagnostics=diagnostics,
+        )
+
+    assert [item.text for item in evidence_units] == ["颜色：黑色"]
+    assert diagnostics["cross_entity_collision"] is True
+
+
+def test_select_evidence_units_requires_all_requested_attributes(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="catalog.md",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="## Orion Edge\n处理器：Nova X2\n颜色：深灰色",
+        )
+        for index, text in enumerate(("处理器：Nova X2", "颜色：深灰色")):
+            _create_citation_unit(
+                db,
+                document=document,
+                chunk_key=chunk.chunk_key,
+                unit_index=index,
+                unit_text=text,
+                metadata={"section_title": "Orion Edge"},
+            )
+        db.commit()
+        retrieved = _retrieved_chunk(
+            chunk_id=chunk.chunk_key,
+            chunk_db_id=chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.9,
+            text=chunk.chunk_text,
+        )
+        diagnostics: dict[str, object] = {}
+        evidence_units = select_evidence_units(
+            question="Orion Edge 的处理器和外壳颜色分别是什么？",
+            retrieved_chunks=[retrieved],
+            chunk_units=load_citation_units_for_chunks(db=db, chunks=[retrieved]),
+            max_evidence_units=4,
+            diagnostics=diagnostics,
+        )
+
+    assert {item.text for item in evidence_units} == {
+        "处理器：Nova X2",
+        "颜色：深灰色",
+    }
+    assert diagnostics["supported_requested_attributes"] == ["processor", "color"]
+    assert diagnostics["missing_requested_attributes"] == []
+    assert set(diagnostics["attribute_to_evidence_ids"]) == {"processor", "color"}
+
+
+def test_select_evidence_units_returns_empty_when_one_requested_attribute_is_missing() -> None:
+    diagnostics: dict[str, object] = {}
+    evidence_units = select_evidence_units(
+        question="Orion Edge 的处理器和外壳颜色分别是什么？",
+        retrieved_chunks=[
+            _retrieved_chunk(
+                chunk_id="1:0",
+                document_id=1,
+                document_name="catalog.md",
+                score=0.9,
+                text="Orion Edge 处理器：Nova X2。",
+                section_title="Orion Edge",
+            )
+        ],
+        chunk_units={},
+        max_evidence_units=4,
+        diagnostics=diagnostics,
+    )
+
+    assert evidence_units == []
+    assert diagnostics["supported_requested_attributes"] == ["processor"]
+    assert diagnostics["missing_requested_attributes"] == ["color"]
+    assert diagnostics["evidence_selection"]["final_rejection_reason"] == "missing_requested_attribute"
+
+
+def test_retrieval_selector_does_not_backfill_rejected_attribute_context(
+    session_factory: sessionmaker,
+) -> None:
+    from app.services.retrieval.retrieval_service import _select_evidence_units
+
+    with session_factory() as db:
+        evidence_units, diagnostics = _select_evidence_units(
+            db=db,
+            query="Orion Edge 的重量是多少？",
+            context_chunks=[
+                _retrieved_chunk(
+                    chunk_id="1:0",
+                    document_id=1,
+                    document_name="catalog.md",
+                    score=0.9,
+                    text="Orion Edge 的颜色是深灰色。",
+                    section_title="Orion Edge",
+                )
+            ],
+            max_evidence_units=4,
+        )
+
+    assert evidence_units == []
+    assert diagnostics["evidence_selection"]["fallback_suppressed"] is True
+    assert diagnostics["evidence_selection"]["fallback_used"] is False
+
+
+def test_select_evidence_units_exact_function_query_uses_technical_gate() -> None:
+    evidence_units = select_evidence_units(
+        question="refresh_index() 的作用是什么？",
+        retrieved_chunks=[
+            _retrieved_chunk(
+                chunk_id="1:0",
+                document_id=1,
+                document_name="maintenance.md",
+                score=0.9,
+                text="The function `refresh_index()` reloads the searchable catalog after validation.",
+                section_title="Index Refresh",
+            )
+        ],
+        chunk_units={},
+        max_evidence_units=4,
+    )
+
+    assert len(evidence_units) == 1
+    assert "reloads the searchable catalog" in evidence_units[0].text
+    assert evidence_units[0].identifier_match is True
+
+
 def test_select_evidence_units_overview_greedily_covers_distinct_members() -> None:
     evidence_units = select_evidence_units(
         question="列出所有团队成员",
