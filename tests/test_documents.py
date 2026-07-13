@@ -58,6 +58,7 @@ from app.services.ocr_provider import OCRProviderError, OCRRegion, OCRResult
 from app.services import document_indexing as document_indexing_service
 from app.services import processing_worker as processing_worker_service
 from app.services.qa import CitationUnitCandidate, NO_RELIABLE_EVIDENCE_MESSAGE
+from app.services.retrieval.citation_builder import build_evidences
 from app.services.retrieval.query_router import route_query
 from app.services.retrieval.types import RetrievalMode, RetrievalResult
 from app.services.processing_job import (
@@ -2703,6 +2704,7 @@ async def test_team_unapproved_document_cannot_be_embedded_or_retrieved(
 @pytest.mark.anyio
 async def test_personal_knowledge_base_ask_returns_answer_and_citations(
     document_client: AsyncClient,
+    test_session_factory: sessionmaker,
     processing_job_runner: CapturedProcessingJobRunner,
 ) -> None:
     alice = await _register_and_login(
@@ -2773,6 +2775,21 @@ async def test_personal_knowledge_base_ask_returns_answer_and_citations(
     assert citation["section_title"] is None
     assert "internal docs" in citation["text"]
 
+    with test_session_factory() as db:
+        trace = db.scalar(
+            select(RetrievalTrace)
+            .where(RetrievalTrace.knowledge_base_id == knowledge_base_id)
+            .order_by(RetrievalTrace.id.desc())
+        )
+        assert trace is not None
+        policy_metadata = json.loads(trace.metadata_json or "{}")
+    assert policy_metadata["answer_policy_outcome"] == "answer"
+    assert policy_metadata["answer_policy_reason"] == "supported"
+    assert policy_metadata["answer_provider_called"] is True
+    assert policy_metadata["answer_citation_required"] is True
+    assert policy_metadata["answer_external_knowledge_allowed"] is False
+    assert policy_metadata["answer_allowed_markers"]
+
     other_user_response = await document_client.post(
         f"/api/v1/knowledge-bases/{knowledge_base_id}/ask",
         headers=bob_headers,
@@ -2784,6 +2801,7 @@ async def test_personal_knowledge_base_ask_returns_answer_and_citations(
 @pytest.mark.anyio
 async def test_team_knowledge_base_ask_uses_only_approved_indexed_documents(
     document_client: AsyncClient,
+    test_session_factory: sessionmaker,
     processing_job_runner: CapturedProcessingJobRunner,
 ) -> None:
     admin = await _register_and_login(
@@ -2866,6 +2884,35 @@ async def test_team_knowledge_base_ask_uses_only_approved_indexed_documents(
         headers=member_headers,
         processing_job_runner=processing_job_runner,
     )
+    with test_session_factory() as db:
+        approved_chunk = DocumentChunk(
+            document_id=approved_document_id,
+            chunk_key=f"{approved_document_id}:0",
+            chunk_index=0,
+            chunk_text="approvedanswer Knowledge base answers for the team.",
+        )
+        db.add(approved_chunk)
+        db.flush()
+        db.add(
+            DocumentCitationUnit(
+                document_id=approved_document_id,
+                chunk_id=approved_chunk.id,
+                knowledge_base_id=knowledge_base_id,
+                chunk_key=approved_chunk.chunk_key,
+                unit_index=0,
+                unit_text=approved_chunk.chunk_text,
+                start_char=0,
+                end_char=len(approved_chunk.chunk_text),
+                metadata_json=json.dumps(
+                    {
+                        "source_type": "markdown",
+                        "source_locator": "section:Approved answers",
+                        "section_title": "Approved answers",
+                    }
+                ),
+            )
+        )
+        db.commit()
 
     ask_pending = await document_client.post(
         f"/api/v1/teams/{team_id}/knowledge-bases/{knowledge_base_id}/ask",
@@ -2890,6 +2937,18 @@ async def test_team_knowledge_base_ask_uses_only_approved_indexed_documents(
     assert citation["knowledge_base_id"] == knowledge_base_id
     assert citation["scope"] == "team"
     assert citation["team_id"] == team_id
+
+    with test_session_factory() as db:
+        trace = db.scalar(
+            select(RetrievalTrace)
+            .where(RetrievalTrace.knowledge_base_id == knowledge_base_id)
+            .order_by(RetrievalTrace.id.desc())
+        )
+        assert trace is not None
+        policy_metadata = json.loads(trace.metadata_json or "{}")
+    assert policy_metadata["answer_policy_outcome"] == "answer"
+    assert policy_metadata["answer_provider_called"] is True
+    assert policy_metadata["answer_citation_required"] is True
 
     outsider_ask = await document_client.post(
         f"/api/v1/teams/{team_id}/knowledge-bases/{knowledge_base_id}/ask",
@@ -3003,11 +3062,20 @@ async def test_personal_knowledge_base_ask_can_use_openai_compatible_provider(
     assert messages[0]["role"] == "system"
     assert "你只能根据给定的 evidence units 回答" in messages[0]["content"]
     assert "每个事实性结论后必须标注来源编号" in messages[0]["content"]
+    assert "Answer Policy Contract:" in messages[0]["content"]
+    assert "External knowledge allowed: false." in messages[0]["content"]
+    assert "Allowed evidence markers: [S1]." in messages[0]["content"]
+    assert "Do not use model memory or external knowledge" in messages[0]["content"]
     assert messages[1]["role"] == "user"
     assert "What does PureLink store?" in messages[1]["content"]
     assert "Evidence Units:" in messages[1]["content"]
     assert "[S1]" in messages[1]["content"]
     assert "PureLink stores internal docs for teams." in messages[1]["content"]
+    rendered_messages = "\n".join(str(item["content"]) for item in messages)
+    assert "test-key" not in rendered_messages
+    assert "user_id" not in rendered_messages
+    assert "knowledge_base_id" not in rendered_messages
+    assert "trace_id" not in rendered_messages
 
 
 @pytest.mark.anyio
@@ -3447,6 +3515,10 @@ async def test_personal_conversation_append_supports_kb_overview_follow_up(
     assert trace_metadata["routing_query_source"] == "evidence_query"
     assert trace_metadata["answerable"] is True
     assert trace_metadata["evidence_support_reason"] == "supported"
+    assert trace_metadata["answer_policy_outcome"] == "answer"
+    assert trace_metadata["answer_provider_called"] is True
+    assert trace_metadata["answer_citation_required"] is True
+    assert trace_metadata["answer_external_knowledge_allowed"] is False
 
 
 @pytest.mark.anyio
@@ -3665,7 +3737,7 @@ async def test_conversation_support_gate_rejects_high_score_wrong_attribute(
             router_reason="default factual question",
             router_confidence="low",
             effective_mode=RetrievalMode.CHUNK_ONLY,
-            evidences=[],
+            evidences=build_evidences([evidence_unit]),
             context_text="",
             metadata={
                 "retrieved_chunks": [chunk],
@@ -3694,11 +3766,15 @@ async def test_conversation_support_gate_rejects_high_score_wrong_attribute(
     assert body["assistant_message"]["citations"] == []
     assert captured_results[0].metadata["answerable"] is False
     assert captured_results[0].metadata["evidence_support_reason"] == "missing_attribute_support"
+    assert captured_results[0].metadata["answer_policy_outcome"] == "refuse"
+    assert captured_results[0].metadata["answer_provider_called"] is False
+    assert captured_results[0].metadata["answer_citation_required"] is False
 
 
 @pytest.mark.anyio
 async def test_team_conversation_history_is_user_owned_and_team_scoped(
     document_client: AsyncClient,
+    test_session_factory: sessionmaker,
     processing_job_runner: CapturedProcessingJobRunner,
 ) -> None:
     admin = await _register_and_login(
@@ -3764,6 +3840,36 @@ async def test_team_conversation_history_is_user_owned_and_team_scoped(
         assert response.status_code == 200
         if action == "embed":
             processing_job_runner.run_all()
+
+    with test_session_factory() as db:
+        persisted_chunk = DocumentChunk(
+            document_id=document_id,
+            chunk_key=f"{document_id}:0",
+            chunk_index=0,
+            chunk_text="Team answers are shared after approval.",
+        )
+        db.add(persisted_chunk)
+        db.flush()
+        db.add(
+            DocumentCitationUnit(
+                document_id=document_id,
+                chunk_id=persisted_chunk.id,
+                knowledge_base_id=knowledge_base_id,
+                chunk_key=persisted_chunk.chunk_key,
+                unit_index=0,
+                unit_text=persisted_chunk.chunk_text,
+                start_char=0,
+                end_char=len(persisted_chunk.chunk_text),
+                metadata_json=json.dumps(
+                    {
+                        "source_type": "markdown",
+                        "source_locator": "section:Approval",
+                        "section_title": "Approval",
+                    }
+                ),
+            )
+        )
+        db.commit()
 
     ask_response = await document_client.post(
         f"/api/v1/teams/{team_id}/knowledge-bases/{knowledge_base_id}/ask",

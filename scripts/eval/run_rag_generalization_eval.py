@@ -23,6 +23,11 @@ from app.db.base import Base, load_all_models
 from app.models.enums import DocumentReviewStatus, KnowledgeBaseScope
 from app.models.retrieval_trace import RetrievalTrace, RetrievalTraceItem
 from app.services.document import list_documents_for_knowledge_base
+from app.services.qa import (
+    HeuristicAnswerGenerator,
+    answer_question,
+    extract_used_citation_ids,
+)
 from app.services.retrieval import RetrievalMode, RetrievalRequest, retrieve
 from scripts.eval.rag_eval import (
     RagEvalCase,
@@ -191,6 +196,22 @@ async def run_generalization_cases(
                         )
                     )
                     retrieval_latency_ms = int((time.perf_counter() - retrieval_started) * 1000)
+                    qa_result = answer_question(
+                        db=db,
+                        question=case.question,
+                        retrieved_chunks=retrieval_result.metadata.get("retrieved_chunks", []),
+                        retrieval_result=retrieval_result,
+                        generator=HeuristicAnswerGenerator(),
+                        settings=get_settings(),
+                    )
+                    retrieval_result.metadata.update(
+                        {
+                            "eval_answer_citation_count": len(qa_result.citations),
+                            "eval_answer_marker_count": len(
+                                extract_used_citation_ids(qa_result.answer)
+                            ),
+                        }
+                    )
                     total_eval_latency_ms = int((time.perf_counter() - case_started) * 1000)
                     trace_item_count, initial_candidate_count = _load_trace_counts(
                         db,

@@ -3,11 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import json
 from pathlib import Path
+import re
 from typing import Any
 
 from app.services.evidence_support import evaluate_evidence_support
 from app.services.qa import build_query_evidence_profile
 from app.services.retrieval.types import RetrievedEvidence, RetrievalResult
+
+
+_STABLE_ANSWER_MARKER_PATTERN = re.compile(r"S[1-9]\d*")
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +94,16 @@ class RagEvalCaseResult:
     evidence_support_reason: str | None = None
     evidence_support_query_type: str | None = None
     evidence_support_signals: dict[str, Any] = field(default_factory=dict)
+    answer_policy_outcome: str | None = None
+    answer_policy_reason: str | None = None
+    answer_provider_called: bool | None = None
+    answer_citation_required: bool | None = None
+    answer_external_knowledge_allowed: bool | None = None
+    answer_allowed_evidence_count: int | None = None
+    answer_allowed_markers: list[str] = field(default_factory=list)
+    answer_unknown_markers_removed: int | None = None
+    answer_citation_count: int | None = None
+    answer_marker_count: int | None = None
     failure_reasons: tuple[str, ...] = ()
     error: str | None = None
 
@@ -298,6 +312,50 @@ def evaluate_retrieval_result(
         evidence_support_reason=support_decision.reason,
         evidence_support_query_type=support_decision.query_type,
         evidence_support_signals=support_decision.signals,
+        answer_policy_outcome=_optional_metadata_str(
+            result.metadata,
+            "answer_policy_outcome",
+        ),
+        answer_policy_reason=_optional_metadata_str(
+            result.metadata,
+            "answer_policy_reason",
+        ),
+        answer_provider_called=_optional_metadata_bool(
+            result.metadata,
+            "answer_provider_called",
+        ),
+        answer_citation_required=_optional_metadata_bool(
+            result.metadata,
+            "answer_citation_required",
+        ),
+        answer_external_knowledge_allowed=_optional_metadata_bool(
+            result.metadata,
+            "answer_external_knowledge_allowed",
+        ),
+        answer_allowed_evidence_count=_optional_metadata_int(
+            result.metadata,
+            "answer_allowed_evidence_count",
+        ),
+        answer_allowed_markers=[
+            marker
+            for marker in _optional_metadata_str_list(
+                result.metadata,
+                "answer_allowed_markers",
+            )
+            if _STABLE_ANSWER_MARKER_PATTERN.fullmatch(marker)
+        ],
+        answer_unknown_markers_removed=_optional_metadata_int(
+            result.metadata,
+            "answer_unknown_markers_removed",
+        ),
+        answer_citation_count=_optional_metadata_int(
+            result.metadata,
+            "eval_answer_citation_count",
+        ),
+        answer_marker_count=_optional_metadata_int(
+            result.metadata,
+            "eval_answer_marker_count",
+        ),
         failure_reasons=failure_reasons,
     )
 
@@ -706,6 +764,16 @@ def case_result_to_dict(result: RagEvalCaseResult) -> dict[str, Any]:
         "evidence_support_reason": result.evidence_support_reason,
         "evidence_support_query_type": result.evidence_support_query_type,
         "evidence_support_signals": result.evidence_support_signals,
+        "answer_policy_outcome": result.answer_policy_outcome,
+        "answer_policy_reason": result.answer_policy_reason,
+        "answer_provider_called": result.answer_provider_called,
+        "answer_citation_required": result.answer_citation_required,
+        "answer_external_knowledge_allowed": result.answer_external_knowledge_allowed,
+        "answer_allowed_evidence_count": result.answer_allowed_evidence_count,
+        "answer_allowed_markers": list(result.answer_allowed_markers),
+        "answer_unknown_markers_removed": result.answer_unknown_markers_removed,
+        "answer_citation_count": result.answer_citation_count,
+        "answer_marker_count": result.answer_marker_count,
         "failure_reasons": list(result.failure_reasons),
     }
     if result.error:
@@ -741,6 +809,28 @@ def _evidence_score(evidence: RetrievedEvidence) -> float:
         if score is not None:
             return float(score)
     return 0.0
+
+
+def _optional_metadata_str(metadata: dict[str, Any], key: str) -> str | None:
+    value = metadata.get(key)
+    return value if isinstance(value, str) else None
+
+
+def _optional_metadata_bool(metadata: dict[str, Any], key: str) -> bool | None:
+    value = metadata.get(key)
+    return value if isinstance(value, bool) else None
+
+
+def _optional_metadata_int(metadata: dict[str, Any], key: str) -> int | None:
+    value = metadata.get(key)
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _optional_metadata_str_list(metadata: dict[str, Any], key: str) -> list[str]:
+    value = metadata.get(key)
+    if not isinstance(value, (list, tuple)):
+        return []
+    return [item for item in value if isinstance(item, str)]
 
 
 def _required_str(payload: dict[str, Any], field_name: str, *, source: str) -> str:
