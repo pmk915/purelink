@@ -1,3 +1,5 @@
+import type { AskResponseContract, CitationContract } from "@/schemas/qa";
+
 export type KnowledgeBaseScope = "personal" | "team";
 export type RetrievalMode = "auto" | "chunk_only" | "overview" | "graph_vector_mix" | "hybrid_text";
 export type TeamMemberRole = "admin" | "member";
@@ -286,11 +288,11 @@ export interface CitationLike {
   citation_marker?: string | null;
   citation_unit_id?: number | null;
   chunk_db_id?: number | null;
-  chunk_id: string;
-  document_id: number;
-  knowledge_base_id: number;
-  scope: string;
-  team_id: number | null;
+  chunk_id?: string | null;
+  document_id?: number | null;
+  knowledge_base_id?: number | null;
+  scope?: string | null;
+  team_id?: number | null;
   document_name: string | null;
   snippet: string | null;
   text: string;
@@ -303,7 +305,10 @@ export interface CitationLike {
   section_title: string | null;
   source_locator: SourceLocator | null;
   preview_target: PreviewTarget | null;
-  heading_path: string[] | null;
+  heading_path: string[];
+  citation_ready?: boolean;
+  retrieval_mode?: RetrievalMode | null;
+  score?: number | null;
 }
 
 export type SourceLocatorKind =
@@ -315,13 +320,13 @@ export type SourceLocatorKind =
 
 export interface SourceLocator {
   kind: SourceLocatorKind;
-  document_id: number;
+  document_id?: number | null;
   source_type: string | null;
   source_locator_text: string | null;
   char_start: number | null;
   char_end: number | null;
   section_title: string | null;
-  heading_path: string[] | null;
+  heading_path: string[];
   page_number: number | null;
   page_region: Record<string, unknown> | null;
   bbox: Record<string, unknown> | null;
@@ -333,7 +338,7 @@ export interface SourceLocator {
 
 export interface PreviewTarget {
   kind: "document_preview";
-  document_id: number;
+  document_id?: number | null;
   source_type: string | null;
   locator_kind: SourceLocatorKind;
   source_locator_text: string | null;
@@ -346,6 +351,11 @@ export interface PreviewTarget {
 }
 
 export interface RetrievalResult extends CitationLike {
+  chunk_id: string;
+  document_id: number;
+  knowledge_base_id: number;
+  scope: string;
+  team_id: number | null;
   score: number;
   vector_score?: number | null;
   keyword_score?: number | null;
@@ -366,20 +376,8 @@ export interface RetrievalResponse {
   results: RetrievalResult[];
 }
 
-export interface Citation extends CitationLike {}
-
-export interface AskResponse {
-  conversation_id: number;
-  answer: string;
-  citations: Citation[];
-  intent?: string | null;
-  retrieval_mode?: RetrievalMode | null;
-  requested_mode?: RetrievalMode | null;
-  selected_mode?: RetrievalMode | null;
-  router_reason?: string | null;
-  used_reranker?: boolean | null;
-  trace_id?: number | string | null;
-}
+export type Citation = CitationContract;
+export type AskResponse = AskResponseContract;
 
 export interface KnowledgeGraphEntitySummary {
   id: number;

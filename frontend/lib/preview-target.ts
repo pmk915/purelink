@@ -29,9 +29,14 @@ export function resolvePreviewTarget(citation: CitationLike): PreviewTarget | nu
     return null;
   }
 
+  const documentId = citation.document_id ?? locator.document_id;
+  if (typeof documentId !== "number") {
+    return null;
+  }
+
   return {
     kind: "document_preview",
-    document_id: citation.document_id,
+    document_id: documentId,
     source_type: citation.source_type,
     locator_kind: locator.kind,
     source_locator_text: locator.source_locator_text,
@@ -51,7 +56,13 @@ export function buildPreviewUrl(
 ) {
   const scope = options?.scope ?? (citation.scope === "team" ? "team" : "personal");
   const previewTarget = resolvePreviewTarget(citation);
-  if (!previewTarget) {
+  const documentId = citation.document_id ?? previewTarget?.document_id;
+  if (
+    !previewTarget
+    || typeof documentId !== "number"
+    || typeof citation.knowledge_base_id !== "number"
+    || !citation.chunk_id
+  ) {
     return null;
   }
 
@@ -62,8 +73,8 @@ export function buildPreviewUrl(
   });
   const basePath =
     scope === "team" && citation.team_id
-      ? `/teams/${citation.team_id}/knowledge-bases/${citation.knowledge_base_id}/documents/${citation.document_id}/preview`
-      : `/knowledge-bases/${citation.knowledge_base_id}/documents/${citation.document_id}/preview`;
+      ? `/teams/${citation.team_id}/knowledge-bases/${citation.knowledge_base_id}/documents/${documentId}/preview`
+      : `/knowledge-bases/${citation.knowledge_base_id}/documents/${documentId}/preview`;
 
   return `${basePath}?${params.toString()}`;
 }
@@ -114,7 +125,7 @@ function buildPreviewSearchParams({
   previewTarget: PreviewTarget;
 }) {
   const params = new URLSearchParams();
-  params.set("chunk_id", citation.chunk_id);
+  setParam(params, "chunk_id", citation.chunk_id);
   params.set("locator_kind", previewTarget.locator_kind);
   setParam(params, "source_type", previewTarget.source_type);
   setParam(params, "locator", previewTarget.source_locator_text);

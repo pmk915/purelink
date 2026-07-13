@@ -341,27 +341,41 @@ Troubleshooting examples:
 - `graph_index_status=missing`: base Q&A can still work, but graph features may have no candidates.
 - `error_code` / `error_message`: use the latest processing job details to identify the failed step.
 
-## 11. AnswerCitation 字段
+## 11. Public Citation Contract
 
-当前 citation 结构的核心字段包括：
+Personal KB ask、Team KB ask 和 Conversation message 共用同一个
+`CitationRead` response model。前端也使用一个共享 Citation schema 解析三类响应。
+Citation UI 的事实文本只来自回答实际引用的 final evidence；provider marker、
+final evidence 和返回 citation 一一对应。未被 marker 引用的候选、broad parent
+chunk、conversation history 或模型生成摘要不会成为 citation text。
 
-- `document_id`
-- `document_name` / filename
-- `chunk_id`
-- `source_type`
-- `source_locator`
-- `page_number`
-- `snippet`
-- `score`
+稳定的 UI contract 字段如下：
 
-此外还会保留：
+| Field | Source | Meaning |
+|---|---|---|
+| `citation_marker` | provider marker + allowed final evidence | Answer-local marker，例如 `S1` |
+| `document_name` | final evidence | 来源文件名；缺失时保持 `null` |
+| `text` | final evidence | 被回答实际引用的 evidence unit 全文 |
+| `source_locator` | citation-unit provenance | 结构化 locator；缺失时保持 `null` |
+| `source_type` | citation unit / final evidence | `text`、`pdf`、`docx` 等来源类型 |
+| `section_title` | citation-unit provenance | 章节标题；未知时为 `null` |
+| `heading_path` | citation-unit provenance | 稳定字符串数组；缺失时为 `[]` |
+| `page_number` | citation-unit provenance | PDF 页码；非分页来源通常为 `null` |
+| `char_start` / `char_end` | citation-unit provenance | 成对出现的有效字符范围，否则两者均为 `null` |
+| `citation_ready` | persisted unit id + stable locator | 是否具备可追溯 provenance，不固定写为 `true` |
+| `retrieval_mode` | final evidence / effective retrieval mode | 本次实际检索模式；无法可靠确定时为 `null` |
+| `score` | final evidence `final_score` | 最终 evidence 分数，不是 Support Gate score |
 
-- `knowledge_base_id`
-- `scope`
-- `team_id`
-- `char_start`
-- `char_end`
-- `section_title`
+`source_locator` 内部会按来源类型保留 page、section、character range 或
+time range。PDF citation 使用 `page_number`；文本 citation 使用有效的
+`char_start` / `char_end` 或 section metadata。系统不会根据文件名猜测 section，
+也不会在 locator 缺失时伪造定位信息。
+
+为保持已有 API 和 document preview 链接兼容，response 目前仍可能携带
+`document_id`、`citation_unit_id`、`chunk_id`、`knowledge_base_id` 等 legacy
+内部标识。它们不属于新的 Citation UI contract，前端共享 Citation 类型不把
+这些 ID 设为必需字段，列表 key 使用 marker 加 answer-local index。新的 UI
+不得显示或依赖 trace id、user id、KB id、chunk id 或 citation-unit id。
 
 ## 12. Evidence Support Gate
 

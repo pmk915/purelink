@@ -44,8 +44,8 @@ from app.services.llm import LLMProviderError, generate_openai_compatible_chat_c
 from app.services.overview_retrieval import collect_overview_chunks
 from app.services.qa_intent import QAIntent, classify_qa_intent
 from app.services.retrieval import trace_service
-from app.services.retrieval.citation_builder import build_evidences
-from app.services.retrieval.types import RetrievalMode, RetrievalResult
+from app.services.retrieval.citation_builder import build_evidences, citation_readiness
+from app.services.retrieval.types import RetrievedEvidence, RetrievalMode, RetrievalResult
 from app.services.source_locator import (
     build_preview_target_for_chunk,
     build_source_locator_for_chunk,
@@ -641,8 +641,10 @@ def _answer_with_context_chunks(
         else:
             citations = build_answer_citations(
                 evidence_units=allowed_evidence_units,
+                final_evidences=final_evidences,
                 used_markers=used_markers,
                 max_citations=settings.max_citations,
+                retrieval_mode=_resolve_citation_retrieval_mode(retrieval_result),
             )
             if not citations:
                 answer = NO_RELIABLE_EVIDENCE_MESSAGE
@@ -974,10 +976,17 @@ def organize_citations(
 def build_answer_citations(
     *,
     evidence_units: list[CitationUnitCandidate],
+    final_evidences: list[RetrievedEvidence],
     used_markers: list[str],
     max_citations: int,
+    retrieval_mode: str | None,
 ) -> list[CitationRead]:
     evidence_by_marker = {item.marker: item for item in evidence_units}
+    final_evidence_by_marker = {
+        marker: item
+        for item in final_evidences
+        if (marker := _retrieved_evidence_marker(item)) is not None
+    }
     citations: list[CitationRead] = []
     seen_markers: set[str] = set()
 
@@ -985,14 +994,35 @@ def build_answer_citations(
         if marker in seen_markers:
             continue
         evidence = evidence_by_marker.get(marker)
-        if evidence is None:
+        final_evidence = final_evidence_by_marker.get(marker)
+        if evidence is None or final_evidence is None:
             continue
-        citations.append(build_citation_read_from_unit(evidence))
+        citations.append(
+            build_citation_read_from_final_evidence(
+                final_evidence,
+                marker=marker,
+                retrieval_mode=retrieval_mode,
+            )
+        )
         seen_markers.add(marker)
         if len(citations) >= max_citations:
             break
 
     return citations
+
+
+def _retrieved_evidence_marker(item: RetrievedEvidence) -> str | None:
+    marker = item.metadata.get("marker")
+    return marker if isinstance(marker, str) and marker else None
+
+
+def _resolve_citation_retrieval_mode(
+    retrieval_result: RetrievalResult | None,
+) -> str | None:
+    if retrieval_result is None:
+        return None
+    mode = retrieval_result.effective_mode or retrieval_result.mode
+    return mode.value
 
 
 def load_citation_units_for_chunks(
@@ -2049,7 +2079,48 @@ def build_citation_read_from_unit(item: CitationUnitCandidate) -> CitationRead:
         section_title=item.section_title,
         source_locator=build_source_locator_for_chunk(item),
         preview_target=build_preview_target_for_chunk(item),
-        heading_path=list(item.heading_path) if item.heading_path else None,
+        heading_path=list(item.heading_path) if item.heading_path else [],
+    )
+
+
+def build_citation_read_from_final_evidence(
+    item: RetrievedEvidence,
+    *,
+    marker: str,
+    retrieval_mode: str | None,
+) -> CitationRead:
+    citation_ready, _ = citation_readiness(item)
+    evidence_mode = item.metadata.get("retrieval_mode")
+    return CitationRead(
+        citation_id=item.citation_id,
+        citation_marker=marker,
+        citation_unit_id=item.citation_unit_id,
+        chunk_db_id=item.chunk_db_id,
+        chunk_id=str(item.chunk_id),
+        document_id=item.document_id,
+        knowledge_base_id=item.knowledge_base_id,
+        scope=item.scope,
+        team_id=item.team_id,
+        document_name=item.document_name,
+        snippet=item.snippet,
+        text=item.text,
+        source_type=item.source_type,
+        char_start=item.char_start,
+        char_end=item.char_end,
+        page_number=item.page_number,
+        start_time=item.start_time,
+        end_time=item.end_time,
+        section_title=item.section_title,
+        source_locator=build_source_locator_for_chunk(item),
+        preview_target=build_preview_target_for_chunk(item),
+        heading_path=list(item.heading_path) if item.heading_path else [],
+        citation_ready=citation_ready,
+        retrieval_mode=(
+            evidence_mode
+            if isinstance(evidence_mode, str) and evidence_mode
+            else retrieval_mode
+        ),
+        score=item.final_score,
     )
 
 
@@ -2074,7 +2145,9 @@ def build_citation_read_from_chunk(item: RetrievedChunk) -> CitationRead:
         section_title=item.section_title,
         source_locator=build_source_locator_for_chunk(item),
         preview_target=build_preview_target_for_chunk(item),
-        heading_path=list(item.heading_path) if item.heading_path else None,
+        heading_path=list(item.heading_path) if item.heading_path else [],
+        citation_ready=False,
+        score=item.score,
     )
 
 

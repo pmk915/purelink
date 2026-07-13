@@ -11,11 +11,19 @@ import {
 import type { CitationLike, RetrievalResult } from "@/types";
 
 
-function hasScore(citation: CitationLike | RetrievalResult): citation is RetrievalResult {
-  return typeof (citation as RetrievalResult).score === "number";
+type ScoredCitation = CitationLike & {
+  score: number;
+  vector_score?: number | null;
+  keyword_score?: number | null;
+  graph_score?: number | null;
+};
+
+
+function hasScore(citation: CitationLike | RetrievalResult): citation is ScoredCitation {
+  return typeof citation.score === "number";
 }
 
-function scoreParts(citation: RetrievalResult) {
+function scoreParts(citation: ScoredCitation) {
   return [
     typeof citation.vector_score === "number" ? `vector ${citation.vector_score.toFixed(3)}` : null,
     typeof citation.keyword_score === "number" ? `keyword ${citation.keyword_score.toFixed(3)}` : null,
@@ -51,7 +59,7 @@ export function CitationCard({
 }) {
   const { messages } = useI18n();
   const snippet = citation.snippet || citation.text;
-  const documentName = citation.document_name || messages.common.documentId(citation.document_id);
+  const documentName = citation.document_name || messages.graph.noSourceDocument;
   const locator = citation.source_locator;
   const sourceLabel = formatSourceLabel(citation.source_type);
   const pageNumber =
