@@ -2,6 +2,8 @@
 
 This tour is a ten-minute reading path through PureLink's document-to-answer flow. Every path and symbol below is present in the repository; the linked tests show the behavior at the relevant boundary.
 
+Use this page to answer **where to inspect the code**. For design rationale, end-to-end behavior, trade-offs, and interview follow-ups, continue with the [Technical Deep Dives](deep-dives/README.md).
+
 ## 1. Start Here
 
 - **Responsibility:** assemble the FastAPI application, mount `/api/v1`, and expose personal, team, and conversation request paths.
@@ -52,7 +54,7 @@ This tour is a ten-minute reading path through PureLink's document-to-answer flo
 - **Responsibility:** choose a concrete retrieval mode from explainable query patterns while allowing manual modes to bypass automatic routing.
 - **Verified code paths:** [`app/services/retrieval/query_router.py`](../../app/services/retrieval/query_router.py) and [`app/services/retrieval/retrieval_service.py`](../../app/services/retrieval/retrieval_service.py).
 - **Key entry points:** `route_query()`, `QueryRouteDecision`, and `_select_retrieval_mode()`.
-- **What to look for:** exact technical identifiers take precedence, explicit entity relations route to graph/vector mix, overview wording routes to overview, and low-confidence queries fall back to `chunk_only` with a reason.
+- **What to look for:** the current decision order checks explicit overview wording, then structured entity relations, then exact technical identifiers after an attribute-question guard; low-confidence queries fall back to `chunk_only` with a reason.
 - **Related tests:** [`tests/services/retrieval/test_query_router.py`](../../tests/services/retrieval/test_query_router.py) and [`tests/services/retrieval/test_query_router_holdout.py`](../../tests/services/retrieval/test_query_router_holdout.py).
 - **Design note:** [Retrieval Layer](../rag/retrieval-layer.md).
 
@@ -118,3 +120,7 @@ This tour is a ten-minute reading path through PureLink's document-to-answer flo
 - **What to look for:** answerable/no-answer denominators are explicit, expected and forbidden phrases replace LLM-as-judge, failed cases remain visible, and sanitized committed snapshots exclude live ids and secrets.
 - **Related tests:** [`tests/eval/test_rag_eval_metrics.py`](../../tests/eval/test_rag_eval_metrics.py), [`tests/eval/test_generalization_case_quality.py`](../../tests/eval/test_generalization_case_quality.py), and [`tests/eval/test_rag_eval_baseline.py`](../../tests/eval/test_rag_eval_baseline.py).
 - **Design note:** [RAG Evaluation](../rag/rag-evaluation.md) and the [latest committed baseline](../../tests/eval/baselines/answer-policy-auto-block-aware/summary.md).
+
+## Continue with Design Deep Dives
+
+The Code Tour is deliberately path-oriented. The [Technical Deep Dives](deep-dives/README.md) use these same verified entry points to explain request flow, document structure, routing and ranking, evidence/answer control, citation alignment, and evaluation failure analysis.

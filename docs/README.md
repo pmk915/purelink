@@ -54,6 +54,7 @@ This page is the main map for PureLink's product, RAG architecture, ingestion, G
 ## Interview
 
 - **Recommended start:** [PureLink Code Tour](interview/code-tour.md): a verified ten-minute path through processing, retrieval, answer control, citations, trace, and eval code.
+- [Technical Deep Dives](interview/deep-dives/README.md): interview-oriented request flow, chunking, retrieval, evidence policy, citations, and failure analysis grounded in current code.
 - [Project Storyline](interview/project-storyline.md): problem, solution, engineering decisions, timeline, and talk tracks.
 - [PureLink Interview Demo Guide](interview/purelink-demo-guide.md): step-by-step demo runbook.
 - [Feature Map](interview/feature-map.md): feature-to-code-to-docs-to-tests mapping.
