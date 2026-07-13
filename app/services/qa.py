@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import logging
 import re
 from typing import Protocol
@@ -42,6 +42,16 @@ from app.services.evidence_support import (
 )
 from app.services.llm import LLMProviderError, generate_openai_compatible_chat_completion
 from app.services.overview_retrieval import collect_overview_chunks
+from app.services.query_analysis import (
+    EVIDENCE_QUERY_ATTRIBUTE,
+    EVIDENCE_QUERY_DEFINITION,
+    EVIDENCE_QUERY_OVERVIEW,
+    EVIDENCE_QUERY_REASON,
+    EVIDENCE_QUERY_TECHNICAL,
+    EvidenceQueryAnalysis,
+    analyze_evidence_query,
+    evidence_attribute_aliases,
+)
 from app.services.qa_intent import QAIntent, classify_qa_intent
 from app.services.retrieval import trace_service
 from app.services.retrieval.citation_builder import build_evidences, citation_readiness
@@ -151,6 +161,11 @@ ENTITY_REASON_TERMS = frozenset(
         "吸引力",
         "因素",
         "特点",
+        "适合",
+        "适用场景",
+        "because",
+        "designed to",
+        "useful",
     }
 )
 ENTITY_RELATION_TERMS = frozenset(
@@ -246,6 +261,13 @@ class CitationUnitCandidate:
     entity_exact_match: bool = False
     entity_context_match: bool = False
     intent_alignment: float = 0.0
+    attribute_match: bool = False
+    identifier_match: bool = False
+    direct_support: bool = False
+    cross_entity_collision: bool = False
+    boilerplate: bool = False
+    coverage_gain: float = 0.0
+    rejection_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -895,6 +917,7 @@ def _rank_context_chunks(
 
     question_features = _build_query_features(question)
     profile = _build_query_evidence_profile(question)
+    analysis = analyze_evidence_query(question)
     technical_identifiers = _extract_technical_identifiers(question)
     technical_intent = _technical_question_intent(question)
     if (
@@ -919,6 +942,20 @@ def _rank_context_chunks(
             question=question,
             structured_text=structured_text,
         )
+        definition_bonus = 0.0
+        if profile.query_type == "entity_definition" and entity_match:
+            definition_bonus = (
+                0.20
+                if _has_direct_answer_support(
+                    unit_text=chunk.text,
+                    structured_text=f"{chunk.text} {structured_text}",
+                    analysis=analysis,
+                    attribute_alignment=0.0,
+                    identifier_match=False,
+                    technical_alignment=0.0,
+                )
+                else 0.0
+            )
         intent_weight = 0.15 if profile.query_type == "entity_relation" else 0.05
         score_weight = 0.25 if profile.query_type == "entity_relation" else 0.35
         priority = (
@@ -928,6 +965,13 @@ def _rank_context_chunks(
             + (0.10 if entity_match else 0.0)
             + (intent_weight if intent_alignment > 0 else 0.0)
             + structure_phrase_bonus
+            + definition_bonus
+            - (
+                0.20
+                if profile.query_type == "entity_definition"
+                and _is_boilerplate_evidence(chunk.text)
+                else 0.0
+            )
         )
         ranked.append((priority, index, chunk))
     ranked.sort(key=lambda item: (-item[0], item[1]))
@@ -1068,9 +1112,11 @@ def select_evidence_units(
     chunk_units: dict[str, list[DocumentCitationUnit]],
     max_evidence_units: int,
     use_query_evidence_profile: bool = True,
+    diagnostics: dict[str, object] | None = None,
 ) -> list[CitationUnitCandidate]:
+    analysis = analyze_evidence_query(question)
     question_features = _build_query_features(question)
-    technical_identifiers = _extract_technical_identifiers(question)
+    technical_identifiers = analysis.technical_identifiers or _extract_technical_identifiers(question)
     technical_intent = _technical_question_intent(question)
     evidence_profile = (
         _build_query_evidence_profile(question)
@@ -1087,16 +1133,25 @@ def select_evidence_units(
             entity_terms=frozenset(),
             intent_terms=frozenset(),
         )
+    overview_coverage = (
+        not use_query_evidence_profile
+        and analysis.query_type == EVIDENCE_QUERY_OVERVIEW
+    )
     per_chunk_limit = (
+        max_evidence_units
+        if overview_coverage
+        else
         1
         if evidence_profile.query_type in ENTITY_PER_CHUNK_LIMIT_TYPES
         else MAX_EVIDENCE_UNITS_PER_CHUNK
     )
     selected: list[CitationUnitCandidate] = []
     seen_keys: set[tuple[int, str, int]] = set()
+    candidate_count = 0
+    rejection_reason_counts: dict[str, int] = defaultdict(int)
 
     for chunk in retrieved_chunks:
-        if not use_query_evidence_profile and len(selected) >= max_evidence_units:
+        if not use_query_evidence_profile and not overview_coverage and len(selected) >= max_evidence_units:
             break
         units = chunk_units.get(chunk.chunk_id)
         ranked_units: list[CitationUnitCandidate]
@@ -1110,6 +1165,7 @@ def select_evidence_units(
                         evidence_profile=evidence_profile,
                         technical_identifiers=technical_identifiers,
                         technical_intent=technical_intent,
+                        analysis=analysis,
                     )
                     for unit in units
                 ),
@@ -1121,31 +1177,71 @@ def select_evidence_units(
                     chunk=chunk,
                     question_features=question_features,
                     evidence_profile=evidence_profile,
+                    analysis=analysis,
                 )
             ]
+        candidate_count += len(ranked_units)
 
         accepted_count = 0
         for candidate in ranked_units:
+            rejection_reason = _candidate_rejection_reason(
+                candidate,
+                analysis=analysis,
+            )
+            if rejection_reason:
+                rejection_reason_counts[rejection_reason] += 1
+                continue
             if _should_filter_entity_candidate(candidate, profile=evidence_profile):
+                rejection_reason_counts["entity_gate"] += 1
                 continue
             candidate_key = (candidate.document_id, candidate.chunk_id, candidate.citation_unit_id or -1)
             if candidate_key in seen_keys:
+                rejection_reason_counts["duplicate"] += 1
                 continue
             selected.append(candidate)
             seen_keys.add(candidate_key)
             accepted_count += 1
-            if not use_query_evidence_profile and len(selected) >= max_evidence_units:
+            if not use_query_evidence_profile and not overview_coverage and len(selected) >= max_evidence_units:
                 break
             if accepted_count >= per_chunk_limit:
                 break
 
-    selected.sort(key=lambda item: (-item.score, item.document_id, item.chunk_id, item.citation_unit_id or -1))
-    selected = _apply_entity_evidence_gate(
-        selected,
-        profile=evidence_profile,
-        max_evidence_units=max_evidence_units,
-    )
-    return _assign_evidence_markers(selected[:max_evidence_units])
+    if overview_coverage:
+        selected = _select_overview_coverage_candidates(
+            selected,
+            max_evidence_units=max_evidence_units,
+            list_all_requested=analysis.list_all_requested,
+        )
+    else:
+        selected.sort(key=lambda item: (-item.score, item.document_id, item.chunk_id, item.citation_unit_id or 0))
+        selected = _apply_entity_evidence_gate(
+            selected,
+            profile=evidence_profile,
+            max_evidence_units=max_evidence_units,
+        )
+        selected = selected[:max_evidence_units]
+
+    if diagnostics is not None:
+        selected_keys = {
+            (item.document_id, item.chunk_id, item.citation_unit_id or -1)
+            for item in selected
+        }
+        not_selected_count = max(0, candidate_count - sum(rejection_reason_counts.values()) - len(selected_keys))
+        if not_selected_count:
+            rejection_reason_counts["lower_rank"] += not_selected_count
+        diagnostics.update(
+            {
+                "requested_attributes": list(analysis.requested_attributes),
+                "technical_identifiers": list(analysis.technical_identifiers),
+                "evidence_selection": {
+                    "candidate_count": candidate_count,
+                    "selected_count": len(selected),
+                    "rejected_count": max(0, candidate_count - len(selected)),
+                    "rejection_reason_counts": dict(sorted(rejection_reason_counts.items())),
+                },
+            }
+        )
+    return _assign_evidence_markers(selected)
 
 
 def build_citation_ready_fallback_units(
@@ -1160,8 +1256,9 @@ def build_citation_ready_fallback_units(
     """Preserve context order while replacing chunk fallbacks with persisted units."""
     if max_evidence_units <= 0 or max_units_per_chunk <= 0 or max_total_chars <= 0:
         return []
+    analysis = analyze_evidence_query(question)
     question_features = _build_query_features(question)
-    technical_identifiers = _extract_technical_identifiers(question)
+    technical_identifiers = analysis.technical_identifiers or _extract_technical_identifiers(question)
     technical_intent = _technical_question_intent(question)
     evidence_profile = _build_query_evidence_profile(question)
     if technical_identifiers and technical_intent:
@@ -1193,6 +1290,7 @@ def build_citation_ready_fallback_units(
                             evidence_profile=evidence_profile,
                             technical_identifiers=technical_identifiers,
                             technical_intent=technical_intent,
+                            analysis=analysis,
                             allow_parent_context=False,
                         ),
                         unit.unit_index,
@@ -1229,6 +1327,7 @@ def build_citation_ready_fallback_units(
             chunk=chunk,
             question_features=question_features,
             evidence_profile=evidence_profile,
+            analysis=analysis,
         )
         candidates_by_chunk.append([candidate])
         seen_fallback_chunks.add(fallback_key)
@@ -1361,6 +1460,13 @@ def _assign_evidence_markers(
             entity_exact_match=item.entity_exact_match,
             entity_context_match=item.entity_context_match,
             intent_alignment=item.intent_alignment,
+            attribute_match=item.attribute_match,
+            identifier_match=item.identifier_match,
+            direct_support=item.direct_support,
+            cross_entity_collision=item.cross_entity_collision,
+            boilerplate=item.boilerplate,
+            coverage_gain=item.coverage_gain,
+            rejection_reason=item.rejection_reason,
         )
         for index, item in enumerate(candidates, start=1)
     ]
@@ -1374,6 +1480,7 @@ def _build_citation_unit_candidate(
     evidence_profile: QueryEvidenceProfile,
     technical_identifiers: tuple[str, ...],
     technical_intent: str | None,
+    analysis: EvidenceQueryAnalysis,
     allow_parent_context: bool = True,
 ) -> CitationUnitCandidate:
     metadata = parse_chunk_metadata(unit.metadata_json, fallback_source_type=chunk.source_type)
@@ -1405,6 +1512,14 @@ def _build_citation_unit_candidate(
         identifiers=technical_identifiers,
         intent=technical_intent,
     )
+    identifier_match = _technical_identifiers_match(
+        structured_text,
+        identifiers=analysis.technical_identifiers,
+    )
+    attribute_alignment = _requested_attribute_alignment(
+        structured_text,
+        requested_attributes=analysis.requested_attributes,
+    )
     entity_context_match = _has_entity_context_match(
         unit_text=unit.unit_text,
         chunk=chunk,
@@ -1414,6 +1529,26 @@ def _build_citation_unit_candidate(
         profile=evidence_profile,
         allow_parent_context=allow_parent_context,
     )
+    cross_entity_collision = _has_cross_entity_collision(
+        unit_text=unit.unit_text,
+        metadata=metadata,
+        chunk=chunk,
+        profile=evidence_profile,
+        analysis=analysis,
+    )
+    boilerplate = _is_boilerplate_evidence(unit.unit_text)
+    unrelated_attribute_penalty = _unrelated_attribute_penalty(
+        structured_text,
+        requested_attributes=analysis.requested_attributes,
+    )
+    direct_support = _has_direct_answer_support(
+        unit_text=unit.unit_text,
+        structured_text=structured_text,
+        analysis=analysis,
+        attribute_alignment=attribute_alignment,
+        identifier_match=identifier_match,
+        technical_alignment=technical_alignment,
+    )
     score = _score_evidence_candidate(
         chunk_score=chunk.score,
         lexical_relevance=lexical_relevance,
@@ -1422,6 +1557,12 @@ def _build_citation_unit_candidate(
         intent_alignment=intent_alignment,
         profile=evidence_profile,
         technical_alignment=technical_alignment,
+        attribute_alignment=attribute_alignment,
+        identifier_match=identifier_match,
+        direct_support=direct_support,
+        unrelated_attribute_penalty=unrelated_attribute_penalty,
+        cross_entity_collision=cross_entity_collision,
+        boilerplate=boilerplate,
     )
     return CitationUnitCandidate(
         marker="",
@@ -1462,6 +1603,11 @@ def _build_citation_unit_candidate(
         entity_exact_match=entity_exact_match,
         entity_context_match=entity_context_match,
         intent_alignment=intent_alignment,
+        attribute_match=attribute_alignment > 0,
+        identifier_match=identifier_match,
+        direct_support=direct_support,
+        cross_entity_collision=cross_entity_collision,
+        boilerplate=boilerplate,
     )
 
 
@@ -1470,11 +1616,38 @@ def _build_chunk_fallback_candidate(
     chunk: RetrievedChunk,
     question_features: set[str],
     evidence_profile: QueryEvidenceProfile,
+    analysis: EvidenceQueryAnalysis,
 ) -> CitationUnitCandidate:
     fallback_text = _resolve_chunk_fallback_text(chunk)
     lexical_relevance = _lexical_relevance(fallback_text, question_features)
     entity_exact_match = _has_entity_exact_match(fallback_text, profile=evidence_profile)
     intent_alignment = _intent_alignment(fallback_text, profile=evidence_profile)
+    structured_text = " ".join(
+        part
+        for part in (
+            fallback_text,
+            chunk.section_title,
+            " ".join(chunk.heading_path or ()),
+        )
+        if part
+    )
+    identifier_match = _technical_identifiers_match(
+        structured_text,
+        identifiers=analysis.technical_identifiers,
+    )
+    attribute_alignment = _requested_attribute_alignment(
+        structured_text,
+        requested_attributes=analysis.requested_attributes,
+    )
+    boilerplate = _is_boilerplate_evidence(fallback_text)
+    direct_support = _has_direct_answer_support(
+        unit_text=fallback_text,
+        structured_text=structured_text,
+        analysis=analysis,
+        attribute_alignment=attribute_alignment,
+        identifier_match=identifier_match,
+        technical_alignment=0.5 if identifier_match else 0.0,
+    )
     return CitationUnitCandidate(
         marker="",
         citation_id=None,
@@ -1505,9 +1678,23 @@ def _build_chunk_fallback_candidate(
             entity_context_match=False,
             intent_alignment=intent_alignment,
             profile=evidence_profile,
+            technical_alignment=0.5 if identifier_match else 0.0,
+            attribute_alignment=attribute_alignment,
+            identifier_match=identifier_match,
+            direct_support=direct_support,
+            unrelated_attribute_penalty=_unrelated_attribute_penalty(
+                structured_text,
+                requested_attributes=analysis.requested_attributes,
+            ),
+            cross_entity_collision=False,
+            boilerplate=boilerplate,
         ),
         entity_exact_match=entity_exact_match,
         intent_alignment=intent_alignment,
+        attribute_match=attribute_alignment > 0,
+        identifier_match=identifier_match,
+        direct_support=direct_support,
+        boilerplate=boilerplate,
     )
 
 
@@ -1536,21 +1723,299 @@ def _score_evidence_candidate(
     intent_alignment: float,
     profile: QueryEvidenceProfile,
     technical_alignment: float = 0.0,
+    attribute_alignment: float = 0.0,
+    identifier_match: bool = False,
+    direct_support: bool = False,
+    unrelated_attribute_penalty: float = 0.0,
+    cross_entity_collision: bool = False,
+    boilerplate: bool = False,
 ) -> float:
     if not profile.is_entity_query:
-        return min(
-            1.0,
+        score = (
             (0.60 * chunk_score)
             + (0.40 * lexical_relevance)
-            + (0.10 * technical_alignment),
+            + (0.10 * technical_alignment)
         )
+    else:
+        entity_score = 1.0 if entity_exact_match or entity_context_match else 0.0
+        score = (
+            (0.50 * chunk_score)
+            + (0.25 * lexical_relevance)
+            + (0.15 * entity_score)
+            + (0.10 * intent_alignment)
+        )
+    score += 0.30 * attribute_alignment
+    score += 0.25 if identifier_match else 0.0
+    score += 0.25 if direct_support else 0.0
+    score -= 0.35 * unrelated_attribute_penalty
+    score -= 0.80 if cross_entity_collision else 0.0
+    score -= 0.45 if boilerplate else 0.0
+    return max(0.0, min(1.0, score))
 
-    entity_score = 1.0 if entity_exact_match or entity_context_match else 0.0
-    return (
-        (0.50 * chunk_score)
-        + (0.25 * lexical_relevance)
-        + (0.15 * entity_score)
-        + (0.10 * intent_alignment)
+
+def _candidate_rejection_reason(
+    candidate: CitationUnitCandidate,
+    *,
+    analysis: EvidenceQueryAnalysis,
+) -> str | None:
+    focused_query = analysis.query_type in {
+        EVIDENCE_QUERY_ATTRIBUTE,
+        EVIDENCE_QUERY_DEFINITION,
+        EVIDENCE_QUERY_REASON,
+        EVIDENCE_QUERY_TECHNICAL,
+        EVIDENCE_QUERY_OVERVIEW,
+    }
+    if focused_query and candidate.boilerplate:
+        return "boilerplate"
+    if candidate.cross_entity_collision:
+        return "cross_entity_binding"
+    if analysis.requested_attributes and not candidate.attribute_match:
+        return "missing_requested_attribute"
+    if analysis.technical_identifiers and not candidate.identifier_match:
+        return "missing_technical_identifier"
+    return None
+
+
+def _technical_identifiers_match(
+    text: str,
+    *,
+    identifiers: tuple[str, ...],
+) -> bool:
+    if not identifiers:
+        return False
+    context_tokens = set(_technical_identifier_tokens(text))
+    compact_context = "".join(_technical_identifier_tokens(text))
+    return all(
+        set(_technical_identifier_tokens(identifier)).issubset(context_tokens)
+        or "".join(_technical_identifier_tokens(identifier)) in compact_context
+        for identifier in identifiers
+    )
+
+
+def _requested_attribute_alignment(
+    text: str,
+    *,
+    requested_attributes: tuple[str, ...],
+) -> float:
+    if not requested_attributes:
+        return 0.0
+    lowered = text.casefold()
+    matched = 0
+    for attribute in requested_attributes:
+        aliases = evidence_attribute_aliases(attribute)
+        has_match = any(alias.casefold() in lowered for alias in aliases)
+        if attribute == "supported_values" and not has_match:
+            has_match = bool(
+                re.search(
+                    r"\b(?:supports?|supported|options?|one of)\b|支持|可选",
+                    lowered,
+                )
+            )
+        if has_match:
+            matched += 1
+    return matched / max(1, len(requested_attributes))
+
+
+def _unrelated_attribute_penalty(
+    text: str,
+    *,
+    requested_attributes: tuple[str, ...],
+) -> float:
+    if not requested_attributes:
+        return 0.0
+    lowered = text.casefold()
+    unrelated = sum(
+        1
+        for attribute in (
+            "location",
+            "processor",
+            "color",
+            "role",
+            "responsibility",
+            "group",
+            "configuration",
+            "default_value",
+            "supported_values",
+            "file_types",
+            "version",
+            "date",
+        )
+        if attribute not in requested_attributes
+        and any(alias.casefold() in lowered for alias in evidence_attribute_aliases(attribute))
+    )
+    return min(1.0, unrelated / 2)
+
+
+def _has_direct_answer_support(
+    *,
+    unit_text: str,
+    structured_text: str,
+    analysis: EvidenceQueryAnalysis,
+    attribute_alignment: float,
+    identifier_match: bool,
+    technical_alignment: float,
+) -> bool:
+    lowered = unit_text.casefold()
+    if analysis.query_type == EVIDENCE_QUERY_ATTRIBUTE:
+        return attribute_alignment > 0
+    if analysis.query_type == EVIDENCE_QUERY_TECHNICAL:
+        return identifier_match and technical_alignment > 0
+    if analysis.query_type == EVIDENCE_QUERY_DEFINITION:
+        return bool(
+            re.search(
+                r"\b(?:is|are)\s+(?:an?\s+)?|user-defined|refers to|defined as|是|指|定义|身份",
+                lowered,
+            )
+        )
+    if analysis.query_type == EVIDENCE_QUERY_REASON:
+        return bool(
+            re.search(
+                r"因为|所以|需要|必须|用于|为了|从而|避免|导致|原因|适合|适用场景|"
+                r"\b(?:because|so|must|need(?:s|ed)?|requires?|allows?|helps?|useful|suitable|designed to|to apply|trigger(?:s|ed)?|do not automatically)\b",
+                lowered,
+            )
+        )
+    if analysis.query_type == EVIDENCE_QUERY_OVERVIEW:
+        return not _is_boilerplate_evidence(unit_text) and bool(structured_text.strip())
+    return False
+
+
+def _is_boilerplate_evidence(text: str) -> bool:
+    lowered = " ".join(text.casefold().split())
+    return lowered.startswith(
+        (
+            "source basis:",
+            "adaptation:",
+            "retrieved:",
+            "copyright",
+            "table of contents",
+        )
+    )
+
+
+def _has_cross_entity_collision(
+    *,
+    unit_text: str,
+    metadata: object,
+    chunk: RetrievedChunk,
+    profile: QueryEvidenceProfile,
+    analysis: EvidenceQueryAnalysis,
+) -> bool:
+    if analysis.query_type != EVIDENCE_QUERY_ATTRIBUTE or not profile.entity_terms:
+        return False
+    if not _has_structured_entity_fields(chunk.text):
+        return False
+    section_title = getattr(metadata, "section_title", None) or chunk.section_title
+    heading_path = getattr(metadata, "heading_path", None) or chunk.heading_path
+    local_heading = str(section_title or (heading_path[-1] if heading_path else "") or "").strip()
+    if not local_heading or not _looks_like_local_entity_heading(local_heading):
+        return False
+    if _has_entity_exact_match(local_heading, profile=profile):
+        return False
+    return not _has_entity_exact_match(unit_text, profile=profile)
+
+
+def _has_structured_entity_fields(text: str) -> bool:
+    field_lines = re.findall(
+        r"(?m)^\s*[^\n:：]{1,32}\s*[:：]\s*\S+",
+        str(text or ""),
+    )
+    return len(field_lines) >= 2
+
+
+def _looks_like_local_entity_heading(value: str) -> bool:
+    lowered = value.casefold().strip()
+    if lowered in {
+        "overview",
+        "summary",
+        "location",
+        "configuration",
+        "responsibilities",
+        "details",
+        "概述",
+        "总结",
+        "配置",
+        "职责",
+        "办公信息",
+    }:
+        return False
+    latin_words = re.findall(r"\b[A-Z][A-Za-z0-9_-]*\b", value)
+    if len(latin_words) >= 2:
+        return True
+    return bool(re.fullmatch(r"[\u4e00-\u9fff]{2,8}", value))
+
+
+def _select_overview_coverage_candidates(
+    candidates: list[CitationUnitCandidate],
+    *,
+    max_evidence_units: int,
+    list_all_requested: bool,
+) -> list[CitationUnitCandidate]:
+    remaining = list(candidates)
+    selected: list[CitationUnitCandidate] = []
+    covered_documents: set[int] = set()
+    covered_sections: set[tuple[int, str]] = set()
+    covered_entities: set[str] = set()
+
+    while remaining and len(selected) < max_evidence_units:
+        scored: list[tuple[float, float, int, CitationUnitCandidate]] = []
+        for index, candidate in enumerate(remaining):
+            section_key = (
+                candidate.document_id,
+                (candidate.section_title or "").strip().casefold(),
+            )
+            entity_keys = _overview_entity_keys(candidate)
+            new_entity_count = len(entity_keys - covered_entities)
+            coverage_gain = 0.0
+            if candidate.document_id not in covered_documents:
+                coverage_gain += 0.15
+            if section_key[1] and section_key not in covered_sections:
+                coverage_gain += 0.20
+            coverage_gain += min(0.40, new_entity_count * (0.25 if list_all_requested else 0.15))
+            if _candidate_repeats_selected_text(candidate, selected):
+                coverage_gain -= 0.50
+            utility = candidate.score + coverage_gain
+            scored.append((utility, candidate.score, -index, candidate))
+        _, _, _, chosen = max(scored, key=lambda item: (item[0], item[1], item[2]))
+        remaining.remove(chosen)
+        if _candidate_repeats_selected_text(chosen, selected):
+            continue
+        chosen_entities = _overview_entity_keys(chosen)
+        section_key = (
+            chosen.document_id,
+            (chosen.section_title or "").strip().casefold(),
+        )
+        gain = float(chosen.document_id not in covered_documents)
+        gain += float(bool(section_key[1]) and section_key not in covered_sections)
+        gain += len(chosen_entities - covered_entities)
+        selected.append(replace(chosen, coverage_gain=gain))
+        covered_documents.add(chosen.document_id)
+        if section_key[1]:
+            covered_sections.add(section_key)
+        covered_entities.update(chosen_entities)
+    return selected
+
+
+def _overview_entity_keys(candidate: CitationUnitCandidate) -> set[str]:
+    keys = {
+        " ".join(match.group(0).casefold().split())
+        for match in re.finditer(r"\b[A-Z][A-Za-z0-9_-]+(?:\s+[A-Z][A-Za-z0-9_-]+)+\b", candidate.text)
+    }
+    section = (candidate.section_title or "").strip()
+    if section and _looks_like_local_entity_heading(section):
+        keys.add(section.casefold())
+    return keys
+
+
+def _candidate_repeats_selected_text(
+    candidate: CitationUnitCandidate,
+    selected: Sequence[CitationUnitCandidate],
+) -> bool:
+    normalized = " ".join(candidate.text.casefold().split())
+    return any(
+        normalized == " ".join(item.text.casefold().split())
+        or _has_heavy_text_overlap(candidate.text, item.text)
+        for item in selected
     )
 
 
@@ -1570,6 +2035,10 @@ def _should_filter_entity_candidate(
         profile.query_type in {"entity_attribute", "entity_reason"}
         and candidate.citation_unit_id is not None
         and candidate.intent_alignment <= 0
+        and not (
+            profile.query_type == "entity_reason"
+            and _has_direct_reason_support(candidate)
+        )
     ):
         return True
     return (
@@ -1588,7 +2057,11 @@ def _apply_entity_evidence_gate(
         return candidates
 
     top = next(
-        (candidate for candidate in candidates if _has_supported_entity_context(candidate)),
+        (
+            candidate
+            for candidate in candidates
+            if _has_required_entity_support(candidate, profile=profile)
+        ),
         None,
     )
     if top is None:
@@ -1629,6 +2102,8 @@ def _passes_entity_followup_gate(
             )
             and candidate.score >= (top.score * ENTITY_FOLLOWUP_MIN_RELATIVE_SCORE)
         )
+    if profile.query_type == "entity_reason" and _has_direct_reason_support(candidate):
+        return candidate.score >= (top.score * ENTITY_FOLLOWUP_MIN_RELATIVE_SCORE)
     if same_chunk:
         return (
             _has_supported_entity_context(candidate)
@@ -1658,6 +2133,21 @@ def _has_supported_entity_context(candidate: CitationUnitCandidate) -> bool:
     return candidate.entity_exact_match or candidate.entity_context_match
 
 
+def _has_required_entity_support(
+    candidate: CitationUnitCandidate,
+    *,
+    profile: QueryEvidenceProfile,
+) -> bool:
+    return _has_supported_entity_context(candidate) or (
+        profile.query_type == "entity_reason"
+        and _has_direct_reason_support(candidate)
+    )
+
+
+def _has_direct_reason_support(candidate: CitationUnitCandidate) -> bool:
+    return candidate.direct_support and candidate.lexical_relevance >= 0.05
+
+
 def _entity_followup_min_lexical_relevance(
     candidate: CitationUnitCandidate,
     *,
@@ -1682,6 +2172,7 @@ def _lexical_relevance(text: str, query_features: set[str]) -> float:
 def _build_query_evidence_profile(question: str) -> QueryEvidenceProfile:
     normalized = _normalize_text(question)
     lowered = normalized.lower()
+    analysis = analyze_evidence_query(question)
 
     relation_terms = _extract_relation_entity_terms(normalized)
     if relation_terms:
@@ -1689,6 +2180,17 @@ def _build_query_evidence_profile(question: str) -> QueryEvidenceProfile:
             query_type="entity_relation",
             entity_terms=frozenset(relation_terms),
             intent_terms=ENTITY_RELATION_TERMS,
+        )
+
+    if analysis.requested_attributes:
+        return QueryEvidenceProfile(
+            query_type="entity_attribute",
+            entity_terms=frozenset(analysis.entities),
+            intent_terms=frozenset(
+                alias.casefold()
+                for attribute in analysis.requested_attributes
+                for alias in evidence_attribute_aliases(attribute)
+            ),
         )
 
     if any(
@@ -1720,14 +2222,14 @@ def _build_query_evidence_profile(question: str) -> QueryEvidenceProfile:
     if any(pattern in lowered for pattern in ("为什么受欢迎", "为什么这么火", "为什么火", "为什么", "受欢迎")):
         return QueryEvidenceProfile(
             query_type="entity_reason",
-            entity_terms=frozenset(_extract_single_entity_terms(normalized, "entity_reason")),
+            entity_terms=_analysis_entity_terms(analysis),
             intent_terms=ENTITY_REASON_TERMS,
         )
 
     if any(pattern in lowered for pattern in ("是谁", "是什么", "是啥", "介绍", "定义")):
         return QueryEvidenceProfile(
             query_type="entity_definition",
-            entity_terms=frozenset(_extract_single_entity_terms(normalized, "entity_definition")),
+            entity_terms=_analysis_entity_terms(analysis),
             intent_terms=ENTITY_DEFINITION_TERMS,
         )
 
@@ -1740,6 +2242,13 @@ def _build_query_evidence_profile(question: str) -> QueryEvidenceProfile:
 
 def build_query_evidence_profile(question: str) -> QueryEvidenceProfile:
     return _build_query_evidence_profile(question)
+
+
+def _analysis_entity_terms(analysis: EvidenceQueryAnalysis) -> frozenset[str]:
+    terms = set(analysis.entities)
+    for entity in analysis.entities:
+        terms.update(re.findall(r"\b[A-Z][A-Za-z0-9_-]*(?:\s+[A-Za-z][A-Za-z0-9_-]*)*", entity))
+    return frozenset(term.strip() for term in terms if term.strip())
 
 
 def _extract_relation_entity_terms(question: str) -> tuple[str, ...]:

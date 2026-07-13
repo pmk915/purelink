@@ -73,6 +73,80 @@ _GENERIC_TERMS = frozenset(
     }
 )
 
+EVIDENCE_QUERY_GENERIC = "generic_factual"
+EVIDENCE_QUERY_ATTRIBUTE = "entity_attribute"
+EVIDENCE_QUERY_DEFINITION = "entity_definition"
+EVIDENCE_QUERY_REASON = "entity_reason"
+EVIDENCE_QUERY_RELATION = "entity_relation"
+EVIDENCE_QUERY_TECHNICAL = "exact_technical"
+EVIDENCE_QUERY_OVERVIEW = "overview"
+
+EVIDENCE_ATTRIBUTE_ALIASES: dict[str, tuple[str, ...]] = {
+    "location": (
+        "在哪里",
+        "在哪",
+        "办公地点",
+        "办公城市",
+        "城市",
+        "地址",
+        "location",
+        "office",
+        "city",
+        "address",
+    ),
+    "processor": ("处理器", "cpu", "gpu", "芯片", "processor", "chipset"),
+    "color": ("颜色", "配色", "color", "colour", "finish"),
+    "role": ("角色", "职位", "职务", "role", "position", "title"),
+    "responsibility": ("负责", "职责", "责任", "responsibility", "responsibilities", "owns"),
+    "group": ("隶属", "属于哪个组", "属于哪个团队", "group", "team", "belongs to"),
+    "configuration": ("配置", "环境变量", "config", "configuration", "environment variable"),
+    "default_value": ("默认值", "缺省值", "default value", "defaults to", "default"),
+    "supported_values": (
+        "支持哪些值",
+        "可选值",
+        "允许值",
+        "supported values",
+        "valid values",
+        "options",
+    ),
+    "file_types": (
+        "文件类型",
+        "文件格式",
+        "文本格式",
+        "扩展名",
+        "file types",
+        "file formats",
+        "formats",
+        "extensions",
+    ),
+    "version": ("版本", "version", "release"),
+    "date": ("日期", "时间", "哪一年", "什么时候", "date", "year", "when"),
+}
+
+_TECHNICAL_IDENTIFIER_PATTERNS = (
+    re.compile(r"`([^`]+)`"),
+    re.compile(r"\b[A-Z][A-Z0-9]+(?:_[A-Z0-9]+)+\b"),
+    re.compile(r"\b[a-z][a-z0-9]+_[a-z0-9_]+\b"),
+    re.compile(r"\b__[A-Za-z0-9_]+__\b"),
+    re.compile(r"\b(?:GET|POST|PUT|PATCH|DELETE)\s+/[\w./{}:-]+", re.IGNORECASE),
+    re.compile(r"(?<!\w)/(?:api|v\d+)(?:/[\w.{}:-]+)+", re.IGNORECASE),
+    re.compile(r"\b(?:app|tests|docs|frontend|scripts|alembic|worker-go)/(?:[\w.{}:-]+/)*[\w.{}:-]+", re.IGNORECASE),
+    re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\(\)"),
+    re.compile(r"(?:中|调用|使用)\s*([A-Z][A-Za-z0-9_]+)(?=\s*(?:的|在|是))"),
+    re.compile(r"\b[\w.-]+\.(?:py|md|txt|pdf|docx|ya?ml|json)\b", re.IGNORECASE),
+    re.compile(r"\b(?:docker\s+compose(?:\s+[A-Za-z0-9_.-]+)+|npm\s+run\s+[A-Za-z0-9_:-]+|pnpm\s+[A-Za-z0-9_:-]+|pytest(?:\s+[A-Za-z0-9_./:-]+)*|curl\s+\S+)", re.IGNORECASE),
+)
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceQueryAnalysis:
+    query_type: str
+    entities: tuple[str, ...]
+    requested_attributes: tuple[str, ...]
+    technical_identifiers: tuple[str, ...]
+    overview_requested: bool
+    list_all_requested: bool
+
 
 class DocumentTarget(Protocol):
     id: int
@@ -86,6 +160,147 @@ class TargetDocumentDecision:
     confidence: str
     reason: str
     target_requested: bool
+
+
+def analyze_evidence_query(query: str) -> EvidenceQueryAnalysis:
+    normalized = " ".join(str(query or "").split())
+    lowered = normalized.casefold()
+    requested_attributes = tuple(
+        name
+        for name, aliases in EVIDENCE_ATTRIBUTE_ALIASES.items()
+        if any(alias.casefold() in lowered for alias in aliases)
+    )
+    technical_identifiers = extract_technical_identifiers(normalized)
+    overview_requested = bool(
+        re.search(
+            r"总结|概括|归纳|综述|主要内容|\boverview\b|\bsummary\b|\bsummarize\b",
+            normalized,
+            re.IGNORECASE,
+        )
+    )
+    list_all_requested = bool(
+        re.search(
+            r"列出所有|全部|所有|有哪些|哪些成员|\blist\s+all\b|\ball\s+(?:the\s+)?(?:items|members|documents)\b",
+            normalized,
+            re.IGNORECASE,
+        )
+    )
+    query_type = _evidence_query_type(
+        normalized,
+        requested_attributes=requested_attributes,
+        technical_identifiers=technical_identifiers,
+        overview_requested=overview_requested,
+        list_all_requested=list_all_requested,
+    )
+    return EvidenceQueryAnalysis(
+        query_type=query_type,
+        entities=_extract_evidence_entities(
+            normalized,
+            query_type=query_type,
+            requested_attributes=requested_attributes,
+            technical_identifiers=technical_identifiers,
+        ),
+        requested_attributes=requested_attributes,
+        technical_identifiers=technical_identifiers,
+        overview_requested=overview_requested,
+        list_all_requested=list_all_requested,
+    )
+
+
+def extract_technical_identifiers(query: str) -> tuple[str, ...]:
+    identifiers: list[str] = []
+    for pattern in _TECHNICAL_IDENTIFIER_PATTERNS:
+        for match in pattern.finditer(query):
+            value = match.group(1) if match.groups() else match.group(0)
+            cleaned = value.strip("`'\" ")
+            if cleaned:
+                identifiers.append(cleaned)
+    return tuple(dict.fromkeys(identifiers))
+
+
+def evidence_attribute_aliases(attribute: str) -> tuple[str, ...]:
+    return EVIDENCE_ATTRIBUTE_ALIASES.get(attribute, (attribute,))
+
+
+def _evidence_query_type(
+    query: str,
+    *,
+    requested_attributes: tuple[str, ...],
+    technical_identifiers: tuple[str, ...],
+    overview_requested: bool,
+    list_all_requested: bool,
+) -> str:
+    lowered = query.casefold()
+    if overview_requested or list_all_requested:
+        return EVIDENCE_QUERY_OVERVIEW
+    if re.search(r"什么关系|有.*关系|\brelationship\b|\brelated\b", query, re.IGNORECASE):
+        return EVIDENCE_QUERY_RELATION
+    if technical_identifiers:
+        return EVIDENCE_QUERY_TECHNICAL
+    if requested_attributes:
+        return EVIDENCE_QUERY_ATTRIBUTE
+    if "为什么" in query or re.search(r"\bwhy\b", lowered):
+        return EVIDENCE_QUERY_REASON
+    if any(term in lowered for term in ("是谁", "是什么", "介绍", "定义", "what is")):
+        return EVIDENCE_QUERY_DEFINITION
+    return EVIDENCE_QUERY_GENERIC
+
+
+def _extract_evidence_entities(
+    query: str,
+    *,
+    query_type: str,
+    requested_attributes: tuple[str, ...],
+    technical_identifiers: tuple[str, ...],
+) -> tuple[str, ...]:
+    if query_type == EVIDENCE_QUERY_RELATION:
+        match = re.search(
+            r"(.+?)(?:和|与|跟|\band\b)(.+?)(?:是什么关系|有.*关系|\brelationship\b|\brelated\b|[？?]?$)",
+            query,
+            re.IGNORECASE,
+        )
+        if match:
+            return tuple(
+                item
+                for item in (_clean_entity_text(match.group(1)), _clean_entity_text(match.group(2)))
+                if item
+            )
+
+    if query_type == EVIDENCE_QUERY_REASON:
+        prefix_match = re.match(r"\s*(.+?)\s*为什么", query)
+        if prefix_match:
+            entity = _clean_entity_text(prefix_match.group(1))
+            if entity:
+                return (entity,)
+        suffix_match = re.search(
+            r"为什么\s*(.+?)(?:需要|会|要|使用|采用|适合|拒绝|触发|导致)",
+            query,
+        )
+        if suffix_match:
+            entity = _clean_entity_text(suffix_match.group(1))
+            if entity:
+                return (entity,)
+
+    cleaned = query
+    for identifier in technical_identifiers:
+        cleaned = re.sub(re.escape(identifier), " ", cleaned, flags=re.IGNORECASE)
+    for attribute in requested_attributes:
+        for alias in evidence_attribute_aliases(attribute):
+            cleaned = re.sub(re.escape(alias), " ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(
+        r"为什么|是谁|是什么|是多少|在哪里|在哪|位于哪里|有什么|什么|如何|怎么|请问|请|的|型号|作用|用途|特点|特征|支持|使用|调用|保存|办公|文本|哪些值|哪些|值|列出所有|全部|所有|总结|概括|归纳|"
+        r"\b(?:why|what|where|when|how|does|do|is|are|the|a|an|please|list|all)\b",
+        " ",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    entity = _clean_entity_text(cleaned)
+    return (entity,) if entity else ()
+
+
+def _clean_entity_text(value: str) -> str:
+    normalized = re.sub(r"[^\w\u4e00-\u9fff]+", " ", value)
+    return " ".join(normalized.split()).strip()
 
 
 @dataclass(frozen=True, slots=True)
@@ -254,6 +469,18 @@ __all__ = [
     "CONFIDENCE_HIGH",
     "CONFIDENCE_MEDIUM",
     "CONFIDENCE_NONE",
+    "EVIDENCE_ATTRIBUTE_ALIASES",
+    "EVIDENCE_QUERY_ATTRIBUTE",
+    "EVIDENCE_QUERY_DEFINITION",
+    "EVIDENCE_QUERY_GENERIC",
+    "EVIDENCE_QUERY_OVERVIEW",
+    "EVIDENCE_QUERY_REASON",
+    "EVIDENCE_QUERY_RELATION",
+    "EVIDENCE_QUERY_TECHNICAL",
+    "EvidenceQueryAnalysis",
     "TargetDocumentDecision",
+    "analyze_evidence_query",
+    "evidence_attribute_aliases",
+    "extract_technical_identifiers",
     "resolve_target_documents",
 ]

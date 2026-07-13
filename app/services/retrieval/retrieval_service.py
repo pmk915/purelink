@@ -38,7 +38,12 @@ from app.services.retrieval.retrieval_router import resolve_mode
 from app.services.retrieval import trace_service
 from app.services.retrieval.trace_types import RetrievalTraceCandidate
 from app.services.retrieval.types import RetrievalMode, RetrievalRequest, RetrievalResult
-from app.services.query_analysis import TargetDocumentDecision, resolve_target_documents
+from app.services.query_analysis import (
+    EVIDENCE_QUERY_ATTRIBUTE,
+    TargetDocumentDecision,
+    analyze_evidence_query,
+    resolve_target_documents,
+)
 
 
 logger = logging.getLogger("purelink.retrieval")
@@ -182,8 +187,9 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
             }
 
         evidence_units = []
+        evidence_selection_metadata: dict[str, object] = {}
         if request.include_citations:
-            evidence_units = _select_evidence_units(
+            evidence_units, evidence_selection_metadata = _select_evidence_units(
                 db=request.db,
                 query=request.evidence_query or request.query,
                 context_chunks=context_chunks,
@@ -195,9 +201,10 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
                 use_query_evidence_profile=effective_mode != RetrievalMode.OVERVIEW,
             )
 
+        evidence_source = evidence_units if request.include_citations else context_chunks
         candidate_evidences = _annotate_chunk_score_evidences(
             _annotate_graph_evidences(
-                build_evidences(evidence_units or context_chunks),
+                build_evidences(evidence_source),
                 graph_chunk_keys=locals().get("graph_chunk_keys", set()),
             ),
             chunks=raw_chunks,
@@ -252,6 +259,7 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
                     routing_query_source=routing_query_source,
                 ),
                 **overview_metadata,
+                **evidence_selection_metadata,
                 "context_chunk_count": len(context_chunks),
                 "evidence_unit_count": len(evidence_units),
                 "graph_candidate_count": len(locals().get("graph_chunks", [])),
@@ -306,6 +314,7 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
                     routing_query_source=routing_query_source,
                 ),
                 **overview_metadata,
+                **evidence_selection_metadata,
                 "retrieved_chunks": retrieved_chunks,
                 "initial_chunks": raw_chunks,
                 "context_chunks": context_chunks,
@@ -604,6 +613,12 @@ def _build_trace_candidates(
                     "retrieval_mode": evidence.metadata.get("retrieval_mode"),
                     "citation_ready": citation_ready,
                     "citation_readiness_reason": citation_readiness_reason,
+                    "attribute_match": evidence.metadata.get("attribute_match"),
+                    "identifier_match": evidence.metadata.get("identifier_match"),
+                    "entity_match": evidence.metadata.get("entity_match"),
+                    "direct_support": evidence.metadata.get("direct_support"),
+                    "coverage_gain": evidence.metadata.get("coverage_gain"),
+                    "rejection_reason": evidence.metadata.get("rejection_reason"),
                 },
             )
         )
@@ -682,21 +697,33 @@ def _select_evidence_units(
     )
 
     chunk_units = load_citation_units_for_chunks(db=db, chunks=context_chunks)
+    diagnostics: dict[str, object] = {}
     selected = select_evidence_units(
         question=query,
         retrieved_chunks=context_chunks,
         chunk_units=chunk_units,
         max_evidence_units=max_evidence_units,
         use_query_evidence_profile=use_query_evidence_profile,
+        diagnostics=diagnostics,
     )
     if selected:
-        return selected
-    return build_citation_ready_fallback_units(
+        return selected, diagnostics
+
+    analysis = analyze_evidence_query(query)
+    if analysis.query_type == EVIDENCE_QUERY_ATTRIBUTE:
+        return [], diagnostics
+
+    fallback = build_citation_ready_fallback_units(
         question=query,
         retrieved_chunks=context_chunks,
         chunk_units=chunk_units,
         max_evidence_units=max_evidence_units,
     )
+    selection = diagnostics.get("evidence_selection")
+    if isinstance(selection, dict):
+        selection["selected_count"] = len(fallback)
+        selection["fallback_used"] = True
+    return fallback, diagnostics
 
 
 def _align_raw_items_to_evidences(*, items, evidences):

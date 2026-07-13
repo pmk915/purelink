@@ -113,6 +113,63 @@ async def test_retrieval_returns_trace_id_and_records_selected_evidence(
 
 
 @pytest.mark.anyio
+async def test_retrieval_trace_records_evidence_selection_signals(
+    session_factory: sessionmaker,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RERANKER_ENABLED", "false")
+    get_settings.cache_clear()
+
+    def fake_retrieve_chunks_for_documents(**kwargs):  # noqa: ANN003
+        return [
+            _retrieved_chunk(
+                document_id=kwargs["documents"][0].id,
+                chunk_id="device-processor",
+                text="Aurora Mini processor: Arc X1.",
+                score=0.9,
+            )
+        ]
+
+    monkeypatch.setattr(
+        "app.services.retrieval.retrieval_service.chunk_retriever.retrieve_chunks_for_documents",
+        fake_retrieve_chunks_for_documents,
+    )
+
+    with session_factory() as db:
+        user, knowledge_base, document = _create_user_kb_document(db)
+        result = await retrieve(
+            RetrievalRequest(
+                db=db,
+                documents=[document],
+                vector_root=tmp_path,
+                scope=KnowledgeBaseScope.PERSONAL,
+                knowledge_base_id=knowledge_base.id,
+                user_id=user.id,
+                query="Aurora Mini 使用什么处理器？",
+                top_k=3,
+                required_review_status=DocumentReviewStatus.NOT_REQUIRED,
+            )
+        )
+        trace = db.scalar(select(RetrievalTrace).where(RetrievalTrace.id == result.trace_id))
+        item = db.scalar(
+            select(RetrievalTraceItem).where(RetrievalTraceItem.trace_id == result.trace_id)
+        )
+
+    get_settings.cache_clear()
+    assert trace is not None
+    assert item is not None
+    trace_metadata = json.loads(trace.metadata_json or "{}")
+    item_metadata = json.loads(item.metadata_json or "{}")
+    assert trace_metadata["requested_attributes"] == ["processor"]
+    assert trace_metadata["technical_identifiers"] == []
+    assert trace_metadata["evidence_selection"]["candidate_count"] == 1
+    assert trace_metadata["evidence_selection"]["selected_count"] == 1
+    assert item_metadata["attribute_match"] is True
+    assert item_metadata["direct_support"] is True
+
+
+@pytest.mark.anyio
 async def test_retrieval_trace_can_be_disabled(
     session_factory: sessionmaker,
     tmp_path,

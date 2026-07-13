@@ -56,6 +56,21 @@ def _build_evidence(item: Any, *, fallback_marker: str) -> RetrievedEvidence:
     marker = _get_attr(item, "marker") or fallback_marker
     score = _get_attr(item, "score")
     heading_path = _get_attr(item, "heading_path")
+    selection_metadata = {
+        key: value
+        for key, value in {
+            "attribute_match": _get_attr(item, "attribute_match"),
+            "identifier_match": _get_attr(item, "identifier_match"),
+            "entity_match": bool(
+                _get_attr(item, "entity_exact_match")
+                or _get_attr(item, "entity_context_match")
+            ),
+            "direct_support": _get_attr(item, "direct_support"),
+            "coverage_gain": _get_attr(item, "coverage_gain"),
+            "rejection_reason": _get_attr(item, "rejection_reason"),
+        }.items()
+        if value is not None
+    }
     return RetrievedEvidence(
         document_id=int(_get_attr(item, "document_id")),
         chunk_id=_get_attr(item, "chunk_id"),
@@ -78,7 +93,7 @@ def _build_evidence(item: Any, *, fallback_marker: str) -> RetrievedEvidence:
         section_title=_get_attr(item, "section_title"),
         heading_path=list(heading_path) if heading_path else None,
         final_score=score,
-        metadata={"marker": marker},
+        metadata={"marker": marker, **selection_metadata},
     )
 
 

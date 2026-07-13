@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 import re
 from typing import Any, Sequence
 
+from app.services.query_analysis import analyze_evidence_query, evidence_attribute_aliases
+
 
 REASON_SUPPORTED = "supported"
 REASON_NO_EVIDENCE = "no_evidence"
@@ -204,10 +206,15 @@ def evaluate_evidence_support(
     support_query = _build_support_query(query, profile=profile, qa_intent=qa_intent)
     evidence_list = list(evidence_units)
     if not evidence_list:
+        reason = (
+            REASON_MISSING_ATTRIBUTE_SUPPORT
+            if support_query.requested_attributes
+            else REASON_NO_EVIDENCE
+        )
         return EvidenceSupportDecision(
             answerable=False,
             support_score=0.0,
-            reason=REASON_NO_EVIDENCE,
+            reason=reason,
             query_type=support_query.query_type,
             signals={"has_final_evidence": False},
         )
@@ -301,6 +308,7 @@ def evaluate_evidence_support(
 def _build_support_query(query: str, *, profile: Any | None, qa_intent: str | None) -> _SupportQuery:
     normalized = _normalize_text(query)
     lowered = normalized.casefold()
+    analysis = analyze_evidence_query(query)
     profile_type = str(getattr(profile, "query_type", "") or "")
     profile_entities = tuple(str(item) for item in getattr(profile, "entity_terms", ()) if str(item))
 
@@ -319,21 +327,33 @@ def _build_support_query(query: str, *, profile: Any | None, qa_intent: str | No
             keywords=_keywords(normalized),
         )
 
-    exact_identifiers = _extract_exact_identifiers(normalized)
+    exact_identifiers = tuple(
+        dict.fromkeys(
+            (*analysis.technical_identifiers, *_extract_exact_identifiers(normalized))
+        )
+    )
+    requested_attributes = tuple(
+        dict.fromkeys(
+            (*analysis.requested_attributes, *_requested_attributes(lowered))
+        )
+    )
     if exact_identifiers:
         return _SupportQuery(
             query_type=QUERY_TYPE_EXACT_TECHNICAL,
             entity_terms=profile_entities,
-            requested_attributes=_requested_attributes(lowered),
+            requested_attributes=requested_attributes,
             exact_identifiers=exact_identifiers,
             keywords=_keywords(normalized),
         )
 
-    requested_attributes = _requested_attributes(lowered)
     if requested_attributes:
         return _SupportQuery(
             query_type=QUERY_TYPE_ENTITY_ATTRIBUTE,
-            entity_terms=_extract_attribute_entity_terms(normalized, requested_attributes) or profile_entities,
+            entity_terms=(
+                analysis.entities
+                or _extract_attribute_entity_terms(normalized, requested_attributes)
+                or profile_entities
+            ),
             requested_attributes=requested_attributes,
             keywords=_keywords(normalized),
         )
@@ -391,7 +411,9 @@ def _unsupported_reason(
             return REASON_INSUFFICIENT_QUERY_COVERAGE
         return REASON_SUPPORTED
     if support_query.query_type == QUERY_TYPE_ENTITY_ATTRIBUTE:
-        if support_query.requested_attributes and not attribute_coverage:
+        if support_query.requested_attributes and (
+            not attribute_coverage or not supporting_ids
+        ):
             return REASON_MISSING_ATTRIBUTE_SUPPORT
         return REASON_SUPPORTED
     if support_query.query_type == QUERY_TYPE_ENTITY_REASON:
@@ -733,7 +755,17 @@ def _attribute_coverage(requested_attributes: tuple[str, ...], context: str) -> 
         return True
     lowered = context.casefold()
     return all(
-        any(alias.casefold() in lowered for alias in ATTRIBUTE_ALIASES.get(attribute, (attribute,)))
+        any(
+            alias.casefold() in lowered
+            for alias in tuple(
+                dict.fromkeys(
+                    (
+                        *ATTRIBUTE_ALIASES.get(attribute, ()),
+                        *evidence_attribute_aliases(attribute),
+                    )
+                )
+            )
+        )
         for attribute in requested_attributes
     )
 

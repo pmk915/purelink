@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services.query_analysis import resolve_target_documents
+from app.services.query_analysis import analyze_evidence_query, resolve_target_documents
 
 
 def _documents(*filenames: str):
@@ -108,3 +108,55 @@ def test_resolve_target_documents_does_not_force_single_generic_token_match() ->
     assert decision.target_requested is True
     assert decision.target_document_ids == ()
     assert decision.reason == "requested_document_not_found"
+
+
+@pytest.mark.parametrize(
+    ("query", "expected_attributes"),
+    [
+        ("Alice Chen 在哪里办公？", ("location",)),
+        ("Where is Alice Chen's office location?", ("location",)),
+        ("Aurora Mini 使用哪款处理器？", ("processor",)),
+        ("PureLink 支持哪些文本文件类型？", ("file_types",)),
+        ("CHUNK_STRATEGY 支持哪些值？", ("supported_values",)),
+        ("RETRIEVAL_MIN_SCORE 默认值是什么？", ("default_value",)),
+        ("Aurora Mini 的颜色和处理器是什么？", ("processor", "color")),
+    ],
+)
+def test_analyze_evidence_query_extracts_requested_attributes(
+    query: str,
+    expected_attributes: tuple[str, ...],
+) -> None:
+    analysis = analyze_evidence_query(query)
+
+    assert set(analysis.requested_attributes) == set(expected_attributes)
+
+
+@pytest.mark.parametrize(
+    ("query", "expected_identifier"),
+    [
+        ("`CHUNK_STRATEGY` 支持哪些值？", "CHUNK_STRATEGY"),
+        ("docker compose down -v 会发生什么？", "docker compose down -v"),
+        ("GET /api/v1/documents 返回什么？", "GET /api/v1/documents"),
+        ("app/services/qa.py 在哪里？", "app/services/qa.py"),
+        ("process_document() 如何调用？", "process_document()"),
+    ],
+)
+def test_analyze_evidence_query_extracts_technical_identifiers(
+    query: str,
+    expected_identifier: str,
+) -> None:
+    analysis = analyze_evidence_query(query)
+
+    assert expected_identifier in analysis.technical_identifiers
+
+
+def test_analyze_evidence_query_does_not_treat_ordinary_english_as_identifier() -> None:
+    analysis = analyze_evidence_query("What makes Python classes useful?")
+
+    assert analysis.technical_identifiers == ()
+
+
+def test_analyze_evidence_query_extracts_contextual_framework_identifier() -> None:
+    analysis = analyze_evidence_query("FastAPI 中 Depends 的作用是什么？")
+
+    assert analysis.technical_identifiers == ("Depends",)

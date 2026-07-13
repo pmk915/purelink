@@ -3539,6 +3539,211 @@ def test_select_evidence_units_mixed_english_entity_config_attribute(
     assert [item.text for item in evidence_units] == ["配置：DEEPSEEK_API_KEY"]
 
 
+def test_select_evidence_units_processor_requires_direct_attribute_support(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="devices.md",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="## Aurora Mini\n颜色：银色\n处理器：Arc X1",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=0,
+            unit_text="颜色：银色",
+            metadata={"section_title": "Aurora Mini"},
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=1,
+            unit_text="处理器：Arc X1",
+            metadata={"section_title": "Aurora Mini"},
+        )
+        db.commit()
+        retrieved = _retrieved_chunk(
+            chunk_id=chunk.chunk_key,
+            chunk_db_id=chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.9,
+            text=chunk.chunk_text,
+        )
+        evidence_units = select_evidence_units(
+            question="Aurora Mini 使用什么处理器？",
+            retrieved_chunks=[retrieved],
+            chunk_units=load_citation_units_for_chunks(db=db, chunks=[retrieved]),
+            max_evidence_units=4,
+        )
+
+    assert [item.text for item in evidence_units] == ["处理器：Arc X1"]
+    assert evidence_units[0].attribute_match is True
+    assert evidence_units[0].direct_support is True
+
+
+def test_select_evidence_units_processor_rejects_color_only() -> None:
+    evidence_units = select_evidence_units(
+        question="Aurora Mini 使用什么处理器？",
+        retrieved_chunks=[
+            _retrieved_chunk(
+                chunk_id="1:0",
+                document_id=1,
+                document_name="devices.md",
+                score=0.95,
+                text="Aurora Mini 颜色：银色。",
+                section_title="Aurora Mini",
+            )
+        ],
+        chunk_units={},
+        max_evidence_units=4,
+    )
+
+    assert evidence_units == []
+
+
+def test_select_evidence_units_keeps_role_and_responsibility_separate(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="team.md",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="## Alice Chen\n角色：检索工程师\n负责：证据评测",
+        )
+        for index, text in enumerate(("角色：检索工程师", "负责：证据评测")):
+            _create_citation_unit(
+                db,
+                document=document,
+                chunk_key=chunk.chunk_key,
+                unit_index=index,
+                unit_text=text,
+                metadata={"section_title": "Alice Chen"},
+            )
+        db.commit()
+        retrieved = _retrieved_chunk(
+            chunk_id=chunk.chunk_key,
+            chunk_db_id=chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.9,
+            text=chunk.chunk_text,
+        )
+        units = load_citation_units_for_chunks(db=db, chunks=[retrieved])
+        role = select_evidence_units(
+            question="Alice Chen 的角色是什么？",
+            retrieved_chunks=[retrieved],
+            chunk_units=units,
+            max_evidence_units=2,
+        )
+        responsibility = select_evidence_units(
+            question="Alice Chen 负责什么？",
+            retrieved_chunks=[retrieved],
+            chunk_units=units,
+            max_evidence_units=2,
+        )
+
+    assert [item.text for item in role] == ["角色：检索工程师"]
+    assert [item.text for item in responsibility] == ["负责：证据评测"]
+
+
+def test_select_evidence_units_file_types_rejects_retrieval_modes() -> None:
+    evidence_units = select_evidence_units(
+        question="PureLink 支持哪些文本文件类型？",
+        retrieved_chunks=[
+            _retrieved_chunk(
+                chunk_id="1:0",
+                document_id=1,
+                document_name="retrieval.md",
+                score=0.95,
+                text="PureLink supports chunk_only, overview, and hybrid_text retrieval modes.",
+                section_title="Retrieval Modes",
+            ),
+            _retrieved_chunk(
+                chunk_id="2:0",
+                document_id=2,
+                document_name="processing.md",
+                score=0.8,
+                text="PureLink supported file formats include Markdown, PDF, and DOCX.",
+                section_title="Upload Validation",
+            ),
+        ],
+        chunk_units={},
+        max_evidence_units=4,
+    )
+
+    assert [item.text for item in evidence_units] == [
+        "PureLink supported file formats include Markdown, PDF, and DOCX."
+    ]
+
+
+def test_select_evidence_units_overview_greedily_covers_distinct_members() -> None:
+    evidence_units = select_evidence_units(
+        question="列出所有团队成员",
+        retrieved_chunks=[
+            _retrieved_chunk(
+                chunk_id="1:0",
+                document_id=1,
+                document_name="team.md",
+                score=0.95,
+                text="Alice Chen is a retrieval engineer.",
+                section_title="Alice Chen",
+            ),
+            _retrieved_chunk(
+                chunk_id="1:1",
+                document_id=1,
+                document_name="team.md",
+                score=0.94,
+                text="Alice Chen evaluates retrieval quality.",
+                section_title="Alice Chen",
+            ),
+            _retrieved_chunk(
+                chunk_id="1:2",
+                document_id=1,
+                document_name="team.md",
+                score=0.82,
+                text="Bob Li maintains the runtime platform.",
+                section_title="Bob Li",
+            ),
+            _retrieved_chunk(
+                chunk_id="1:3",
+                document_id=1,
+                document_name="team.md",
+                score=0.8,
+                text="Carol Wang manages product workflows.",
+                section_title="Carol Wang",
+            ),
+        ],
+        chunk_units={},
+        max_evidence_units=3,
+        use_query_evidence_profile=False,
+    )
+
+    assert len(evidence_units) == 3
+    assert any("Bob Li" in item.text for item in evidence_units)
+    assert any("Carol Wang" in item.text for item in evidence_units)
+    assert sum("Alice Chen" in item.text for item in evidence_units) == 1
+
+
 def test_select_evidence_units_generic_factual_keeps_existing_multi_unit_behavior(
     session_factory: sessionmaker,
 ) -> None:
