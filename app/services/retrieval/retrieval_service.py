@@ -38,6 +38,7 @@ from app.services.retrieval.retrieval_router import resolve_mode
 from app.services.retrieval import trace_service
 from app.services.retrieval.trace_types import RetrievalTraceCandidate
 from app.services.retrieval.types import RetrievalMode, RetrievalRequest, RetrievalResult
+from app.services.query_analysis import TargetDocumentDecision, resolve_target_documents
 
 
 logger = logging.getLogger("purelink.retrieval")
@@ -73,17 +74,32 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
         request=request,
         settings=active_settings,
     )
+    overview_target_decision: TargetDocumentDecision | None = None
+    overview_metadata: dict[str, object] = {}
 
     try:
         if resolved_mode == RetrievalMode.OVERVIEW:
+            overview_target_decision = resolve_target_documents(
+                request.evidence_query or request.query,
+                request.documents,
+            )
+            overview_metadata = _build_overview_metadata(overview_target_decision)
             raw_chunks = retrieve_overview_chunks(
                 db=request.db,
-                documents=documents,
+                documents=request.documents,
                 knowledge_base_id=request.knowledge_base_id,
                 scope=scope,
                 required_review_status=required_review_status,
                 team_id=request.team_id,
                 settings=active_settings,
+                query=request.evidence_query or request.query,
+                target_document_ids=(
+                    overview_target_decision.target_document_ids
+                    if overview_target_decision.target_requested
+                    else None
+                ),
+                overview_scope=str(overview_metadata["overview_scope"]),
+                target_document_requested=overview_target_decision.target_requested,
             )
             context_chunks = raw_chunks
         else:
@@ -235,6 +251,7 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
                     fallback_reason=fallback_reason,
                     routing_query_source=routing_query_source,
                 ),
+                **overview_metadata,
                 "context_chunk_count": len(context_chunks),
                 "evidence_unit_count": len(evidence_units),
                 "graph_candidate_count": len(locals().get("graph_chunks", [])),
@@ -288,6 +305,7 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
                     fallback_reason=fallback_reason,
                     routing_query_source=routing_query_source,
                 ),
+                **overview_metadata,
                 "retrieved_chunks": retrieved_chunks,
                 "initial_chunks": raw_chunks,
                 "context_chunks": context_chunks,
@@ -315,6 +333,7 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
                     fallback_reason=fallback_reason,
                     routing_query_source=routing_query_source,
                 ),
+                **overview_metadata,
                 "error": f"{type(exc).__name__}: {exc}",
             },
         )
@@ -352,6 +371,19 @@ def _build_router_metadata(
         "fallback_mode": fallback_mode.value if fallback_mode else None,
         "fallback_reason": fallback_reason,
         "routing_query_source": routing_query_source,
+    }
+
+
+def _build_overview_metadata(decision: TargetDocumentDecision) -> dict[str, object]:
+    return {
+        "overview_scope": (
+            "document_targeted" if decision.target_requested else "knowledge_base"
+        ),
+        "target_document_requested": decision.target_requested,
+        "target_document_ids": list(decision.target_document_ids),
+        "target_document_terms": list(decision.matched_terms),
+        "target_document_confidence": decision.confidence,
+        "target_document_reason": decision.reason,
     }
 
 

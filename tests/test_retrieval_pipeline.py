@@ -252,6 +252,179 @@ def test_collect_overview_chunks_balances_documents(
     assert set(counts_by_document) == {item.id for item in documents}
 
 
+def test_collect_overview_chunks_prioritizes_relevant_document_in_kb_wide_scope(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        unrelated = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="database-concurrency.txt",
+            processing_status=DocumentProcessingStatus.INDEXED,
+        )
+        team_document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="engineering-team-roles.txt",
+            processing_status=DocumentProcessingStatus.INDEXED,
+        )
+        for document, text in (
+            (unrelated, "Database concurrency overview."),
+            (team_document, "Alice, Bob, and Carol are engineering team members."),
+        ):
+            _create_chunk(
+                db,
+                document=document,
+                chunk_index=0,
+                chunk_text=text,
+                metadata={"source_type": "text", "section_title": "Overview"},
+            )
+        db.commit()
+
+        chunks = collect_overview_chunks(
+            db=db,
+            documents=[unrelated, team_document],
+            knowledge_base_id=knowledge_base.id,
+            scope=KnowledgeBaseScope.PERSONAL,
+            required_review_status=DocumentReviewStatus.NOT_REQUIRED,
+            query="当前语料中的团队成员有哪些？",
+            max_chunks=1,
+            max_chunks_per_document=1,
+        )
+
+    assert len(chunks) == 1
+    assert chunks[0].document_id == team_document.id
+
+
+def test_collect_overview_chunks_limits_candidates_to_target_document(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        target = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="python-classes.txt",
+            processing_status=DocumentProcessingStatus.INDEXED,
+        )
+        unrelated = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="postgresql-concurrency.txt",
+            processing_status=DocumentProcessingStatus.INDEXED,
+        )
+        for document, text in (
+            (target, "Python classes organize data and behavior. Inheritance reuses behavior."),
+            (unrelated, "PostgreSQL uses MVCC and locks for concurrency control."),
+        ):
+            _create_chunk(
+                db,
+                document=document,
+                chunk_index=0,
+                chunk_text=text,
+                metadata={"source_type": "text", "section_title": "Overview"},
+            )
+        db.commit()
+
+        chunks = collect_overview_chunks(
+            db=db,
+            documents=[target, unrelated],
+            knowledge_base_id=knowledge_base.id,
+            scope=KnowledgeBaseScope.PERSONAL,
+            required_review_status=DocumentReviewStatus.NOT_REQUIRED,
+            target_document_ids=(target.id,),
+            overview_scope="document_targeted",
+            target_document_requested=True,
+            max_chunks=4,
+            max_chunks_per_document=2,
+        )
+
+    assert chunks
+    assert {item.document_id for item in chunks} == {target.id}
+    assert all("PostgreSQL" not in item.text for item in chunks)
+
+
+def test_collect_overview_chunks_balances_multiple_target_documents(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        documents = [
+            _create_document(
+                db,
+                user=user,
+                knowledge_base=knowledge_base,
+                original_filename=f"target-{index}.txt",
+                processing_status=DocumentProcessingStatus.INDEXED,
+            )
+            for index in range(3)
+        ]
+        for index, document in enumerate(documents):
+            _create_chunk(
+                db,
+                document=document,
+                chunk_index=0,
+                chunk_text=f"Target document {index} overview content.",
+                metadata={"source_type": "text", "section_title": "Overview"},
+            )
+        db.commit()
+
+        chunks = collect_overview_chunks(
+            db=db,
+            documents=documents,
+            knowledge_base_id=knowledge_base.id,
+            scope=KnowledgeBaseScope.PERSONAL,
+            required_review_status=DocumentReviewStatus.NOT_REQUIRED,
+            target_document_ids=(documents[0].id, documents[2].id),
+            overview_scope="document_targeted",
+            target_document_requested=True,
+            max_chunks=4,
+            max_chunks_per_document=2,
+        )
+
+    assert {item.document_id for item in chunks} == {documents[0].id, documents[2].id}
+
+
+def test_collect_overview_chunks_does_not_fallback_for_unmatched_target(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="existing.txt",
+            processing_status=DocumentProcessingStatus.INDEXED,
+        )
+        _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="Existing document overview must not be used as fallback.",
+            metadata={"source_type": "text", "section_title": "Overview"},
+        )
+        db.commit()
+
+        chunks = collect_overview_chunks(
+            db=db,
+            documents=[document],
+            knowledge_base_id=knowledge_base.id,
+            scope=KnowledgeBaseScope.PERSONAL,
+            required_review_status=DocumentReviewStatus.NOT_REQUIRED,
+            target_document_ids=(),
+            overview_scope="document_targeted",
+            target_document_requested=True,
+        )
+
+    assert chunks == []
+
+
 def test_collect_overview_chunks_deduplicates_near_duplicate_chunks(
     session_factory: sessionmaker,
 ) -> None:

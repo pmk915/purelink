@@ -57,12 +57,18 @@ BOILERPLATE_KEYWORDS: tuple[str, ...] = (
     "appendix",
 )
 
+OVERVIEW_TOPIC_ALIASES: dict[str, tuple[str, ...]] = {
+    "团队": ("team",),
+    "成员": ("member", "role"),
+}
+
 LIST_MARKER_PATTERN = re.compile(
     r"(^|\n)\s*(?:[-*]\s+|\d+\.\s+|[一二三四五六七八九十]+、)",
     re.MULTILINE,
 )
 PUNCTUATION_STRIP_PATTERN = re.compile(r"[^0-9a-z\u4e00-\u9fff]+")
 WHITESPACE_PATTERN = re.compile(r"\s+")
+_SUPPORTED_FILENAME_SEPARATORS = re.compile(r"[-_.]+")
 
 logger = logging.getLogger("purelink.qa")
 
@@ -82,17 +88,34 @@ def collect_overview_chunks(
     scope: KnowledgeBaseScope,
     required_review_status: DocumentReviewStatus,
     team_id: int | None = None,
+    query: str | None = None,
+    target_document_ids: Sequence[int] | None = None,
+    overview_scope: str = "knowledge_base",
+    target_document_requested: bool = False,
     max_chunks: int = 10,
     max_chunks_per_document: int = 2,
 ) -> list[RetrievedChunk]:
+    target_ids = set(target_document_ids) if target_document_ids is not None else None
     indexed_documents = [
         item
         for item in documents
         if item.knowledge_base_id == knowledge_base_id
         and item.review_status == required_review_status
         and item.processing_status == DocumentProcessingStatus.INDEXED
+        and (target_ids is None or item.id in target_ids)
     ]
+    if target_ids is None and query:
+        indexed_documents = _order_documents_by_query_topic(indexed_documents, query=query)
     if not indexed_documents:
+        _log_overview_selection(
+            knowledge_base_id=knowledge_base_id,
+            overview_scope=overview_scope,
+            target_document_requested=target_document_requested,
+            target_document_ids=target_document_ids or (),
+            indexed_document_count=0,
+            candidate_chunk_count=0,
+            final_candidates=(),
+        )
         return []
 
     document_lookup = {item.id: item for item in indexed_documents}
@@ -156,15 +179,14 @@ def collect_overview_chunks(
         if len(final_candidates) >= max_chunks:
             break
 
-    logger.info(
-        "qa overview selection knowledge_base_id=%s indexed_document_count=%s candidate_chunk_count=%s selected_overview_chunk_count=%s selected_document_ids=%s selected_chunk_ids=%s overview_chunk_scores=%s",
-        knowledge_base_id,
-        len(indexed_documents),
-        candidate_chunk_count,
-        len(final_candidates),
-        [item.document.id for item in final_candidates],
-        [item.chunk.chunk_key for item in final_candidates],
-        [round(item.score, 3) for item in final_candidates],
+    _log_overview_selection(
+        knowledge_base_id=knowledge_base_id,
+        overview_scope=overview_scope,
+        target_document_requested=target_document_requested,
+        target_document_ids=target_document_ids or (),
+        indexed_document_count=len(indexed_documents),
+        candidate_chunk_count=candidate_chunk_count,
+        final_candidates=final_candidates,
     )
 
     return [
@@ -176,6 +198,61 @@ def collect_overview_chunks(
         )
         for candidate in final_candidates
     ]
+
+
+def _log_overview_selection(
+    *,
+    knowledge_base_id: int,
+    overview_scope: str,
+    target_document_requested: bool,
+    target_document_ids: Sequence[int],
+    indexed_document_count: int,
+    candidate_chunk_count: int,
+    final_candidates: Sequence[OverviewChunkCandidate],
+) -> None:
+    logger.info(
+        "qa overview selection knowledge_base_id=%s overview_scope=%s target_document_requested=%s target_document_ids=%s indexed_document_count=%s candidate_chunk_count=%s selected_overview_chunk_count=%s selected_document_ids=%s selected_chunk_ids=%s overview_chunk_scores=%s",
+        knowledge_base_id,
+        overview_scope,
+        target_document_requested,
+        list(target_document_ids),
+        indexed_document_count,
+        candidate_chunk_count,
+        len(final_candidates),
+        [item.document.id for item in final_candidates],
+        [item.chunk.chunk_key for item in final_candidates],
+        [round(item.score, 3) for item in final_candidates],
+    )
+
+
+def _order_documents_by_query_topic(
+    documents: Sequence[Document],
+    *,
+    query: str,
+) -> list[Document]:
+    query_tokens = {_normalize_topic_token(token) for token in tokenize_text(query)}
+    for source_term, aliases in OVERVIEW_TOPIC_ALIASES.items():
+        if source_term in query:
+            query_tokens.update(aliases)
+
+    ranked = []
+    for original_index, document in enumerate(documents):
+        filename = document.original_filename.replace("\\", "/").rsplit("/", maxsplit=1)[-1]
+        document_tokens = {
+            _normalize_topic_token(token)
+            for token in tokenize_text(_SUPPORTED_FILENAME_SEPARATORS.sub(" ", filename))
+        }
+        overlap_count = len(query_tokens & document_tokens)
+        ranked.append((-overlap_count, original_index, document))
+    ranked.sort(key=lambda item: (item[0], item[1]))
+    return [document for _, _, document in ranked]
+
+
+def _normalize_topic_token(token: str) -> str:
+    normalized = token.casefold()
+    if len(normalized) > 3 and normalized.endswith("s"):
+        return normalized[:-1]
+    return normalized
 
 
 def overview_score_chunk(

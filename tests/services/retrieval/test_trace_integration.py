@@ -412,6 +412,121 @@ async def test_auto_mode_records_selected_mode_and_router_trace_metadata(
 
 
 @pytest.mark.anyio
+async def test_overview_records_document_target_scope_in_trace(
+    session_factory: sessionmaker,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RERANKER_ENABLED", "false")
+    get_settings.cache_clear()
+    captured_target_ids: list[tuple[int, ...] | None] = []
+
+    def fake_retrieve_overview_chunks(**kwargs):  # noqa: ANN003
+        captured_target_ids.append(kwargs["target_document_ids"])
+        return [
+            _retrieved_chunk(
+                document_id=kwargs["documents"][0].id,
+                chunk_id="chunk-overview",
+                text="Python classes define reusable data and behavior.",
+                score=0.9,
+            )
+        ]
+
+    monkeypatch.setattr(
+        "app.services.retrieval.retrieval_service.retrieve_overview_chunks",
+        fake_retrieve_overview_chunks,
+    )
+
+    with session_factory() as db:
+        user, knowledge_base, document = _create_user_kb_document(db)
+        document.filename = "python-classes.txt"
+        document.original_filename = "python-classes.txt"
+        result = await retrieve(
+            RetrievalRequest(
+                db=db,
+                documents=[document],
+                vector_root=tmp_path,
+                scope=KnowledgeBaseScope.PERSONAL,
+                knowledge_base_id=knowledge_base.id,
+                user_id=user.id,
+                query="总结 Python classes 文档",
+                evidence_query="总结 Python classes 文档",
+                top_k=3,
+                mode=RetrievalMode.AUTO,
+                include_citations=False,
+                required_review_status=DocumentReviewStatus.NOT_REQUIRED,
+            )
+        )
+        trace = db.scalar(select(RetrievalTrace).where(RetrievalTrace.id == result.trace_id))
+
+    assert captured_target_ids == [(document.id,)]
+    assert result.selected_mode == RetrievalMode.OVERVIEW
+    assert result.metadata["overview_scope"] == "document_targeted"
+    assert result.metadata["target_document_requested"] is True
+    assert result.metadata["target_document_ids"] == [document.id]
+    assert result.metadata["target_document_terms"] == ["python classes"]
+    assert trace is not None
+    trace_metadata = json.loads(trace.metadata_json or "{}")
+    assert trace_metadata["overview_scope"] == "document_targeted"
+    assert trace_metadata["target_document_requested"] is True
+    assert trace_metadata["target_document_ids"] == [document.id]
+    assert trace_metadata["target_document_confidence"] == "high"
+    assert trace_metadata["target_document_reason"] == "filename_stem_match"
+
+
+@pytest.mark.anyio
+async def test_overview_missing_document_target_records_reason_without_fallback(
+    session_factory: sessionmaker,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RERANKER_ENABLED", "false")
+    get_settings.cache_clear()
+    captured_target_ids: list[tuple[int, ...] | None] = []
+
+    def fake_retrieve_overview_chunks(**kwargs):  # noqa: ANN003
+        captured_target_ids.append(kwargs["target_document_ids"])
+        return []
+
+    monkeypatch.setattr(
+        "app.services.retrieval.retrieval_service.retrieve_overview_chunks",
+        fake_retrieve_overview_chunks,
+    )
+
+    with session_factory() as db:
+        user, knowledge_base, document = _create_user_kb_document(db)
+        result = await retrieve(
+            RetrievalRequest(
+                db=db,
+                documents=[document],
+                vector_root=tmp_path,
+                scope=KnowledgeBaseScope.PERSONAL,
+                knowledge_base_id=knowledge_base.id,
+                user_id=user.id,
+                query="总结 billing-handbook 文档",
+                evidence_query="总结 billing-handbook 文档",
+                top_k=3,
+                mode=RetrievalMode.AUTO,
+                include_citations=False,
+                required_review_status=DocumentReviewStatus.NOT_REQUIRED,
+            )
+        )
+        trace = db.scalar(select(RetrievalTrace).where(RetrievalTrace.id == result.trace_id))
+
+    assert captured_target_ids == [()]
+    assert result.evidences == []
+    assert result.metadata["overview_scope"] == "document_targeted"
+    assert result.metadata["target_document_requested"] is True
+    assert result.metadata["target_document_ids"] == []
+    assert result.metadata["target_document_confidence"] == "none"
+    assert result.metadata["target_document_reason"] == "requested_document_not_found"
+    assert trace is not None
+    trace_metadata = json.loads(trace.metadata_json or "{}")
+    assert trace_metadata["target_document_ids"] == []
+    assert trace_metadata["target_document_reason"] == "requested_document_not_found"
+
+
+@pytest.mark.anyio
 async def test_manual_chunk_only_mode_bypasses_auto_router(
     session_factory: sessionmaker,
     tmp_path,

@@ -20,6 +20,10 @@ def retrieve_overview_chunks(
     required_review_status: DocumentReviewStatus,
     team_id: int | None,
     settings: Settings,
+    query: str | None = None,
+    target_document_ids: Sequence[int] | None = None,
+    overview_scope: str = "knowledge_base",
+    target_document_requested: bool = False,
 ) -> list[RetrievedChunk]:
     return collect_overview_chunks(
         db=db,
@@ -28,6 +32,10 @@ def retrieve_overview_chunks(
         scope=scope,
         required_review_status=required_review_status,
         team_id=team_id,
+        query=query,
+        target_document_ids=target_document_ids,
+        overview_scope=overview_scope,
+        target_document_requested=target_document_requested,
         max_chunks=settings.overview_max_chunks,
         max_chunks_per_document=settings.overview_max_chunks_per_document,
     )
