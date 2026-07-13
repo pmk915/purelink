@@ -29,7 +29,7 @@ export function EvidencePanel({
           <div className="grid max-h-[520px] gap-3 overflow-y-auto pr-1">
             {evidences.map((evidence, index) => (
               <CitationCard
-                key={`${evidence.citation_unit_id ?? evidence.chunk_db_id ?? evidence.chunk_id}-${index}`}
+                key={`${evidence.citation_marker ?? "evidence"}-${index}`}
                 citation={evidence}
                 compact={compact}
               />

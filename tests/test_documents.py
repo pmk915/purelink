@@ -43,6 +43,7 @@ from app.models.enums import (
 from app.models.message import Message
 from app.models.processing_job import ProcessingJob
 from app.models.retrieval_trace import RetrievalTrace
+from app.schemas.qa import CitationRead
 from app.services.document_embedding import DocumentEmbeddingError, RetrievedChunk
 from app.services.document_embedding import build_index_relative_path
 from app.services.document_processing import (
@@ -126,6 +127,19 @@ def _assert_api_source_locator(
         assert locator["end_time"] == end_time
     if section_title is not None:
         assert locator["section_title"] == section_title
+
+
+def _assert_public_citation_contract(citation: dict[str, object]) -> None:
+    assert set(citation) == set(CitationRead.model_fields)
+    assert citation["citation_marker"]
+    assert citation["document_name"]
+    assert citation["text"]
+    assert isinstance(citation["heading_path"], list)
+    assert citation["citation_ready"] is True
+    assert isinstance(citation["retrieval_mode"], str)
+    assert isinstance(citation["score"], (int, float))
+    assert "trace_id" not in citation
+    assert "user_id" not in citation
 
 
 @pytest.fixture
@@ -2763,6 +2777,7 @@ async def test_personal_knowledge_base_ask_returns_answer_and_citations(
     assert ask_body["citations"]
     assert ask_body["intent"] == "kb_fact_qa"
     citation = ask_body["citations"][0]
+    _assert_public_citation_contract(citation)
     assert citation["chunk_id"] == f"{document_id}:0"
     assert citation["document_id"] == document_id
     assert citation["knowledge_base_id"] == knowledge_base_id
@@ -2933,6 +2948,7 @@ async def test_team_knowledge_base_ask_uses_only_approved_indexed_documents(
     assert approved_body["citations"]
     assert approved_body["intent"] == "kb_fact_qa"
     citation = approved_body["citations"][0]
+    _assert_public_citation_contract(citation)
     assert citation["document_id"] == approved_document_id
     assert citation["knowledge_base_id"] == knowledge_base_id
     assert citation["scope"] == "team"
@@ -3255,6 +3271,9 @@ async def test_personal_ask_creates_and_reuses_conversation_history(
     assert append_body["user_message"]["content"] == "Who is it for?"
     assert append_body["assistant_message"]["role"] == "assistant"
     assert append_body["assistant_message"]["citations"]
+    append_citation = append_body["assistant_message"]["citations"][0]
+    _assert_public_citation_contract(append_citation)
+    assert set(append_citation) == set(first_body["citations"][0])
 
     list_response = await document_client.get(
         "/api/v1/conversations",
@@ -3280,6 +3299,7 @@ async def test_personal_ask_creates_and_reuses_conversation_history(
     assert detail_body["messages"][0]["content"] == "What does PureLink store?"
     assert detail_body["messages"][1]["role"] == "assistant"
     assert detail_body["messages"][1]["citations"]
+    _assert_public_citation_contract(detail_body["messages"][1]["citations"][0])
     assert detail_body["messages"][1]["citations"][0]["document_id"] == document_id
     assert detail_body["messages"][1]["citations"][0]["chunk_db_id"] is not None
     assert detail_body["messages"][2]["role"] == "user"

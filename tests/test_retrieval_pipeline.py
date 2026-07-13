@@ -22,6 +22,7 @@ from app.models.enums import (
 )
 from app.models.knowledge_base import KnowledgeBase
 from app.models.user import User
+from app.schemas.qa import CitationRead
 from app.services.document_embedding import DocumentEmbeddingError, RetrievedChunk
 from app.services.document_embedding import build_index_relative_path
 from app.services.document_processing import process_document
@@ -2097,7 +2098,12 @@ def test_answer_citation_uses_the_same_unit_as_final_retrieval_evidence(
             unit_text="Canonical citation fact.",
             start_char=10,
             end_char=34,
-            metadata={"source_type": "text", "source_locator": "chars:10-34"},
+            metadata={
+                "source_type": "text",
+                "source_locator": "chars:10-34",
+                "section_title": "Canonical facts",
+                "heading_path": ["Runbook", "Canonical facts"],
+            },
         )
         db.commit()
         retrieved = _retrieved_chunk(
@@ -2113,10 +2119,23 @@ def test_answer_citation_uses_the_same_unit_as_final_retrieval_evidence(
             retrieved_chunks=[retrieved],
             chunk_units=load_citation_units_for_chunks(db=db, chunks=[retrieved]),
         )
-        evidences = build_evidences(candidates)
+        evidences = [
+            item.model_copy(
+                update={
+                    "final_score": 0.77,
+                    "metadata": {
+                        **item.metadata,
+                        "retrieval_mode": RetrievalMode.HYBRID_TEXT.value,
+                    },
+                }
+            )
+            for item in build_evidences(candidates)
+        ]
         retrieval_result = RetrievalResult(
             query="What is the canonical citation fact?",
-            mode=RetrievalMode.CHUNK_ONLY,
+            mode=RetrievalMode.HYBRID_TEXT,
+            selected_mode=RetrievalMode.HYBRID_TEXT,
+            effective_mode=RetrievalMode.HYBRID_TEXT,
             evidences=evidences,
             context_text="[S1]\ncontent: Canonical citation fact.",
             metadata={"context_chunks": [retrieved], "evidence_units": candidates},
@@ -2135,6 +2154,39 @@ def test_answer_citation_uses_the_same_unit_as_final_retrieval_evidence(
     assert answer.citations[0].citation_unit_id == unit.id
     assert answer.citations[0].source_locator is not None
     assert answer.citations[0].source_locator.source_locator_text == "chars:10-34"
+    assert answer.citations[0].citation_marker == "S1"
+    assert answer.citations[0].heading_path == ["Runbook", "Canonical facts"]
+    assert answer.citations[0].section_title == "Canonical facts"
+    assert answer.citations[0].char_start == 10
+    assert answer.citations[0].char_end == 34
+    assert answer.citations[0].citation_ready is True
+    assert answer.citations[0].retrieval_mode == "hybrid_text"
+    assert answer.citations[0].score == 0.77
+
+
+def test_citation_contract_normalizes_missing_locator_heading_and_invalid_char_range() -> None:
+    citation = CitationRead(
+        chunk_id="1:0",
+        document_id=1,
+        knowledge_base_id=1,
+        scope="personal",
+        team_id=None,
+        document_name="legacy.txt",
+        text="Legacy final evidence.",
+        citation_unit_id=1,
+        source_locator=None,
+        heading_path=None,
+        char_start=10,
+        char_end=None,
+    )
+
+    assert citation.source_locator is None
+    assert citation.heading_path == []
+    assert citation.char_start is None
+    assert citation.char_end is None
+    assert citation.citation_ready is False
+    assert citation.retrieval_mode is None
+    assert citation.score is None
 
 
 def test_answer_question_prefers_citation_unit_snippets(
