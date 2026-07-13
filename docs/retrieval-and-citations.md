@@ -377,6 +377,24 @@ time range。PDF citation 使用 `page_number`；文本 citation 使用有效的
 这些 ID 设为必需字段，列表 key 使用 marker 加 answer-local index。新的 UI
 不得显示或依赖 trace id、user id、KB id、chunk id 或 citation-unit id。
 
+### 11.1 Clickable Citation Details
+
+Personal KB、Team KB 和 Conversation 的回答正文共用同一个 citation-aware
+renderer。回答中的 `[S1]` 是 answer-local citation reference；旧回答中的 `[1]`
+可兼容映射到 `citation_marker=S1`。只有能匹配当前公开 Citation 数据的 marker
+才会显示为可点击按钮。未知、格式错误或 Markdown link 中的 marker 会保留为
+普通文本，不会猜测或生成来源。
+
+点击 marker 会打开右侧 Citation Drawer。Drawer 展示该 marker 实际引用的
+final evidence text，以及真实存在的 source type、section、heading path、PDF page、
+character range、retrieval mode 和 final evidence score。定位信息缺失时保持为空；
+`citation_ready=false` 只提示来源详情有限，不会伪造 provenance。存在可靠 preview
+target 时可以沿用现有 document preview 链接查看来源。
+
+Drawer 完全使用当前回答已经返回的 Citation 数据，不会重新请求 API、运行 retrieval
+或展示其他未引用 evidence。界面不展示 document、chunk、citation-unit、KB、trace
+等内部 ID。完整来源列表仍由现有 EvidencePanel 和 CitationCard 提供。
+
 ## 12. Evidence Support Gate
 
 PureLink Core separates retrieval relevance from answer support. A high-scoring

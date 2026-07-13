@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { ConversationSidebar } from "@/components/conversations/conversation-sidebar";
+import { CitationAwareAnswer } from "@/components/qa/citation-aware-answer";
 import { CitationCard } from "@/components/qa/citation-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -238,7 +239,14 @@ export default function ConversationDetailPage({
                             : "rounded-3xl bg-secondary/80 px-4 py-3 text-sm leading-7 text-foreground break-words [overflow-wrap:anywhere]"
                         }
                       >
-                        <p className="whitespace-pre-wrap">{message.content}</p>
+                        {isAssistant ? (
+                          <CitationAwareAnswer
+                            answer={message.content}
+                            citations={message.citations}
+                          />
+                        ) : (
+                          <p className="whitespace-pre-wrap">{message.content}</p>
+                        )}
                       </div>
                       <div
                         className={

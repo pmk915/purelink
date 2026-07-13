@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 
+import { getCitationDisplayDetails } from "@/components/qa/citation-details";
 import { buttonVariants } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
 import {
@@ -32,24 +33,6 @@ function scoreParts(citation: ScoredCitation) {
 }
 
 
-function formatSourceLabel(sourceType: string | null) {
-  switch (sourceType) {
-    case "pdf":
-      return "PDF";
-    case "markdown":
-    case "md":
-      return "Markdown";
-    case "docx":
-      return "DOCX";
-    case "text":
-    case "txt":
-      return "Text";
-    default:
-      return sourceType ? sourceType.toUpperCase() : "Text";
-  }
-}
-
-
 export function CitationCard({
   citation,
   compact = false
@@ -60,25 +43,10 @@ export function CitationCard({
   const { messages } = useI18n();
   const snippet = citation.snippet || citation.text;
   const documentName = citation.document_name || messages.graph.noSourceDocument;
-  const locator = citation.source_locator;
-  const sourceLabel = formatSourceLabel(citation.source_type);
-  const pageNumber =
-    typeof locator?.page_number === "number"
-      ? locator.page_number
-      : typeof citation.page_number === "number"
-        ? citation.page_number
-        : null;
-  const hasPageNumber = pageNumber !== null;
-  const sectionTitle = locator?.section_title || citation.section_title;
-  const headingPath = locator?.heading_path || citation.heading_path;
-  const locationFallback = locator?.source_locator_text;
+  const details = getCitationDisplayDetails(citation);
   const previewUrl = buildPreviewUrl(citation);
-  const textRangeStart = locator?.char_start;
-  const textRangeEnd = locator?.char_end;
-  const hasTextRange =
-    locator?.kind === "text_range" &&
-    typeof textRangeStart === "number" &&
-    typeof textRangeEnd === "number";
+  const hasPageNumber = details.pageNumber !== null;
+  const hasTextRange = details.charStart !== null && details.charEnd !== null;
 
   return (
     <div
@@ -102,26 +70,27 @@ export function CitationCard({
             </p>
           </div>
           <div className={compact ? "mt-1.5 flex flex-wrap gap-2 text-[11px] text-muted-foreground" : "mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground"}>
-            <span>{sourceLabel}</span>
-            {hasPageNumber ? (
-              <span>{messages.qa.citationPage(pageNumber)}</span>
+            <span>{details.sourceLabel}</span>
+            {typeof details.pageNumber === "number" ? (
+              <span>{messages.qa.citationPage(details.pageNumber)}</span>
             ) : null}
-            {headingPath && headingPath.length > 1 ? (
-              <span>{messages.qa.citationHeadingPath(headingPath.join(" / "))}</span>
+            {details.headingPath.length > 1 ? (
+              <span>{messages.qa.citationHeadingPath(details.headingPath.join(" / "))}</span>
             ) : null}
-            {sectionTitle ? (
-              <span>{messages.qa.citationSection(sectionTitle)}</span>
-            ) : null}
-            {!hasPageNumber &&
-            !sectionTitle &&
-            hasTextRange ? (
-              <span>{messages.qa.citationCharRange(textRangeStart, textRangeEnd)}</span>
+            {details.sectionTitle ? (
+              <span>{messages.qa.citationSection(details.sectionTitle)}</span>
             ) : null}
             {!hasPageNumber &&
-            !sectionTitle &&
+            !details.sectionTitle &&
+            typeof details.charStart === "number" &&
+            typeof details.charEnd === "number" ? (
+              <span>{messages.qa.citationCharRange(details.charStart, details.charEnd)}</span>
+            ) : null}
+            {!hasPageNumber &&
+            !details.sectionTitle &&
             !hasTextRange &&
-            locationFallback ? (
-              <span>{locationFallback}</span>
+            details.sourceLocatorText ? (
+              <span>{details.sourceLocatorText}</span>
             ) : null}
           </div>
         </div>
