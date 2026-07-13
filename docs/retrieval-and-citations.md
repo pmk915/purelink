@@ -288,6 +288,11 @@ pages, headings, field-like lines, and list items; short field facts with both
 label and value are preserved, while heading-only or other low-value fragments
 are filtered.
 
+Technical tokens remain semantically intact during inline-format cleanup, and
+sentence segmentation does not split decimals, versions, IP addresses,
+filenames, or module paths at internal periods. The persisted unit text and its
+character range therefore refer to the same processed-source fact.
+
 Existing processed documents are not rewritten automatically. To apply updated
 block or citation-unit rules to old data, reprocess the document and rebuild its
 vector index. This does not require a database schema migration.

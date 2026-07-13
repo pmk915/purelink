@@ -21,5 +21,9 @@ The format is based on Keep a Changelog, and this project intends to use Semanti
 
 ### Fixed
 
+- Preserved underscores in technical identifiers and internal periods in
+  decimals, versions, IP addresses, filenames, and module paths when generating
+  citation units. Existing documents require reprocessing and vector reindexing
+  to replace previously persisted units; no database migration is required.
 - Improved rule-based auto retrieval routing with explicit confidence,
   routed/effective mode metadata, and conservative graph/hybrid fallbacks.

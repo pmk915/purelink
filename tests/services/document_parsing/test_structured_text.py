@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import pytest
+
 from app.models.enums import DocumentBlockType
+from app.services.document_processing import normalize_markdown_inline_text
 from app.services.document_parsing.parsers.text_parser import TextParser
 from app.services.document_parsing.structured_text import (
     detect_markdown_like_structure,
@@ -68,3 +71,46 @@ def test_text_parser_uses_structured_blocks_for_markdown_like_txt(tmp_path) -> N
     assert parsed.metadata["markdown_like"] is True
     assert [block.block_type for block in parsed.blocks].count(DocumentBlockType.HEADING) == 2
     assert any(block.metadata.get("line_role") == "field" for block in parsed.blocks)
+
+
+@pytest.mark.parametrize(
+    "identifier",
+    [
+        "RETRIEVAL_MIN_SCORE",
+        "CHUNK_STRATEGY",
+        "graph_vector_mix",
+        "__init__",
+        "API_BASE_URL",
+    ],
+)
+def test_markdown_inline_normalization_preserves_technical_identifiers(
+    identifier: str,
+) -> None:
+    source = f"### Technical Reference\n`{identifier}` remains exact.\n\n### Notes\nDone."
+
+    blocks = parse_structured_text_blocks(source, source_type="text")
+
+    assert any(identifier in block.text for block in blocks)
+    assert normalize_markdown_inline_text(f"`{identifier}`") == identifier
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("**important**", "important"),
+        ("_emphasis_", "emphasis"),
+        ("*italic*", "italic"),
+        ("~~removed~~", "removed"),
+    ],
+)
+def test_markdown_inline_normalization_still_removes_paired_emphasis(
+    source: str,
+    expected: str,
+) -> None:
+    blocks = parse_structured_text_blocks(
+        f"### Formatting\n{source}\n\n### Notes\nDone.",
+        source_type="text",
+    )
+
+    assert any(block.text == expected for block in blocks)
+    assert normalize_markdown_inline_text(source) == expected

@@ -34,4 +34,4 @@ Retrieval trace records candidate and final evidence metadata, the selected mode
 
 ## Minimum Score
 
-`RETRIEVAL_MIN_SCORE` configures the minimum retrieval score used by answer generation reliability checks. Low-scoring or missing evidence can trigger a no-reliable-evidence response rather than unsupported answer generation.
+`RETRIEVAL_MIN_SCORE` defaults to `0.15`. It configures the minimum retrieval score used by answer generation reliability checks. Low-scoring or missing evidence can trigger a no-reliable-evidence response rather than unsupported answer generation.

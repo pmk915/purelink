@@ -53,6 +53,12 @@ such as document blocks, PDF pages, heading sections, field-like lines, or list
 items. Field facts such as `声：小泽亚李` or `形似动物：兔子` are allowed to stay
 short because they contain both label and value.
 
+Inline Markdown cleanup removes paired presentation markers without changing
+technical identifiers such as `RETRIEVAL_MIN_SCORE`, `graph_vector_mix`, or
+`__init__`. Citation sentence boundaries also preserve periods inside decimals,
+versions, IP addresses, filenames, and module paths while retaining accurate
+processed-source character spans.
+
 ## Indexing
 
 Indexing writes vector metadata to `document_indexes.vector`. After vector indexing succeeds, PureLink attempts lightweight graph indexing. Graph index failure is isolated and does not break vector RAG.
