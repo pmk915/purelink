@@ -51,26 +51,6 @@ Source: [committed answer-policy baseline](tests/eval/baselines/answer-policy-au
 
 This is a reproducible regression baseline, not a production-scale benchmark. The snapshot also records `forbidden_evidence_clean` at 7 / 9 and expected evidence at 32 / 45. Overview retrieval is the weakest category at 3 / 5 retrieval hits and 2 / 5 expected-evidence hits. These remaining precision and recall failures are kept visible in the committed report rather than removed from the corpus.
 
-## Product Walkthrough
-
-### Retrieval Trace and Routed Evidence
-
-An `auto` technical query routes to keyword + vector hybrid retrieval with an explicit reason, trace id, reranker status, and scored source evidence. The current frontend exposes routing and candidate details; Evidence Support and Answer Policy decisions remain backend trace metadata rather than fields in this panel.
-
-![PureLink Retrieval Debug showing AUTO routing, the selected hybrid mode, router reason, trace id, and evidence](docs/assets/screenshots/retrieval-trace.png)
-
-### Document Processing Inspector
-
-The document-level inspector shows an indexed, RAG-ready document and the persisted blocks, chunks, citation units, vector index, and graph index checks used to diagnose readiness without reading worker logs.
-
-![PureLink Document Processing Inspector showing ready pipeline checks and index status](docs/assets/screenshots/processing-inspector.png)
-
-### Graph Explorer
-
-The lightweight Graph Explorer supports entity search and one-hop inspection. Relation sources retain the public document name, chunk and citation-unit references, and the grounded source snippet.
-
-![PureLink Graph Explorer showing an entity relation and document source provenance](docs/assets/screenshots/graph-explorer.png)
-
 ## Architecture and Request Flow
 
 ### System Context
@@ -129,6 +109,26 @@ flowchart TD
 ```
 
 The detailed ingestion and retrieval diagrams live in [RAG Pipeline](docs/rag/rag-pipeline.md) and [RAG v2 Architecture](docs/architecture/rag-v2-architecture.md).
+
+## Product Walkthrough
+
+### Retrieval Trace and Routed Evidence
+
+An `auto` technical query routes to keyword + vector hybrid retrieval with an explicit reason, trace id, reranker status, and scored source evidence. The current frontend exposes routing and candidate details; Evidence Support and Answer Policy decisions remain backend trace metadata rather than fields in this panel.
+
+![PureLink Retrieval Debug showing AUTO routing, the selected hybrid mode, router reason, trace id, and evidence](docs/assets/screenshots/retrieval-trace.png)
+
+### Document Processing Inspector
+
+The document-level inspector shows an indexed, RAG-ready document and the persisted blocks, chunks, citation units, vector index, and graph index checks used to diagnose readiness without reading worker logs.
+
+![PureLink Document Processing Inspector showing ready pipeline checks and index status](docs/assets/screenshots/processing-inspector.png)
+
+### Graph Explorer
+
+The lightweight Graph Explorer supports entity search and one-hop inspection. Relation sources retain the public document name, chunk and citation-unit references, and the grounded source snippet.
+
+![PureLink Graph Explorer showing an entity relation and document source provenance](docs/assets/screenshots/graph-explorer.png)
 
 ## Quick Start
 
