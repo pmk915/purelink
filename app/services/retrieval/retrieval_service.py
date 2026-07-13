@@ -20,7 +20,11 @@ from app.services.knowledge_graph.graph_retriever import (
     retrieve_graph_chunks,
 )
 from app.services.retrieval import chunk_retriever
-from app.services.retrieval.citation_builder import build_evidences
+from app.services.retrieval.citation_builder import (
+    build_evidences,
+    citation_readiness,
+    summarize_citation_readiness,
+)
 from app.services.retrieval.context_builder import build_context
 from app.services.retrieval.hybrid_text_retriever import retrieve_hybrid_text_chunks
 from app.services.retrieval.overview_retriever_adapter import retrieve_overview_chunks
@@ -200,6 +204,10 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
             )
         else:
             evidences = candidate_evidences
+            evidence_units = _align_raw_items_to_evidences(
+                items=evidence_units,
+                evidences=evidences,
+            )
 
         _safe_record_trace_items(
             request=request,
@@ -233,6 +241,7 @@ async def retrieve(request: RetrievalRequest) -> RetrievalResult:
                 "graph_used": bool(locals().get("graph_chunks", [])),
                 "keyword_candidate_count": getattr(locals().get("hybrid_metadata"), "keyword_candidate_count", 0),
                 "hybrid_fallback_reason": getattr(locals().get("hybrid_metadata"), "fallback_reason", None),
+                **summarize_citation_readiness(evidences),
             },
         )
 
@@ -530,6 +539,7 @@ def _build_trace_candidates(
         final_rank = final_rank_by_key.get(key)
         final_evidence = final_evidence_by_key.get(key, evidence)
         selected = final_rank is not None
+        citation_ready, citation_readiness_reason = citation_readiness(evidence)
         candidates.append(
             RetrievalTraceCandidate(
                 document_id=evidence.document_id,
@@ -560,6 +570,8 @@ def _build_trace_candidates(
                     "candidate_sources": evidence.metadata.get("candidate_sources"),
                     "matched_terms": evidence.metadata.get("matched_terms"),
                     "retrieval_mode": evidence.metadata.get("retrieval_mode"),
+                    "citation_ready": citation_ready,
+                    "citation_readiness_reason": citation_readiness_reason,
                 },
             )
         )
@@ -632,17 +644,26 @@ def _select_evidence_units(
     use_query_evidence_profile: bool = True,
 ):
     from app.services.qa import (
+        build_citation_ready_fallback_units,
         load_citation_units_for_chunks,
         select_evidence_units,
     )
 
     chunk_units = load_citation_units_for_chunks(db=db, chunks=context_chunks)
-    return select_evidence_units(
+    selected = select_evidence_units(
         question=query,
         retrieved_chunks=context_chunks,
         chunk_units=chunk_units,
         max_evidence_units=max_evidence_units,
         use_query_evidence_profile=use_query_evidence_profile,
+    )
+    if selected:
+        return selected
+    return build_citation_ready_fallback_units(
+        question=query,
+        retrieved_chunks=context_chunks,
+        chunk_units=chunk_units,
+        max_evidence_units=max_evidence_units,
     )
 
 

@@ -77,6 +77,46 @@ overview > relation > exact technical identifier > chunk_only
 
 `selected_mode` 表示 router 选择的模式，`effective_mode` 表示 fallback 后实际执行的模式。这样 eval 可以继续衡量 router 分类准确性，同时 trace 能说明实际检索是否从 `graph_vector_mix` 或 `hybrid_text` 回退到 `chunk_only`。
 
+### Citation Readiness
+
+`RetrievalResult.evidences` is the canonical source for both answer context and
+citations. QA does not rebuild citations independently from raw retrieved
+chunks, because that could make the answer use one fact while the citation
+points to another.
+
+A citation-ready evidence requires both a persisted `citation_unit_id` and a
+stable `source_locator`. It also preserves document and chunk identifiers,
+source type, page or character range, section title, and heading path when
+available. Unit-level provenance takes precedence; chunk metadata only fills a
+field that the unit does not provide.
+
+When query-specific unit selection returns no units, the retrieval layer may
+expand the already selected context chunks into their persisted citation
+units. The fallback keeps context chunk order, admits at most two units per
+chunk, observes the existing global evidence-unit limit, and keeps the rendered
+evidence context within the existing character budget. It does not rerun
+retrieval, read unselected or broad parent chunks, or invent a unit id. A
+legacy chunk without persisted units remains usable as answer evidence but is
+explicitly not citation-ready. Likewise, the system does not fabricate a
+precise locator from a database id, trace id, or vector index id.
+
+Locator precedence follows the existing source formats:
+
+1. citation-unit `source_locator`;
+2. unit page/time/section or character range metadata;
+3. corresponding chunk metadata only when the unit field is absent.
+
+Exact duplicate evidence from the same document and chunk prefers the version
+with complete citation-unit provenance. Retrieval trace metadata records
+`citation_ready_count`, `citation_missing_count`, and grouped
+`citation_missing_reasons`; final trace items record `citation_ready` and
+`citation_readiness_reason` in their JSON metadata.
+
+Citation Readiness and the Evidence Support Gate are independent checks. The
+Support Gate decides whether the selected evidence can answer the question;
+Citation Readiness decides whether that evidence can be linked to a stable
+source. Citation readiness does not by itself prove that an answer is correct.
+
 Conversation 中追加消息时默认请求 `AUTO`。当前用户问题保存在
 `evidence_query`，用于 deterministic rule-based Router、evidence profile 和
 Evidence Support Gate；实际检索使用的 `query` 可以包含最近对话上下文。

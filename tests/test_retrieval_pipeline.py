@@ -31,7 +31,9 @@ from app.services.qa import (
     MessageContext,
     NO_RELIABLE_EVIDENCE_MESSAGE,
     answer_question,
+    build_citation_ready_fallback_units,
     build_conversation_retrieval_query,
+    build_fact_prompt,
     extract_used_citation_ids,
     load_citation_units_for_chunks,
     select_context_chunks_for_answer,
@@ -39,12 +41,15 @@ from app.services.qa import (
 )
 from app.services.qa_intent import QAIntent, classify_qa_intent
 from app.services.retrieval import (
+    RetrievalMode,
+    RetrievalResult,
     build_query_aware_chunk_snippet,
     merge_hybrid_candidates,
     preprocess_retrieval_query,
     retrieve_chunks_for_documents,
     search_document_chunks_lexical,
 )
+from app.services.retrieval.citation_builder import build_evidences
 
 
 load_all_models()
@@ -422,6 +427,8 @@ def _retrieved_chunk(
     source_type: str | None = "text",
     char_start: int | None = None,
     char_end: int | None = None,
+    page_number: int | None = None,
+    source_locator: str | None = None,
 ) -> RetrievedChunk:
     return RetrievedChunk(
         chunk_id=chunk_id,
@@ -435,11 +442,11 @@ def _retrieved_chunk(
         source_type=source_type,
         char_start=char_start,
         char_end=char_end,
-        page_number=None,
+        page_number=page_number,
         start_time=None,
         end_time=None,
         section_title=section_title,
-        source_locator=None,
+        source_locator=source_locator,
         heading_path=heading_path,
         score=score,
         chunk_db_id=chunk_db_id,
@@ -1363,6 +1370,442 @@ def test_load_citation_units_for_chunks_falls_back_to_chunk_key_when_db_id_missi
 
     assert chunk.chunk_key in units_by_chunk
     assert units_by_chunk[chunk.chunk_key][0].id == unit.id
+
+
+def test_citation_ready_fallback_expands_persisted_units_with_unit_provenance(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="grounding.pdf",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="First grounded fact. Second grounded fact.",
+        )
+        first = _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=0,
+            unit_text="First grounded fact.",
+            start_char=100,
+            end_char=120,
+            metadata={
+                "source_type": "pdf",
+                "page_number": 3,
+                "source_locator": "page:3",
+                "section_title": "Unit Section",
+                "heading_path": ["Report", "Unit Section"],
+            },
+        )
+        second = _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=1,
+            unit_text="Second grounded fact.",
+            start_char=121,
+            end_char=142,
+            metadata={"source_type": "pdf", "page_number": 3, "source_locator": "page:3"},
+        )
+        db.commit()
+        retrieved = _retrieved_chunk(
+            chunk_id=chunk.chunk_key,
+            chunk_db_id=chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.9,
+            text=chunk.chunk_text,
+            source_type="pdf",
+            char_start=90,
+            char_end=150,
+            page_number=9,
+            source_locator="page:9",
+        )
+        units = load_citation_units_for_chunks(db=db, chunks=[retrieved])
+
+        candidates = build_citation_ready_fallback_units(
+            question="What are the grounded facts?",
+            retrieved_chunks=[retrieved, retrieved],
+            chunk_units=units,
+        )
+
+    assert [item.citation_unit_id for item in candidates] == [first.id, second.id]
+    assert [item.marker for item in candidates] == ["S1", "S2"]
+    assert candidates[0].source_locator == "page:3"
+    assert candidates[0].page_number == 3
+    assert (candidates[0].char_start, candidates[0].char_end) == (100, 120)
+    assert candidates[0].section_title == "Unit Section"
+    assert candidates[0].heading_path == ("Report", "Unit Section")
+
+
+def test_citation_ready_fallback_keeps_chunk_without_units_non_ready() -> None:
+    chunk = _retrieved_chunk(
+        chunk_id="1:0",
+        chunk_db_id=10,
+        document_id=1,
+        document_name="legacy.txt",
+        score=0.8,
+        text="Legacy chunk without citation units.",
+    )
+
+    candidates = build_citation_ready_fallback_units(
+        question="What does the legacy document say?",
+        retrieved_chunks=[chunk],
+        chunk_units={},
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].citation_unit_id is None
+    assert candidates[0].citation_id is None
+    assert candidates[0].text == chunk.text
+
+
+def test_citation_ready_fallback_bounds_one_hundred_units_and_keeps_relevant_unit(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="configuration.md",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="Configuration reference with many persisted facts.",
+        )
+        expected = None
+        for unit_index in range(100):
+            unit_text = f"Archived migration note {unit_index}."
+            if unit_index == 73:
+                unit_text = "RETRIEVAL_MIN_SCORE default value is 0.15."
+            unit = _create_citation_unit(
+                db,
+                document=document,
+                chunk_key=chunk.chunk_key,
+                unit_index=unit_index,
+                unit_text=unit_text,
+                metadata={"source_type": "text", "source_locator": "section:Configuration"},
+            )
+            if unit_index == 73:
+                expected = unit
+        db.commit()
+        retrieved = _retrieved_chunk(
+            chunk_id=chunk.chunk_key,
+            chunk_db_id=chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.9,
+            text=chunk.chunk_text,
+        )
+
+        candidates = build_citation_ready_fallback_units(
+            question="RETRIEVAL_MIN_SCORE 的默认值是多少？",
+            retrieved_chunks=[retrieved],
+            chunk_units=load_citation_units_for_chunks(db=db, chunks=[retrieved]),
+            max_evidence_units=8,
+        )
+
+    assert expected is not None
+    assert len(candidates) == 2
+    assert expected.id in {item.citation_unit_id for item in candidates}
+    assert [item.marker for item in candidates] == ["S1", "S2"]
+
+
+def test_citation_ready_fallback_applies_global_limit_and_preserves_context_chunk_order(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="ordered.txt",
+        )
+        chunks = [
+            _create_chunk(
+                db,
+                document=document,
+                chunk_index=chunk_index,
+                chunk_text=f"Context chunk {chunk_index}.",
+            )
+            for chunk_index in range(4)
+        ]
+        for chunk in chunks:
+            for unit_index in range(2):
+                _create_citation_unit(
+                    db,
+                    document=document,
+                    chunk_key=chunk.chunk_key,
+                    unit_index=chunk.chunk_index * 2 + unit_index,
+                    unit_text=f"Fact {chunk.chunk_index}-{unit_index}.",
+                    metadata={
+                        "source_type": "text",
+                        "source_locator": f"section:Chunk-{chunk.chunk_index}",
+                    },
+                )
+        db.commit()
+        retrieved_by_index = {
+            chunk.chunk_index: _retrieved_chunk(
+                chunk_id=chunk.chunk_key,
+                chunk_db_id=chunk.id,
+                document_id=document.id,
+                document_name=document.original_filename,
+                score=0.9 - chunk.chunk_index * 0.01,
+                text=chunk.chunk_text,
+            )
+            for chunk in chunks
+        }
+        context_chunks = [retrieved_by_index[2], retrieved_by_index[0], retrieved_by_index[1]]
+        all_units = load_citation_units_for_chunks(
+            db=db,
+            chunks=[*context_chunks, retrieved_by_index[3]],
+        )
+
+        candidates = build_citation_ready_fallback_units(
+            question="List the context facts.",
+            retrieved_chunks=context_chunks,
+            chunk_units=all_units,
+            max_evidence_units=5,
+        )
+
+    assert len(candidates) == 5
+    assert [item.chunk_id for item in candidates] == [
+        chunks[2].chunk_key,
+        chunks[0].chunk_key,
+        chunks[0].chunk_key,
+        chunks[1].chunk_key,
+        chunks[1].chunk_key,
+    ]
+    assert all(item.chunk_id != chunks[3].chunk_key for item in candidates)
+
+
+def test_citation_ready_fallback_deduplicates_same_chunk_text(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="duplicates.txt",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="Duplicate and distinct grounded facts.",
+        )
+        for unit_index, unit_text in enumerate(
+            ("Same grounded fact.", "  same   grounded fact. ", "Distinct grounded fact.")
+        ):
+            _create_citation_unit(
+                db,
+                document=document,
+                chunk_key=chunk.chunk_key,
+                unit_index=unit_index,
+                unit_text=unit_text,
+                metadata={"source_type": "text", "source_locator": "section:Facts"},
+            )
+        db.commit()
+        retrieved = _retrieved_chunk(
+            chunk_id=chunk.chunk_key,
+            chunk_db_id=chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.9,
+            text=chunk.chunk_text,
+        )
+
+        candidates = build_citation_ready_fallback_units(
+            question="What are the grounded facts?",
+            retrieved_chunks=[retrieved],
+            chunk_units=load_citation_units_for_chunks(db=db, chunks=[retrieved]),
+            max_units_per_chunk=3,
+        )
+
+    assert len(candidates) == 2
+    assert {" ".join(item.text.split()).casefold() for item in candidates} == {
+        "same grounded fact.",
+        "distinct grounded fact.",
+    }
+
+
+def test_citation_ready_fallback_does_not_use_broad_parent_chunk_for_entity_match(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="catalog.txt",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="Aurora Pro catalog details. 重量：2.1 kg。",
+        )
+        _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=0,
+            unit_text="重量：2.1 kg。",
+            metadata={"source_type": "text", "source_locator": "section:Specifications"},
+        )
+        db.commit()
+        retrieved = _retrieved_chunk(
+            chunk_id=chunk.chunk_key,
+            chunk_db_id=chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.9,
+            text=chunk.chunk_text,
+        )
+
+        candidates = build_citation_ready_fallback_units(
+            question="Aurora Pro 重量是多少？",
+            retrieved_chunks=[retrieved],
+            chunk_units=load_citation_units_for_chunks(db=db, chunks=[retrieved]),
+        )
+
+    assert len(candidates) == 1
+    assert candidates[0].entity_exact_match is False
+    assert candidates[0].entity_context_match is False
+
+
+def test_citation_ready_fallback_bounds_serialized_prompt_context(
+    session_factory: sessionmaker,
+) -> None:
+    context_budget = 220
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="budget.txt",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="Prompt context budget facts.",
+        )
+        for unit_index in range(4):
+            _create_citation_unit(
+                db,
+                document=document,
+                chunk_key=chunk.chunk_key,
+                unit_index=unit_index,
+                unit_text=f"Fact {unit_index}: " + "bounded context " * 6,
+                metadata={"source_type": "text", "source_locator": "section:Budget"},
+            )
+        db.commit()
+        retrieved = _retrieved_chunk(
+            chunk_id=chunk.chunk_key,
+            chunk_db_id=chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.9,
+            text=chunk.chunk_text,
+        )
+
+        candidates = build_citation_ready_fallback_units(
+            question="What are the budget facts?",
+            retrieved_chunks=[retrieved],
+            chunk_units=load_citation_units_for_chunks(db=db, chunks=[retrieved]),
+            max_evidence_units=4,
+            max_units_per_chunk=4,
+            max_total_chars=context_budget,
+        )
+
+    prompt = build_fact_prompt(question="What are the budget facts?", evidence_units=candidates)
+    evidence_context = prompt.user_prompt.split("Evidence Units:\n", maxsplit=1)[1]
+    assert candidates
+    assert len(candidates) < 4
+    assert len(evidence_context) <= context_budget
+
+
+def test_answer_citation_uses_the_same_unit_as_final_retrieval_evidence(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as db:
+        user, knowledge_base = _create_user_and_kb(db)
+        document = _create_document(
+            db,
+            user=user,
+            knowledge_base=knowledge_base,
+            original_filename="canonical.txt",
+        )
+        chunk = _create_chunk(
+            db,
+            document=document,
+            chunk_index=0,
+            chunk_text="Canonical citation fact.",
+        )
+        unit = _create_citation_unit(
+            db,
+            document=document,
+            chunk_key=chunk.chunk_key,
+            unit_index=0,
+            unit_text="Canonical citation fact.",
+            start_char=10,
+            end_char=34,
+            metadata={"source_type": "text", "source_locator": "chars:10-34"},
+        )
+        db.commit()
+        retrieved = _retrieved_chunk(
+            chunk_id=chunk.chunk_key,
+            chunk_db_id=chunk.id,
+            document_id=document.id,
+            document_name=document.original_filename,
+            score=0.9,
+            text=chunk.chunk_text,
+        )
+        candidates = build_citation_ready_fallback_units(
+            question="What is the canonical citation fact?",
+            retrieved_chunks=[retrieved],
+            chunk_units=load_citation_units_for_chunks(db=db, chunks=[retrieved]),
+        )
+        evidences = build_evidences(candidates)
+        retrieval_result = RetrievalResult(
+            query="What is the canonical citation fact?",
+            mode=RetrievalMode.CHUNK_ONLY,
+            evidences=evidences,
+            context_text="[S1]\ncontent: Canonical citation fact.",
+            metadata={"context_chunks": [retrieved], "evidence_units": candidates},
+        )
+
+        answer = answer_question(
+            db=db,
+            question="What is the canonical citation fact?",
+            retrieved_chunks=[],
+            retrieval_result=retrieval_result,
+            generator=StaticAnswerGenerator("Canonical citation fact [S1]."),
+        )
+
+    assert len(answer.citations) == 1
+    assert answer.citations[0].text == evidences[0].text
+    assert answer.citations[0].citation_unit_id == unit.id
+    assert answer.citations[0].source_locator is not None
+    assert answer.citations[0].source_locator.source_locator_text == "chars:10-34"
 
 
 def test_answer_question_prefers_citation_unit_snippets(
