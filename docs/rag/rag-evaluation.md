@@ -14,6 +14,12 @@ Cross-domain generalization baseline:
 make eval-rag-generalization
 ```
 
+Independent generalization holdout:
+
+```bash
+make eval-rag-generalization-holdout
+```
+
 Custom cases:
 
 ```bash
@@ -60,12 +66,23 @@ The generalization case file also supports optional fields:
 - `answerability_accuracy`: production Evidence Support Gate answerability matches `expected_answerable`. The gate is deterministic and uses query-type mandatory checks such as requested attribute coverage, relation support, exact technical identifier coverage, and reason/definition signals.
 - `evidence_support_score`, `evidence_support_reason`, `evidence_support_query_type`, and `evidence_support_signals`: debugging fields emitted by the production support evaluator.
 - `retrieval_latency_ms` and `total_eval_latency_ms`: in-process retrieval timing values.
+- `expected_document_in_raw_candidates` / `expected_evidence_in_raw_candidates`: whether the retriever returned the expected document and phrase before context selection.
+- `expected_document_in_final_context` / `expected_evidence_in_final_context`: whether expected material survived context selection.
+- `expected_document_in_final_selection` / `expected_evidence_in_final_selection`: whether expected material reached canonical final evidence.
+- `failure_stage`: the earliest diagnosable loss point. Values include `retrieval_document_miss`, `raw_candidate_miss`, `final_context_miss`, `evidence_selection_miss`, `support_gate_miss`, `expected_phrase_format_mismatch`, `genuine_no_answer`, and `success`.
 
 The harness is deterministic and does not use LLM-as-judge. The support score is
 not a semantic correctness score; it explains why the rule-based production gate
 allowed or rejected the final evidence.
 
 The canonical final evidence source is `RetrievalResult.evidences`. Retrieval metadata such as `initial_chunks`, `context_chunks`, and `evidence_units` is useful for debugging, but summary metrics do not treat raw chunks as final citation evidence. When the reranker is enabled, `RetrievalResult.evidences` contains the aligned final evidence.
+
+Expected phrase checks normalize presentation-only differences: Markdown
+backticks and emphasis, repeated whitespace, case, quotes, Unicode punctuation,
+and terminal punctuation. They preserve numbers, underscores, hyphens, path
+separators, API paths, and CLI flags. For example, formatted and unformatted
+`CHUNK_STRATEGY` are equivalent, while `docker compose down` and
+`docker compose down -v` are not.
 
 Summary tables show `passed / applicable (percentage)`. `null` or non-applicable metrics are skipped from the denominator, so no-answer cases do not dilute ordinary retrieval/citation rates.
 
@@ -82,6 +99,13 @@ Run output is written under `data/eval_runs/<run-id>/`:
 - `summary.md`: run configuration, overall metrics, category/mode breakdowns, no-answer results, latency summary, failed cases, and known limitations.
 
 The generated reports should be interpreted as phrase/doc based approximations. Latency is useful only for comparison on the same machine and configuration.
+
+The committed 50-case generalization set is a deterministic regression suite.
+The independent holdout uses `tests/eval/holdout_corpus/` and
+`tests/eval/rag_generalization_holdout_cases.jsonl`; it must remain separate
+from the production-rule tuning loop. A fixture whose corpus does not contain
+the requested fact should be modeled as no-answer and documented in case
+notes, rather than counted as an answerable retrieval failure.
 
 To write a sanitized local preview that can later become a committed baseline snapshot, use:
 

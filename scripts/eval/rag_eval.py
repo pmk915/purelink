@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import re
 from typing import Any
+import unicodedata
 
 from app.services.evidence_support import evaluate_evidence_support
 from app.services.qa import build_query_evidence_profile
@@ -104,6 +105,13 @@ class RagEvalCaseResult:
     answer_unknown_markers_removed: int | None = None
     answer_citation_count: int | None = None
     answer_marker_count: int | None = None
+    expected_document_in_raw_candidates: bool | None = None
+    expected_evidence_in_raw_candidates: bool | None = None
+    expected_document_in_final_context: bool | None = None
+    expected_evidence_in_final_context: bool | None = None
+    expected_document_in_final_selection: bool | None = None
+    expected_evidence_in_final_selection: bool | None = None
+    failure_stage: str | None = None
     failure_reasons: tuple[str, ...] = ()
     error: str | None = None
 
@@ -189,6 +197,8 @@ def evaluate_retrieval_result(
     retrieval_min_score: float = 0.0,
 ) -> RagEvalCaseResult:
     evidences = get_final_evidences(result)
+    raw_candidates = _metadata_items(result.metadata, "initial_chunks")
+    final_context = _metadata_items(result.metadata, "context_chunks")
     keyword_result = calculate_keyword_coverage(
         text=result.context_text,
         expected_keywords=case.expected_keywords,
@@ -200,6 +210,13 @@ def evaluate_retrieval_result(
         expected_doc_names=case.expected_doc_names,
         expected_doc_ids=case.expected_doc_ids,
         expected_phrases=case.expected_evidence_phrases,
+    )
+    literal_expected_evidence_hit = calculate_expected_evidence_hit(
+        evidences,
+        expected_doc_names=case.expected_doc_names,
+        expected_doc_ids=case.expected_doc_ids,
+        expected_phrases=case.expected_evidence_phrases,
+        normalize_formatting=False,
     )
     forbidden_evidence_hit = calculate_forbidden_evidence_hit(
         evidences,
@@ -238,6 +255,39 @@ def evaluate_retrieval_result(
         expected_doc_names=case.expected_doc_names,
         expected_doc_ids=case.expected_doc_ids,
         expected_citation_required=case.expected_citation_required,
+    )
+    expected_document_in_raw_candidates = _items_match_expected_document(
+        raw_candidates,
+        expected_doc_names=case.expected_doc_names,
+        expected_doc_ids=case.expected_doc_ids,
+    )
+    expected_evidence_in_raw_candidates = _items_match_expected_evidence(
+        raw_candidates,
+        expected_doc_names=case.expected_doc_names,
+        expected_doc_ids=case.expected_doc_ids,
+        expected_phrases=case.expected_evidence_phrases,
+    )
+    expected_document_in_final_context = _items_match_expected_document(
+        final_context,
+        expected_doc_names=case.expected_doc_names,
+        expected_doc_ids=case.expected_doc_ids,
+    )
+    expected_evidence_in_final_context = _items_match_expected_evidence(
+        final_context,
+        expected_doc_names=case.expected_doc_names,
+        expected_doc_ids=case.expected_doc_ids,
+        expected_phrases=case.expected_evidence_phrases,
+    )
+    failure_stage = classify_failure_stage(
+        expected_answerable=case.expected_answerable,
+        predicted_answerable=predicted_answerable,
+        expected_document_in_raw_candidates=expected_document_in_raw_candidates,
+        expected_evidence_in_raw_candidates=expected_evidence_in_raw_candidates,
+        expected_document_in_final_context=expected_document_in_final_context,
+        expected_evidence_in_final_context=expected_evidence_in_final_context,
+        expected_document_in_final_selection=retrieval_hit,
+        expected_evidence_in_final_selection=expected_evidence_hit,
+        literal_expected_evidence_hit=literal_expected_evidence_hit,
     )
     trace_available = result.trace_id is not None
     failure_reasons = classify_failure_reasons(
@@ -356,6 +406,13 @@ def evaluate_retrieval_result(
             result.metadata,
             "eval_answer_marker_count",
         ),
+        expected_document_in_raw_candidates=expected_document_in_raw_candidates,
+        expected_evidence_in_raw_candidates=expected_evidence_in_raw_candidates,
+        expected_document_in_final_context=expected_document_in_final_context,
+        expected_evidence_in_final_context=expected_evidence_in_final_context,
+        expected_document_in_final_selection=retrieval_hit,
+        expected_evidence_in_final_selection=expected_evidence_hit,
+        failure_stage=failure_stage,
         failure_reasons=failure_reasons,
     )
 
@@ -405,6 +462,13 @@ def failed_case_result(case: RagEvalCase, *, error: str) -> RagEvalCaseResult:
         evidence_support_reason="no_evidence",
         evidence_support_query_type=None,
         evidence_support_signals={"has_final_evidence": False},
+        expected_document_in_raw_candidates=False,
+        expected_evidence_in_raw_candidates=False,
+        expected_document_in_final_context=False,
+        expected_evidence_in_final_context=False,
+        expected_document_in_final_selection=False,
+        expected_evidence_in_final_selection=False,
+        failure_stage="evaluation_error",
         failure_reasons=("unexpected_no_answer",) if case.expected_answerable else (),
         error=error,
     )
@@ -519,12 +583,20 @@ def calculate_expected_evidence_hit(
     expected_doc_names: tuple[str, ...] | list[str],
     expected_doc_ids: tuple[int, ...] | list[int] = (),
     expected_phrases: tuple[str, ...] | list[str],
+    normalize_formatting: bool = True,
 ) -> bool | None:
     if not expected_phrases:
         return None
     return any(
         _evidence_matches_expected(item, expected_doc_names, expected_doc_ids)
-        and any(_contains_keyword(item.text, phrase) for phrase in expected_phrases)
+        and any(
+            _contains_keyword(
+                item.text,
+                phrase,
+                normalize_formatting=normalize_formatting,
+            )
+            for phrase in expected_phrases
+        )
         for item in evidences
     )
 
@@ -619,6 +691,41 @@ def classify_failure_reasons(
     if not trace_available:
         reasons.append("trace_missing")
     return tuple(reasons)
+
+
+def classify_failure_stage(
+    *,
+    expected_answerable: bool | None,
+    predicted_answerable: bool,
+    expected_document_in_raw_candidates: bool | None,
+    expected_evidence_in_raw_candidates: bool | None,
+    expected_document_in_final_context: bool | None,
+    expected_evidence_in_final_context: bool | None,
+    expected_document_in_final_selection: bool | None,
+    expected_evidence_in_final_selection: bool | None,
+    literal_expected_evidence_hit: bool | None,
+) -> str:
+    if expected_answerable is False:
+        return "support_gate_miss" if predicted_answerable else "genuine_no_answer"
+    if expected_document_in_raw_candidates is False:
+        return "retrieval_document_miss"
+    if expected_evidence_in_raw_candidates is False:
+        return "raw_candidate_miss"
+    if (
+        expected_document_in_final_context is False
+        or expected_evidence_in_final_context is False
+    ):
+        return "final_context_miss"
+    if (
+        expected_document_in_final_selection is False
+        or expected_evidence_in_final_selection is False
+    ):
+        return "evidence_selection_miss"
+    if not predicted_answerable:
+        return "support_gate_miss"
+    if expected_evidence_in_final_selection and literal_expected_evidence_hit is False:
+        return "expected_phrase_format_mismatch"
+    return "success"
 
 
 def get_final_evidences(result: RetrievalResult) -> tuple[RetrievedEvidence, ...]:
@@ -774,6 +881,13 @@ def case_result_to_dict(result: RagEvalCaseResult) -> dict[str, Any]:
         "answer_unknown_markers_removed": result.answer_unknown_markers_removed,
         "answer_citation_count": result.answer_citation_count,
         "answer_marker_count": result.answer_marker_count,
+        "expected_document_in_raw_candidates": result.expected_document_in_raw_candidates,
+        "expected_evidence_in_raw_candidates": result.expected_evidence_in_raw_candidates,
+        "expected_document_in_final_context": result.expected_document_in_final_context,
+        "expected_evidence_in_final_context": result.expected_evidence_in_final_context,
+        "expected_document_in_final_selection": result.expected_document_in_final_selection,
+        "expected_evidence_in_final_selection": result.expected_evidence_in_final_selection,
+        "failure_stage": result.failure_stage,
         "failure_reasons": list(result.failure_reasons),
     }
     if result.error:
@@ -792,10 +906,115 @@ def _evidence_matches_expected(
     return evidence.document_id in set(expected_doc_ids)
 
 
-def _contains_keyword(text: str, keyword: str) -> bool:
+def _contains_keyword(
+    text: str,
+    keyword: str,
+    *,
+    normalize_formatting: bool = True,
+) -> bool:
     if not keyword:
         return True
+    if normalize_formatting:
+        normalized_keyword = normalize_eval_text(keyword)
+        return bool(normalized_keyword) and normalized_keyword in normalize_eval_text(text)
     return keyword.casefold() in text.casefold()
+
+
+def normalize_eval_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", str(value or ""))
+    normalized = re.sub(r"`+([^`]+?)`+", r"\1", normalized)
+    normalized = re.sub(r"\*\*([^*]+?)\*\*", r"\1", normalized)
+    normalized = re.sub(r"(?<!\w)\*([^*]+?)\*(?!\w)", r"\1", normalized)
+    normalized = normalized.translate(
+        str.maketrans(
+            {
+                "，": ",",
+                "。": ".",
+                "：": ":",
+                "；": ";",
+                "！": "!",
+                "？": "?",
+                "“": "",
+                "”": "",
+                "‘": "",
+                "’": "",
+                "「": "",
+                "」": "",
+                "『": "",
+                "』": "",
+                '"': "",
+                "'": "",
+            }
+        )
+    )
+    normalized = " ".join(normalized.casefold().split())
+    return normalized.rstrip(".,;:!?")
+
+
+def _metadata_items(metadata: dict[str, Any], key: str) -> tuple[Any, ...]:
+    value = metadata.get(key)
+    return tuple(value) if isinstance(value, (list, tuple)) else ()
+
+
+def _items_match_expected_document(
+    items: tuple[Any, ...],
+    *,
+    expected_doc_names: tuple[str, ...] | list[str],
+    expected_doc_ids: tuple[int, ...] | list[int],
+) -> bool | None:
+    if not expected_doc_names and not expected_doc_ids:
+        return None
+    return any(
+        _item_matches_expected(item, expected_doc_names, expected_doc_ids)
+        for item in items
+    )
+
+
+def _items_match_expected_evidence(
+    items: tuple[Any, ...],
+    *,
+    expected_doc_names: tuple[str, ...] | list[str],
+    expected_doc_ids: tuple[int, ...] | list[int],
+    expected_phrases: tuple[str, ...] | list[str],
+) -> bool | None:
+    if not expected_phrases:
+        return None
+    has_expected_docs = bool(expected_doc_names or expected_doc_ids)
+    return any(
+        (
+            not has_expected_docs
+            or _item_matches_expected(item, expected_doc_names, expected_doc_ids)
+        )
+        and any(_contains_keyword(_item_evidence_text(item), phrase) for phrase in expected_phrases)
+        for item in items
+    )
+
+
+def _item_matches_expected(
+    item: Any,
+    expected_doc_names: tuple[str, ...] | list[str],
+    expected_doc_ids: tuple[int, ...] | list[int],
+) -> bool:
+    document_name = str(getattr(item, "document_name", "") or "")
+    document_id = getattr(item, "document_id", None)
+    expected_names = {name.casefold() for name in expected_doc_names}
+    return (
+        bool(document_name and document_name.casefold() in expected_names)
+        or document_id in set(expected_doc_ids)
+    )
+
+
+def _item_evidence_text(item: Any) -> str:
+    heading_path = getattr(item, "heading_path", None) or ()
+    return " ".join(
+        str(part)
+        for part in (
+            getattr(item, "text", ""),
+            getattr(item, "section_title", ""),
+            *heading_path,
+        )
+        if part
+    )
 
 
 def _evidence_score(evidence: RetrievedEvidence) -> float:

@@ -12,8 +12,10 @@ CASE_PATH = ROOT_DIR / "tests/eval/rag_generalization_cases.jsonl"
 CORPUS_PATH = ROOT_DIR / "tests/eval/corpus/purelink_retrieval.txt"
 ENV_EXAMPLE_PATH = ROOT_DIR / ".env.example"
 TARGET_CASE_ID = "tech_retrieval_min_score"
+DEEPSEEK_CASE_ID = "attr_deepseek_config"
 EXPECTED_DEFAULT = "0.15"
-NON_TARGET_CASES_SHA256 = "09bb5a858eac159687e430f257815b5c555ad9d6018e0f29f2fd84f38f8fc811"
+INTENTIONALLY_CHANGED_CASE_IDS = {TARGET_CASE_ID, DEEPSEEK_CASE_ID}
+NON_TARGET_CASES_SHA256 = "8bf2f83ad9be404268455c3d034f6fc519c584eae91ab29e526d16705114f034"
 
 
 def _load_case_payloads() -> list[dict[str, object]]:
@@ -42,7 +44,9 @@ def test_generalization_cases_are_valid_jsonl_and_keep_non_target_cases_unchange
 
     assert len(cases) == 50
     assert len({str(item["id"]) for item in cases}) == 50
-    non_target_cases = [item for item in cases if item["id"] != TARGET_CASE_ID]
+    non_target_cases = [
+        item for item in cases if item["id"] not in INTENTIONALLY_CHANGED_CASE_IDS
+    ]
     normalized = json.dumps(
         non_target_cases,
         ensure_ascii=False,
@@ -74,6 +78,22 @@ def test_retrieval_corpus_contains_the_expected_default_value_fact() -> None:
     assert "`RETRIEVAL_MIN_SCORE` defaults to `0.15`." in corpus
     assert "minimum retrieval score used by answer generation reliability checks" in corpus
     assert "Low-scoring or missing evidence can trigger" in corpus
+
+
+def test_deepseek_config_case_is_no_answer_because_fixture_has_no_location() -> None:
+    case = next(
+        item for item in _load_case_payloads() if item["id"] == DEEPSEEK_CASE_ID
+    )
+    corpus = CORPUS_PATH.read_text(encoding="utf-8")
+
+    assert case["category"] == "no_answer"
+    assert case["expected_answerable"] is False
+    assert case["expected_citation_required"] is False
+    assert case.get("expected_doc_names") is None
+    assert case.get("expected_evidence_phrases") is None
+    assert "evaluation_fixture_mismatch" in str(case["notes"])
+    assert "DeepSeek" not in corpus
+    assert "API paths, environment variables, code-like tokens" in corpus
 
 
 def test_retrieval_corpus_default_matches_settings_and_env_example(

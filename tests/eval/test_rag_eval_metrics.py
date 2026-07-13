@@ -12,11 +12,13 @@ from scripts.eval.rag_eval import (
     calculate_keyword_coverage,
     calculate_retrieval_hit,
     classify_evidence_units,
+    classify_failure_stage,
     case_result_to_dict,
     evaluate_retrieval_result,
     failed_case_result,
     get_final_evidences,
     load_cases,
+    normalize_eval_text,
     parse_case,
     summarize_latencies,
     summarize_results,
@@ -286,6 +288,62 @@ def test_expected_and_forbidden_evidence_hits() -> None:
     assert calculate_forbidden_evidence_hit(evidences, forbidden_phrases=()) is None
 
 
+def test_expected_evidence_normalizes_presentation_only_formatting() -> None:
+    evidences = [
+        _evidence(
+            document_id=1,
+            document_name="technical.txt",
+            text="CHUNK_STRATEGY supports fixed and block_aware. FastAPI uses Depends to inject values.",
+        )
+    ]
+
+    for phrase in (
+        "`CHUNK_STRATEGY` supports `fixed` and `block_aware`.",
+        "chunk_strategy SUPPORTS fixed AND block_aware",
+        "CHUNK_STRATEGY   supports   fixed   and   block_aware",
+        "“CHUNK_STRATEGY” supports fixed and block_aware。",
+        "**CHUNK_STRATEGY** supports *fixed* and `block_aware`",
+    ):
+        assert calculate_expected_evidence_hit(
+            evidences,
+            expected_doc_names=("technical.txt",),
+            expected_phrases=(phrase,),
+        )
+
+
+def test_expected_evidence_normalization_preserves_technical_semantics() -> None:
+    evidences = [
+        _evidence(
+            document_id=1,
+            document_name="technical.txt",
+            text=(
+                "docker compose down preserves volumes. CHUNKSTRATEGY is unrelated. "
+                "GET /api/v1/jobs returns ten items and the threshold is 0.15."
+            ),
+        )
+    ]
+
+    for phrase in (
+        "docker compose down -v",
+        "CHUNK_STRATEGY",
+        "GET /api/v2/jobs",
+        "threshold is 0.10",
+    ):
+        assert calculate_expected_evidence_hit(
+            evidences,
+            expected_doc_names=("technical.txt",),
+            expected_phrases=(phrase,),
+        ) is False
+
+
+def test_normalize_eval_text_keeps_identifiers_paths_flags_and_numbers() -> None:
+    normalized = normalize_eval_text(
+        "`CHUNK_STRATEGY` GET /api/v1/jobs docker compose down -v 0.15。"
+    )
+
+    assert normalized == "chunk_strategy get /api/v1/jobs docker compose down -v 0.15"
+
+
 def test_evidence_classification_and_precision() -> None:
     evidences = [
         _evidence(document_id=1, document_name="team.md", text="办公地点：Singapore"),
@@ -532,6 +590,111 @@ def test_final_evidence_uses_retrieval_result_evidences_not_metadata_chunks() ->
     assert evaluated.expected_evidence_hit is True
 
 
+def test_failure_stage_distinguishes_retrieval_context_selection_and_support() -> None:
+    expected = _evidence(
+        document_id=1,
+        document_name="runtime.txt",
+        text="REQUEST_TIMEOUT_SECONDS controls waiting.",
+    )
+    unrelated = _evidence(document_id=2, document_name="other.txt", text="Other fact.")
+    case = RagEvalCase(
+        id="stage",
+        question="REQUEST_TIMEOUT_SECONDS 的默认值是多少？",
+        knowledge_base_id=1,
+        expected_doc_names=("runtime.txt",),
+        expected_evidence_phrases=("REQUEST_TIMEOUT_SECONDS controls waiting",),
+        expected_answerable=True,
+    )
+
+    retrieval_miss = evaluate_retrieval_result(
+        case,
+        _retrieval_result(evidences=[], initial=[unrelated], context=[unrelated]),
+    )
+    raw_candidate_miss = evaluate_retrieval_result(
+        case,
+        _retrieval_result(
+            evidences=[],
+            initial=[_evidence(document_id=1, document_name="runtime.txt", text="Unrelated runtime fact.")],
+            context=[],
+        ),
+    )
+    context_miss = evaluate_retrieval_result(
+        case,
+        _retrieval_result(evidences=[], initial=[expected], context=[unrelated]),
+    )
+    selection_miss = evaluate_retrieval_result(
+        case,
+        _retrieval_result(evidences=[unrelated], initial=[expected], context=[expected]),
+    )
+    support_miss = evaluate_retrieval_result(
+        case,
+        _retrieval_result(evidences=[expected], initial=[expected], context=[expected]),
+    )
+
+    assert retrieval_miss.failure_stage == "retrieval_document_miss"
+    assert raw_candidate_miss.failure_stage == "raw_candidate_miss"
+    assert context_miss.failure_stage == "final_context_miss"
+    assert selection_miss.failure_stage == "evidence_selection_miss"
+    assert support_miss.failure_stage == "support_gate_miss"
+
+
+def test_failure_stage_records_success_format_mismatch_and_genuine_no_answer() -> None:
+    formatted = _evidence(
+        document_id=1,
+        document_name="runtime.txt",
+        text="CHUNK_STRATEGY supports fixed and block_aware values.",
+    )
+    formatted_case = RagEvalCase(
+        id="format",
+        question="CHUNK_STRATEGY 支持哪些值？",
+        knowledge_base_id=1,
+        expected_doc_names=("runtime.txt",),
+        expected_evidence_phrases=("supports `fixed` and `block_aware` values",),
+        expected_answerable=True,
+    )
+    format_result = evaluate_retrieval_result(
+        formatted_case,
+        _retrieval_result(evidences=[formatted], initial=[formatted], context=[formatted]),
+    )
+    success_case = RagEvalCase(
+        id="success",
+        question="CHUNK_STRATEGY 支持哪些值？",
+        knowledge_base_id=1,
+        expected_doc_names=("runtime.txt",),
+        expected_evidence_phrases=("supports fixed and block_aware values",),
+        expected_answerable=True,
+    )
+    success_result = evaluate_retrieval_result(
+        success_case,
+        _retrieval_result(evidences=[formatted], initial=[formatted], context=[formatted]),
+    )
+    no_answer_result = evaluate_retrieval_result(
+        RagEvalCase(
+            id="missing",
+            question="Unknown setting default?",
+            knowledge_base_id=1,
+            expected_answerable=False,
+            expected_citation_required=False,
+        ),
+        _retrieval_result(evidences=[], initial=[], context=[]),
+    )
+
+    assert format_result.failure_stage == "expected_phrase_format_mismatch"
+    assert success_result.failure_stage == "success"
+    assert no_answer_result.failure_stage == "genuine_no_answer"
+    assert classify_failure_stage(
+        expected_answerable=False,
+        predicted_answerable=True,
+        expected_document_in_raw_candidates=None,
+        expected_evidence_in_raw_candidates=None,
+        expected_document_in_final_context=None,
+        expected_evidence_in_final_context=None,
+        expected_document_in_final_selection=None,
+        expected_evidence_in_final_selection=None,
+        literal_expected_evidence_hit=None,
+    ) == "support_gate_miss"
+
+
 def test_latency_percentiles() -> None:
     assert summarize_latencies([1, 2, 3, 100]) == {"mean": 26.5, "p50": 2, "p95": 85, "max": 100}
 
@@ -577,7 +740,9 @@ def test_summary_markdown_generation_for_generalization() -> None:
     )
 
     assert "## 1. Run Configuration" in markdown
-    assert "## 7. Failed Cases" in markdown
+    assert "## 7. Failure Diagnostics" in markdown
+    assert "### Failed Cases" in markdown
+    assert "| Failure Stage | Cases |" in markdown
     assert "1 / 1 (100.0%)" in markdown
     assert "In-process retrieval latency" in markdown
     assert "Evidence-gate answerability" in markdown
@@ -627,7 +792,7 @@ def test_summary_null_metrics_do_not_enter_denominator() -> None:
 
     assert "| retrieval_hit | 1 / 1 (100.0%) |" in markdown
     assert "| citation_hit | 1 / 1 (100.0%) |" in markdown
-    assert "`no-answer` | n/a | n/a | n/a | False | true" in markdown
+    assert "`no-answer` | False | true" in markdown
 
 
 def test_corpus_manifest_validation(tmp_path) -> None:
@@ -655,7 +820,7 @@ def test_corpus_manifest_validation(tmp_path) -> None:
                 id="case",
                 question="q",
                 knowledge_base_id=1,
-                expected_doc_names=("tests/eval/corpus/python_classes.txt",),
+                expected_doc_names=((corpus_dir / "python_classes.txt").as_posix(),),
             )
         ],
     )
@@ -670,8 +835,8 @@ def test_generalization_cases_have_expected_modes_and_answerability_contracts() 
     assert all(case.mode == "auto" for case in cases)
     assert all(case.expected_mode for case in cases)
     assert all(case.expected_answerable is not None for case in cases)
-    assert sum(1 for case in cases if case.expected_answerable is True and case.expected_citation_required) == 45
-    assert sum(1 for case in cases if case.expected_answerable is False and not case.expected_citation_required) == 5
+    assert sum(1 for case in cases if case.expected_answerable is True and case.expected_citation_required) == 44
+    assert sum(1 for case in cases if case.expected_answerable is False and not case.expected_citation_required) == 6
 
 
 def test_results_metadata_does_not_include_api_keys() -> None:
@@ -824,6 +989,22 @@ def _evidence(
         document_name=document_name,
         final_score=final_score,
         source_locator=source_locator,
+    )
+
+
+def _retrieval_result(
+    *,
+    evidences: list[RetrievedEvidence],
+    initial: list[RetrievedEvidence],
+    context: list[RetrievedEvidence],
+) -> RetrievalResult:
+    return RetrievalResult(
+        query="evaluation query",
+        mode=RetrievalMode.CHUNK_ONLY,
+        evidences=evidences,
+        context_text="\n".join(item.text for item in evidences),
+        metadata={"initial_chunks": initial, "context_chunks": context},
+        trace_id=1,
     )
 
 
