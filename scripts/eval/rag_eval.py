@@ -576,6 +576,9 @@ def get_final_evidences(result: RetrievalResult) -> tuple[RetrievedEvidence, ...
 
 
 def evidence_to_dict(evidence: RetrievedEvidence) -> dict[str, Any]:
+    from app.services.retrieval.citation_builder import citation_readiness
+
+    citation_ready, citation_readiness_reason = citation_readiness(evidence)
     return {
         "document_name": evidence.document_name,
         "document_id": evidence.document_id,
@@ -586,8 +589,16 @@ def evidence_to_dict(evidence: RetrievedEvidence) -> dict[str, Any]:
         "graph_score": evidence.graph_score,
         "rerank_score": evidence.rerank_score,
         "source_locator": evidence.source_locator,
+        "citation_id": evidence.citation_id,
         "citation_unit_id": evidence.citation_unit_id,
         "chunk_id": str(evidence.chunk_id),
+        "page_number": evidence.page_number,
+        "char_start": evidence.char_start,
+        "char_end": evidence.char_end,
+        "section_title": evidence.section_title,
+        "heading_path": evidence.heading_path,
+        "citation_ready": citation_ready,
+        "citation_readiness_reason": citation_readiness_reason,
     }
 
 

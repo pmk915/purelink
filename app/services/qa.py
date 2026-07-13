@@ -1006,6 +1006,194 @@ def select_evidence_units(
         profile=evidence_profile,
         max_evidence_units=max_evidence_units,
     )
+    return _assign_evidence_markers(selected[:max_evidence_units])
+
+
+def build_citation_ready_fallback_units(
+    *,
+    question: str,
+    retrieved_chunks: list[RetrievedChunk],
+    chunk_units: dict[str, list[DocumentCitationUnit]],
+    max_evidence_units: int = MAX_ASK_EVIDENCE_UNITS,
+    max_units_per_chunk: int = MAX_EVIDENCE_UNITS_PER_CHUNK,
+    max_total_chars: int = MAX_ASK_CONTEXT_TOTAL_CHARS,
+) -> list[CitationUnitCandidate]:
+    """Preserve context order while replacing chunk fallbacks with persisted units."""
+    if max_evidence_units <= 0 or max_units_per_chunk <= 0 or max_total_chars <= 0:
+        return []
+    question_features = _build_query_features(question)
+    technical_identifiers = _extract_technical_identifiers(question)
+    technical_intent = _technical_question_intent(question)
+    evidence_profile = _build_query_evidence_profile(question)
+    if technical_identifiers and technical_intent:
+        evidence_profile = QueryEvidenceProfile(
+            query_type="generic_factual",
+            entity_terms=frozenset(),
+            intent_terms=frozenset(),
+        )
+
+    candidates_by_chunk: list[list[CitationUnitCandidate]] = []
+    seen_chunk_keys: set[tuple[int, str]] = set()
+    seen_unit_ids: set[int] = set()
+    seen_fallback_chunks: set[tuple[int, str]] = set()
+    seen_text_keys: set[tuple[int, str, str]] = set()
+    for chunk in retrieved_chunks:
+        chunk_key = (chunk.document_id, str(chunk.chunk_id))
+        if chunk_key in seen_chunk_keys:
+            continue
+        seen_chunk_keys.add(chunk_key)
+        units = chunk_units.get(chunk.chunk_id) or []
+        if units:
+            ranked_units = sorted(
+                (
+                    (
+                        _build_citation_unit_candidate(
+                            unit=unit,
+                            chunk=chunk,
+                            question_features=question_features,
+                            evidence_profile=evidence_profile,
+                            technical_identifiers=technical_identifiers,
+                            technical_intent=technical_intent,
+                            allow_parent_context=False,
+                        ),
+                        unit.unit_index,
+                    )
+                    for unit in units
+                ),
+                key=lambda item: (-item[0].score, item[1], item[0].citation_unit_id or 0),
+            )
+            unique_ranked_units: list[tuple[CitationUnitCandidate, int]] = []
+            local_unit_ids: set[int] = set()
+            local_text_keys: set[tuple[int, str, str]] = set()
+            for candidate, source_index in ranked_units:
+                unit_id = candidate.citation_unit_id
+                if unit_id is None or unit_id in local_unit_ids:
+                    continue
+                text_key = _citation_candidate_text_key(candidate)
+                if text_key in local_text_keys:
+                    continue
+                unique_ranked_units.append((candidate, source_index))
+                local_unit_ids.add(unit_id)
+                local_text_keys.add(text_key)
+            candidates_by_chunk.append(
+                _select_source_diverse_candidates(
+                    unique_ranked_units,
+                    limit=max_units_per_chunk,
+                )
+            )
+            continue
+
+        fallback_key = chunk_key
+        if fallback_key in seen_fallback_chunks:
+            continue
+        candidate = _build_chunk_fallback_candidate(
+            chunk=chunk,
+            question_features=question_features,
+            evidence_profile=evidence_profile,
+        )
+        candidates_by_chunk.append([candidate])
+        seen_fallback_chunks.add(fallback_key)
+
+    selected_by_chunk: list[list[CitationUnitCandidate]] = [
+        [] for _ in candidates_by_chunk
+    ]
+    budget_order: list[CitationUnitCandidate] = []
+    primary_candidates = [
+        (chunk_index, chunk_candidates[0])
+        for chunk_index, chunk_candidates in enumerate(candidates_by_chunk)
+        if chunk_candidates
+    ]
+    followup_candidates = [
+        (chunk_index, candidate)
+        for chunk_index, chunk_candidates in enumerate(candidates_by_chunk)
+        for candidate in chunk_candidates[1:]
+    ]
+    followup_candidates.sort(
+        key=lambda item: (
+            -item[1].lexical_relevance,
+            -item[1].intent_alignment,
+            -item[1].score,
+            item[0],
+            item[1].citation_unit_id or 0,
+        )
+    )
+    for chunk_index, candidate in [*primary_candidates, *followup_candidates]:
+        if len(budget_order) >= max_evidence_units:
+            break
+        unit_id = candidate.citation_unit_id
+        if unit_id is not None and unit_id in seen_unit_ids:
+            continue
+        text_key = _citation_candidate_text_key(candidate)
+        if text_key in seen_text_keys:
+            continue
+        if not _fits_evidence_context_budget(
+            budget_order,
+            candidate,
+            max_total_chars=max_total_chars,
+        ):
+            continue
+        selected_by_chunk[chunk_index].append(candidate)
+        budget_order.append(candidate)
+        if unit_id is not None:
+            seen_unit_ids.add(unit_id)
+        seen_text_keys.add(text_key)
+
+    candidates = [
+        candidate
+        for chunk_candidates in selected_by_chunk
+        for candidate in chunk_candidates
+    ]
+    return _assign_evidence_markers(candidates)
+
+
+def _select_source_diverse_candidates(
+    ranked_candidates: list[tuple[CitationUnitCandidate, int]],
+    *,
+    limit: int,
+) -> list[CitationUnitCandidate]:
+    if len(ranked_candidates) <= limit:
+        return [candidate for candidate, _ in ranked_candidates]
+
+    selected = [ranked_candidates[0]]
+    remaining = ranked_candidates[1:]
+    while remaining and len(selected) < limit:
+        candidate = max(
+            remaining,
+            key=lambda item: (
+                min(abs(item[1] - selected_item[1]) for selected_item in selected),
+                item[0].score,
+                -item[1],
+                -(item[0].citation_unit_id or 0),
+            ),
+        )
+        selected.append(candidate)
+        remaining.remove(candidate)
+    return [candidate for candidate, _ in selected]
+
+
+def _citation_candidate_text_key(
+    candidate: CitationUnitCandidate,
+) -> tuple[int, str, str]:
+    return (
+        candidate.document_id,
+        str(candidate.chunk_id),
+        " ".join(candidate.text.split()).casefold(),
+    )
+
+
+def _fits_evidence_context_budget(
+    candidates: list[CitationUnitCandidate],
+    candidate: CitationUnitCandidate,
+    *,
+    max_total_chars: int,
+) -> bool:
+    bounded_candidates = _assign_evidence_markers([*candidates, candidate])
+    return len(_build_evidence_context_block(bounded_candidates)) <= max_total_chars
+
+
+def _assign_evidence_markers(
+    candidates: list[CitationUnitCandidate],
+) -> list[CitationUnitCandidate]:
     return [
         CitationUnitCandidate(
             marker=f"S{index}",
@@ -1035,7 +1223,7 @@ def select_evidence_units(
             entity_context_match=item.entity_context_match,
             intent_alignment=item.intent_alignment,
         )
-        for index, item in enumerate(selected[:max_evidence_units], start=1)
+        for index, item in enumerate(candidates, start=1)
     ]
 
 
@@ -1047,6 +1235,7 @@ def _build_citation_unit_candidate(
     evidence_profile: QueryEvidenceProfile,
     technical_identifiers: tuple[str, ...],
     technical_intent: str | None,
+    allow_parent_context: bool = True,
 ) -> CitationUnitCandidate:
     metadata = parse_chunk_metadata(unit.metadata_json, fallback_source_type=chunk.source_type)
     structured_text = _build_bounded_unit_context_text(
@@ -1084,6 +1273,7 @@ def _build_citation_unit_candidate(
         lexical_relevance=lexical_relevance,
         intent_alignment=intent_alignment,
         profile=evidence_profile,
+        allow_parent_context=allow_parent_context,
     )
     score = _score_evidence_candidate(
         chunk_score=chunk.score,
@@ -1108,8 +1298,20 @@ def _build_citation_unit_candidate(
         text=unit.unit_text,
         snippet=build_chunk_snippet(unit.unit_text),
         source_type=metadata.source_type or chunk.source_type,
-        char_start=unit.start_char if unit.start_char is not None else metadata.char_start,
-        char_end=unit.end_char if unit.end_char is not None else metadata.char_end,
+        char_start=(
+            unit.start_char
+            if unit.start_char is not None
+            else metadata.char_start
+            if metadata.char_start is not None
+            else chunk.char_start
+        ),
+        char_end=(
+            unit.end_char
+            if unit.end_char is not None
+            else metadata.char_end
+            if metadata.char_end is not None
+            else chunk.char_end
+        ),
         page_number=metadata.page_number if metadata.page_number is not None else chunk.page_number,
         start_time=metadata.start_time if metadata.start_time is not None else chunk.start_time,
         end_time=metadata.end_time if metadata.end_time is not None else chunk.end_time,
@@ -1513,6 +1715,7 @@ def _has_entity_context_match(
     lexical_relevance: float,
     intent_alignment: float,
     profile: QueryEvidenceProfile,
+    allow_parent_context: bool = True,
 ) -> bool:
     if profile.query_type not in ENTITY_CONTEXT_QUERY_TYPES:
         return False
@@ -1531,6 +1734,9 @@ def _has_entity_context_match(
     )
     if _has_entity_exact_match(structured_context_text, profile=profile):
         return True
+
+    if not allow_parent_context:
+        return False
 
     return _has_local_entity_anchor(
         unit_text=unit_text,

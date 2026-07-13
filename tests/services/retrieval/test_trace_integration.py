@@ -103,6 +103,13 @@ async def test_retrieval_returns_trace_id_and_records_selected_evidence(
     assert items[0].selected_for_context is True
     assert items[0].filtered_reason == RetrievalFilteredReason.NOT_FILTERED
     assert "selected evidence" in items[0].candidate_text_preview
+    trace_metadata = json.loads(trace.metadata_json or "{}")
+    item_metadata = json.loads(items[0].metadata_json or "{}")
+    assert trace_metadata["citation_ready_count"] == 0
+    assert trace_metadata["citation_missing_count"] == 1
+    assert trace_metadata["citation_missing_reasons"] == {"missing_both": 1}
+    assert item_metadata["citation_ready"] is False
+    assert item_metadata["citation_readiness_reason"] == "missing_both"
 
 
 @pytest.mark.anyio
