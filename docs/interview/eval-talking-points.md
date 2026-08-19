@@ -1,143 +1,98 @@
-# RAG Eval Talking Points
+# RAG Evaluation Talking Points
 
-## 1. Why Evaluation Was Added
+## One Official Regression Suite
 
-PureLink added eval because RAG changes are otherwise too easy to discuss only by anecdote. The goal is not to claim a statistically complete benchmark. The goal is to make retrieval and citation changes repeatable enough to catch regressions and explain tradeoffs.
+The only current official interview regression suite is [`rag_generalization_cases.jsonl`](../../tests/eval/rag_generalization_cases.jsonl): 50 deterministic cases over nine small cross-domain documents, with 44 answerable and 6 no-answer cases. It exercises the real ingestion, indexing, routed retrieval, evidence selection, Evidence Support, Answer Policy, citation-readiness, and trace paths.
 
-The eval baseline helps answer:
+The earlier 20-case repository-doc comparison is historical. Its files remain for provenance, but its metrics and `make eval-rag-legacy-20` command are not the current interview result.
 
-- Did the expected source document appear in retrieved evidence?
-- Did citation-ready evidence include the expected source?
-- Did the expected source appear near the top?
-- Did retrieved context cover the expected keywords?
-- Was a retrieval trace recorded?
-- When `auto` was requested, which concrete mode did the router select?
+## Why Two Snapshots Exist
 
-## 2. Dataset
+### Deterministic Regression Baseline
 
-The current baseline uses 20 repository-doc cases from [rag-eval-cases.json](rag-eval-cases.json).
+Configuration:
 
-Case types:
-
-- overview: 4
-- technical: 6
-- relation: 5
-- factual: 5
-
-The cases are based on PureLink's own documentation, including retrieval, ingestion, GraphRAG, product workspace, eval, and smoke docs. This makes the baseline easy to reproduce locally and useful for interview demos.
-
-## 3. Compared Baselines
-
-The runner compares:
-
-- `fixed + chunk_only`
-- `block_aware + chunk_only`
-- `block_aware + hybrid_text`
-- `block_aware + graph_vector_mix`
-- `block_aware + auto`
-
-Fixed and block-aware chunking are compared by rebuilding separate temporary KBs because chunk strategy is decided during ingestion.
-
-## 4. Metrics
-
-- `retrieval_hit`: final retrieved evidence includes the expected source document.
-- `citation_hit`: citation-ready evidence includes the expected source document.
-- `top_1_doc_hit`: expected source is the first final evidence document.
-- `top_3_doc_hit`: expected source appears in the first three final evidence documents.
-- `keyword_coverage`: fraction of expected keywords found in retrieved context.
-- `trace_available`: retrieval wrote a trace id.
-- `selected_mode`: actual retrieval mode used. For `auto`, this is selected by the Query Router.
-- `router_reason`: rule-based explanation for `auto`.
-- `answer_contains_expected`: currently not calculated because this baseline evaluates retrieval and citation evidence, not generated answers.
-
-## 5. Current Results
-
-Current generated summary: [rag-eval-baseline-summary.md](rag-eval-baseline-summary.md).
-
-| Baseline | retrieval_hit | citation_hit | top_1_doc_hit | top_3_doc_hit | keyword_coverage | trace_available |
-|---|---:|---:|---:|---:|---:|---:|
-| `fixed_chunk_only` | 50.0% | 50.0% | 20.0% | 25.0% | 29.3% | 100.0% |
-| `block_aware_chunk_only` | 65.0% | 65.0% | 35.0% | 45.0% | 27.7% | 100.0% |
-| `block_aware_hybrid_text` | 55.0% | 55.0% | 20.0% | 40.0% | 21.7% | 100.0% |
-| `block_aware_graph_vector_mix` | 30.0% | 30.0% | 15.0% | 20.0% | 20.0% | 100.0% |
-| `block_aware_auto` | 45.0% | 45.0% | 25.0% | 40.0% | 21.4% | 100.0% |
-
-Auto selected modes in the current run:
-
-- `chunk_only`: 7
-- `graph_vector_mix`: 5
-- `hybrid_text`: 6
-- `overview`: 2
-
-## 6. Honest Findings
-
-Block-aware chunking is the clearest current win:
-
-- `block_aware_chunk_only` improved retrieval_hit and citation_hit by +15.0 percentage points compared with `fixed_chunk_only`.
-- It also improved top-1 and top-3 document hit rates in the current run.
-- Keyword coverage is slightly lower than `fixed_chunk_only` in the current run, so do not describe block-aware as improving every metric.
-
-Hybrid text is useful, but not globally better:
-
-- Overall, `block_aware_hybrid_text` is below `block_aware_chunk_only` in retrieval_hit and citation_hit in the current run.
-- For technical/API/config cases, it produced 66.7% retrieval_hit and 66.7% citation_hit.
-- The correct framing is that `hybrid_text` is a targeted mode for exact technical tokens, not a universal replacement for vector retrieval.
-
-Graph vector mix is currently limited on this docs corpus:
-
-- `block_aware_graph_vector_mix` produced 30.0% retrieval_hit and 30.0% citation_hit overall.
-- For relation/dependency cases, it produced 20.0% retrieval_hit, 20.0% citation_hit, and 30.0% keyword coverage.
-- The honest takeaway is that the current lightweight local-rule graph helps expose provenance and graph debugging, but it is not yet a strong global retrieval winner.
-
-Auto router improves ergonomics and observability, not global optimality:
-
-- `block_aware_auto` records selected modes and router reasons.
-- It helps users avoid manually selecting modes.
-- It is still rule-based and does not guarantee the best baseline score for every query.
-- In the current run, `block_aware_auto` produced 45.0% retrieval_hit and 45.0% citation_hit overall.
-
-Trace availability is stable:
-
-- All current baselines report 100.0% trace availability.
-- This is important for debugging because every eval case can be inspected through trace metadata.
-
-## 7. What Not to Overclaim
-
-- The eval baseline is small and docs-based. It is a regression and interview
-  demonstration baseline, not a statistically broad benchmark.
-- GraphRAG is lightweight and PostgreSQL-backed. It is not a Neo4j-scale graph
-  platform and should not be described as full graph reasoning.
-- The `auto` router is rule-based. It improves ergonomics and observability, but
-  it is not LLM planning and does not guarantee the best mode for every query.
-- The reranker is optional. Some local demos may run without a learned reranker.
-- Local hashed embedding exists for deterministic tests and fixture execution;
-  it is not a production-quality embedding model.
-- Production deployment still needs HTTPS/reverse proxy hardening, secret
-  management, monitoring, backups, and environment-specific operations.
-
-## 8. How This Guides Next Iteration
-
-The eval points to specific next work:
-
-- Expand the eval dataset beyond repository docs before claiming broad quality improvements.
-- Add more technical cases to test `hybrid_text` where it should win.
-- Improve graph extraction quality before expecting `graph_vector_mix` to outperform vector retrieval.
-- Add answer-level evaluation only after retrieval/citation metrics are stable.
-- Keep `auto` explanations visible so routing mistakes can become test cases.
-
-## 9. Reproduction Command
-
-```bash
-make eval-rag-baseline
+```env
+CHUNK_STRATEGY=block_aware
+EMBEDDING_PROVIDER=local_hashed_bow
+EMBEDDING_MODEL=hashed_bow_v1
+RERANKER_ENABLED=false
+RERANKER_PROVIDER=noop
 ```
 
-Equivalent direct command:
+Question answered: “Did a system change cause regression?”
 
-```bash
-.venv/bin/python scripts/eval/run_rag_eval_baseline.py \
-  --cases docs/interview/rag-eval-cases.json \
-  --output docs/interview/rag-eval-baseline-results.json \
-  --summary docs/interview/rag-eval-baseline-summary.md
+| Metric | Result |
+|---|---:|
+| retrieval_hit | 43 / 44 |
+| citation_hit | 43 / 44 |
+| expected_evidence_hit | 39 / 44 |
+| forbidden_evidence_clean | 9 / 9 |
+| mean_evidence_precision | 72.3% (n=42) |
+| router_accuracy | 50 / 50 |
+| answerability_accuracy | 49 / 50 |
+| trace_available | 50 / 50 |
+
+Snapshot: [answer-policy-auto-block-aware](../../tests/eval/baselines/answer-policy-auto-block-aware/summary.md).
+
+### Default Runtime Evaluation
+
+Configuration:
+
+```env
+CHUNK_STRATEGY=fixed
+EMBEDDING_PROVIDER=fastembed
+EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
+RERANKER_ENABLED=false
+RERANKER_PROVIDER=noop
 ```
 
-The baseline can change slightly when documentation content changes, because repository docs are the eval corpus.
+Question answered: “How does the actual Demo default perform?”
+
+| Metric | Result |
+|---|---:|
+| retrieval_hit | 44 / 44 |
+| citation_hit | 44 / 44 |
+| expected_evidence_hit | 36 / 44 |
+| forbidden_evidence_clean | 8 / 9 |
+| mean_evidence_precision | 70.6% (n=41) |
+| router_accuracy | 50 / 50 |
+| answerability_accuracy | 47 / 50 |
+| trace_available | 50 / 50 |
+
+Snapshot: [runtime-fastembed-fixed](../../tests/eval/baselines/runtime-fastembed-fixed/summary.md).
+
+Do not rank these as “simple versus advanced.” Hashed BoW is the repeatable regression fixture; FastEmbed describes the user-facing runtime. Both expose real failures.
+
+## What the Metrics Mean
+
+- `retrieval_hit`: final evidence contains an expected document.
+- `citation_hit`: final evidence from the expected document is citation-ready.
+- `expected_evidence_hit`: canonical final evidence contains an expected phrase.
+- `forbidden_evidence_clean`: no explicitly forbidden phrase reached final evidence.
+- `evidence_precision`: recognized relevant evidence divided by recognized relevant plus irrelevant evidence; unknown evidence is excluded.
+- `router_accuracy`: AUTO selected the labeled expected mode.
+- `answerability_accuracy`: the deterministic production support decision matched the case label.
+- `trace_available`: a retrieval trace was persisted.
+
+These are phrase/document heuristics, not semantic correctness or LLM-as-judge. Router accuracy is not answer quality, retrieval hit is not answerability, and 49/50 answerability does not imply 98% real-world QA accuracy.
+
+## Evidence Selection Result
+
+The final support-aware narrowing experiment applies only to explicit `entity_attribute`, `exact_technical`, and `entity_relation` support IDs. It preserves overview/generic breadth and keeps unsupported evidence available for diagnostics while Answer Policy skips the provider.
+
+Against the pre-change working tree, deterministic precision improved from 67.3% to 72.3% while retrieval/citation stayed 43/44, expected evidence stayed 39/44, forbidden clean stayed 9/9, router stayed 50/50, and answerability stayed 49/50. The independent 20-case holdout was unchanged: retrieval/citation 16/16, expected evidence 13/16, forbidden clean 12/12, router/answerability/trace 20/20, and precision 100% on 13 applicable cases.
+
+## Reproduce
+
+```bash
+make eval-rag-generalization
+make eval-rag-generalization-holdout
+make eval-rag-runtime
+```
+
+`make eval-rag-runtime` requires FastEmbed and the model cache; first use may download the model. Generated local runs go under `data/eval_runs/`; committed snapshots are sanitized.
+
+## Interview Answer
+
+> I use one 50-case cross-domain suite for the current interview regression story. The deterministic stack catches code regressions, while a separate run of the same cases records the real fixed/FastEmbed Demo defaults. The metrics deliberately separate retrieval, final evidence, forbidden leakage, routing, support-gate answerability, trace availability, and local latency. They reveal remaining selection and answerability failures rather than hiding them behind one accuracy number.

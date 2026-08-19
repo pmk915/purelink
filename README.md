@@ -11,7 +11,7 @@ PureLink is a local-first, self-hosted RAG knowledge workspace with structured d
 [![Next.js](https://img.shields.io/badge/Next.js-14-black.svg?logo=next.js)](frontend/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg?logo=docker&logoColor=white)](docker-compose.yml)
 
-[Engineering highlights](#engineering-highlights) · [Evaluation](#evaluation-snapshot) · [Architecture](#architecture-and-request-flow) · [Code tour](#where-to-start) · [Quick start](#quick-start) · [Documentation](#documentation)
+[Core decisions](#core-engineering-decisions) · [Evaluation](#evaluation-snapshot) · [Architecture](#architecture-and-request-flow) · [Demo](#product-walkthrough) · [Quick start](#quick-start) · [Documentation](#documentation)
 
 </div>
 
@@ -19,24 +19,26 @@ PureLink is a local-first, self-hosted RAG knowledge workspace with structured d
   <img src="docs/assets/screenshots/citation-drawer.png" alt="PureLink answer with an inline citation and the citation provenance drawer" width="100%">
 </p>
 
-PureLink is built for developers who want to inspect how a text-based RAG system processes documents, retrieves evidence, decides whether an answer is supportable, and maps provider output back to source locations. It combines personal and team knowledge workspaces with backend-generated citations, processing diagnostics, retrieval traces, and reproducible evaluation.
+PureLink is an engineering-focused RAG knowledge workspace that makes document processing, retrieval decisions, evidence sufficiency, citations, and failure states explicit, observable, and testable. It combines personal and team workspaces with backend-grounded citations, processing diagnostics, retrieval traces, and reproducible evaluation.
 
-The project addresses a gap common in small RAG demos: retrieval and answer generation often work as an opaque request, while parser decisions, chunk boundaries, evidence sufficiency, citation provenance, and failure states remain hidden. PureLink keeps those boundaries explicit and testable. It is an engineering-oriented reference project, not a production-audited SaaS platform or a claim of state-of-the-art retrieval quality.
+## Problem
 
-## Engineering Highlights
+Small RAG demos commonly flatten document structure, hide retrieval strategy, treat retrieved relevance as answerability, delegate citation markers to the model, require logs to diagnose failures, and evaluate quality changes only by anecdote. PureLink keeps those boundaries explicit. It is an engineering reference project, not a production-audited SaaS platform or a claim of state-of-the-art retrieval quality.
 
-1. **[Structured document processing](docs/ingestion/file-processing-pipeline.md)** routes supported files through typed parsers, persists `DocumentBlock` records, and uses queued processing/indexing jobs with retry and failure states.
-2. **[Block-aware chunking](docs/ingestion/document-blocks.md)** carries heading paths and source spans forward, keeps small tables and code blocks intact, and has bounded fallback behavior for oversized content.
+## Core Engineering Decisions
+
+1. **[Structured ingestion](docs/ingestion/file-processing-pipeline.md)** persists parser-neutral `DocumentBlock` records so PDF, DOCX, Markdown, and text parsing can evolve separately from chunking. The trade-off is more persisted state and processing work.
+2. **[Chunk and citation-unit dual granularity](docs/ingestion/document-blocks.md)** uses chunks for retrieval context and smaller source-located units for claims and citations. Block-aware chunking is available for regression experiments; the default runtime remains fixed chunking.
 3. **[Hybrid and routed retrieval](docs/rag/retrieval-layer.md)** provides vector, keyword, overview, and lightweight graph candidates behind one retrieval contract; `auto` uses a transparent rule-based query router.
-4. **[Evidence Support Gate](docs/retrieval-and-citations.md)** evaluates whether final evidence covers the entity and requested intent before an answer provider is allowed to run, including deterministic no-answer control.
-5. **[Deterministic Answer Policy](docs/rag/answer-policy.md)** aligns the provider call decision, evidence-only instructions, allowed markers, and post-generation marker validation. External knowledge is disabled for grounded answers.
-6. **[Citation and retrieval observability](docs/rag/retrieval-trace.md)** connects persisted citation units to a clickable Citation Drawer, records candidate and policy decisions in Retrieval Trace, and exposes document processing readiness in the workspace.
+4. **[Evidence Support and Answer Policy](docs/rag/answer-policy.md)** check question-specific support before generation, conservatively narrow explicit attribute/technical/relation evidence, and skip the provider for unsupported questions.
+5. **[Backend-grounded citations](docs/retrieval-and-citations.md)** assign citation identities before generation, restrict allowed markers, validate provider output, and resolve the final drawer from backend evidence.
+6. **[Trace and deterministic evaluation](docs/rag/retrieval-trace.md)** expose routing, candidates, final evidence, support/policy decisions, processing readiness, and repeatable phrase/document metrics.
 
 ## Evaluation Snapshot
 
 ### Deterministic Regression Baseline
 
-The latest committed generalization baseline uses 50 deterministic cases over a small cross-domain corpus: 45 answerable questions and 5 no-answer questions. It does not use an LLM as judge.
+The only current official interview regression suite is the 50-case generalization evaluation over a small cross-domain corpus: 44 answerable questions and 6 no-answer questions. It does not use an LLM as judge.
 
 The committed run uses a deliberately reproducible configuration rather than the default Docker model stack:
 
@@ -51,21 +53,21 @@ RERANKER_PROVIDER=noop
 | Metric | Result |
 |---|---:|
 | Cases | 50 |
-| Retrieval hit | 42 / 45 |
-| Citation hit | 42 / 45 |
-| Expected evidence hit | 32 / 45 |
+| Retrieval hit | 43 / 44 |
+| Citation hit | 43 / 44 |
+| Expected evidence hit | 39 / 44 |
 | Router accuracy | 50 / 50 |
-| Answerability accuracy | 50 / 50 |
-| Forbidden evidence clean | 7 / 9 |
-| Mean evidence precision | 30.9% (46 applicable cases) |
-| No-answer cases | 5 / 5 |
+| Answerability accuracy | 49 / 50 |
+| Forbidden evidence clean | 9 / 9 |
+| Mean evidence precision | 72.3% (42 applicable cases) |
+| No-answer cases | 6 / 6 |
 | Trace available | 50 / 50 |
 
 Source: [committed answer-policy baseline](tests/eval/baselines/answer-policy-auto-block-aware/summary.md). Metric definitions and reproduction details are in [RAG Evaluation](docs/rag/rag-evaluation.md).
 
-This baseline emphasizes repeatability for CI and local regression checks. It is not a production-scale benchmark, does not use LLM-as-judge, and is not the default Docker runtime configuration. Overview retrieval is the weakest category at 3 / 5 retrieval hits and 2 / 5 expected-evidence hits. Expected evidence and forbidden-evidence scores also show that final evidence selection still has known precision and recall failures; those failures remain visible in the committed report.
+This baseline answers “did a system change cause a regression?” It emphasizes repeatability for CI and local checks; it is not a production-scale benchmark or the default Docker model stack. Remaining failures stay visible in the committed report.
 
-### Default Runtime Stack
+### Default Runtime Evaluation
 
 The default local Docker path follows [`.env.example`](.env.example):
 
@@ -77,27 +79,20 @@ RERANKER_ENABLED=false
 RERANKER_PROVIDER=noop
 ```
 
-This is the normal user-facing local runtime path. The repository does not yet contain a directly comparable committed generalization baseline for this exact FastEmbed configuration, so no quality metrics are claimed here; a separately reproduced runtime-stack evaluation can be added later.
+The same 50 cases were also run through the normal user-facing local stack without changing its defaults:
 
-## Product Walkthrough
+| Metric | Result |
+|---|---:|
+| Retrieval hit | 44 / 44 |
+| Citation hit | 44 / 44 |
+| Expected evidence hit | 36 / 44 |
+| Router accuracy | 50 / 50 |
+| Answerability accuracy | 47 / 50 |
+| Forbidden evidence clean | 8 / 9 |
+| Mean evidence precision | 70.6% (41 applicable cases) |
+| Trace available | 50 / 50 |
 
-### Retrieval Trace and Routed Evidence
-
-An `auto` technical query routes to keyword + vector hybrid retrieval with an explicit reason, trace id, reranker status, and scored source evidence. The current frontend exposes routing and candidate details; Evidence Support and Answer Policy decisions remain backend trace metadata rather than fields in this panel.
-
-![PureLink Retrieval Debug showing AUTO routing, the selected hybrid mode, router reason, trace id, and evidence](docs/assets/screenshots/retrieval-trace.png)
-
-### Document Processing Inspector
-
-The document-level inspector shows an indexed, RAG-ready document and the persisted blocks, chunks, citation units, vector index, and graph index checks used to diagnose readiness without reading worker logs.
-
-![PureLink Document Processing Inspector showing ready pipeline checks and index status](docs/assets/screenshots/processing-inspector.png)
-
-### Graph Explorer
-
-The lightweight Graph Explorer supports entity search and one-hop inspection. Relation sources retain the public document name, chunk and citation-unit references, and the grounded source snippet.
-
-![PureLink Graph Explorer showing an entity relation and document source provenance](docs/assets/screenshots/graph-explorer.png)
+Source: [committed default-runtime snapshot](tests/eval/baselines/runtime-fastembed-fixed/summary.md). This run answers “how does the actual Demo default perform?” It is reported separately from the deterministic regression baseline; neither configuration is presented as universally superior. Latency is local in-process timing and excludes ingestion, HTTP, LLM generation, and frontend rendering.
 
 ## Architecture and Request Flow
 
@@ -159,6 +154,22 @@ flowchart TD
 The detailed ingestion and retrieval diagrams live in [RAG Pipeline](docs/rag/rag-pipeline.md) and [RAG v2 Architecture](docs/architecture/rag-v2-architecture.md).
 
 Docker Compose runs the Python worker entry point at [`app/workers/processing_worker_main.py`](app/workers/processing_worker_main.py). The separate [`worker-go`](worker-go/) implementation is experimental and is not feature-equivalent to, or used by, the default Compose stack. See [Docker Deployment](docs/development/docker-deployment.md#python-and-go-worker-positioning).
+
+## Product Walkthrough
+
+### Retrieval Trace and Routed Evidence
+
+An `auto` technical query routes to keyword + vector hybrid retrieval with an explicit reason, trace id, reranker status, and scored source evidence. Evidence Support and Answer Policy decisions are stored in backend trace metadata.
+
+![PureLink Retrieval Debug showing AUTO routing, the selected hybrid mode, router reason, trace id, and evidence](docs/assets/screenshots/retrieval-trace.png)
+
+### Document Processing Inspector
+
+The document-level inspector shows an indexed, RAG-ready document and the persisted blocks, chunks, citation units, vector index, and graph index checks used to diagnose readiness without reading worker logs.
+
+![PureLink Document Processing Inspector showing ready pipeline checks and index status](docs/assets/screenshots/processing-inspector.png)
+
+The [5-minute Demo Guide](docs/interview/purelink-demo-guide.md) keeps Graph Explorer, team KBs, processing jobs, manual modes, and rerankers as optional follow-ups rather than main-flow steps.
 
 ## Quick Start
 

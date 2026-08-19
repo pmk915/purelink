@@ -91,9 +91,9 @@ document -> blocks -> normalized text -> chunks
 
 当前支持 heading、text、table、code，并保留 image/formula placeholder。这样后续可以做更精细的 chunking、table-aware retrieval、GraphRAG entity extraction 和多模态扩展。
 
-### M8 RAG Eval
+### Evaluation
 
-M8 增加 JSONL eval harness，用确定性指标评估 RAG：
+项目使用 JSONL eval harness，用确定性指标评估 RAG：
 
 - retrieval hit
 - citation hit
@@ -102,7 +102,7 @@ M8 增加 JSONL eval harness，用确定性指标评估 RAG：
 - reranker usage
 - trace availability
 
-它不使用 LLM-as-judge，适合本地重复跑 baseline 和 regression。
+它不使用 LLM-as-judge，适合本地重复跑 regression。当前唯一正式面试口径是 50-case generalization suite；deterministic snapshot 用于发现 regression，fixed + FastEmbed snapshot 用于描述真实 Demo 默认栈。
 
 ### M7 Lightweight GraphRAG
 
@@ -138,7 +138,10 @@ flowchart TD
   L --> N[Optional Reranker]
   M --> N
   N --> O[Final Evidences]
-  O --> P[Answer with Citations]
+  O --> P[Evidence Support]
+  P --> S[Support-aware Narrowing]
+  S --> T[Answer Policy]
+  T --> U[Backend-grounded Citations]
   J --> Q[Retrieval Trace]
   Q --> R[RAG Eval]
 ```
@@ -152,7 +155,7 @@ flowchart TD
 - retrieval trace，可调试候选、分数、过滤原因和最终证据。
 - DocumentBlock parser routing，为结构化解析、表格和 GraphRAG 打基础。
 - lightweight GraphRAG，实体/关系信号与 vector retrieval 合并。
-- JSONL eval harness，用固定 case 做 retrieval/citation baseline。
+- 50-case generalization harness，分别记录 deterministic regression 与默认 Runtime snapshot。
 - 团队知识库、权限、审核流和文档状态都和 RAG 链路结合。
 
 ## 6. 当前限制
@@ -161,13 +164,21 @@ flowchart TD
 - 没有复杂多跳推理和 graph community detection。
 - 没有外部图数据库。
 - 不是完整多模态 RAG，没有默认 OCR/VLM。
-- 还没有 Agent runtime 和工具编排。
+- Agent runtime 和工具编排不属于最终 Demo 范围。
 - eval 目前是确定性指标，不包含 LLM-as-judge。
 
-## 7. 后续计划
+## 7. 最终定位
 
-- Agent-ready tools：`retrieve_knowledge`、`read_document`、`compare_documents`。
-- 更强 graph extraction：可选 LLM extractor 或更好的规则/NER。
-- 更完善 eval baseline：更多真实 KB case 和模式对比。
-- 可选 `bge-m3` / `bge-reranker-v2-m3` preset。
-- human-in-the-loop RAG workflow：人工审核、反馈和 reindex。
+PureLink v1.0-demo 不再继续堆叠 Agent、LLM router、新 embedding provider、多跳 GraphRAG 或复杂 reranker。项目价值固定为：围绕真实 RAG failure mode 做清晰的工程决策，并通过 processing inspector、retrieval trace、evidence support、backend citation 和可复现 evaluation 验证这些决策。
+
+```text
+Structured Ingestion
+→ Routed Retrieval
+→ Evidence Selection
+→ Evidence Support
+→ Answer Policy
+→ Backend-grounded Citations
+→ Retrieval Trace / Evaluation
+```
+
+Team KB、Processing Jobs 和 PostgreSQL-backed one-hop GraphRAG 是 supporting features，不作为主线继续扩展。

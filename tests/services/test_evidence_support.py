@@ -7,8 +7,14 @@ from app.services.evidence_support import (
     REASON_SUPPORTED,
     evaluate_evidence_support,
 )
-from app.services.qa import NO_RELIABLE_EVIDENCE_MESSAGE, answer_question, build_query_evidence_profile
-from app.services.retrieval.types import RetrievedEvidence
+from app.services.qa import (
+    NO_RELIABLE_EVIDENCE_MESSAGE,
+    CitationUnitCandidate,
+    answer_question,
+    build_query_evidence_profile,
+)
+from app.services.retrieval.citation_builder import build_evidences
+from app.services.retrieval.types import RetrievedEvidence, RetrievalMode, RetrievalResult
 
 
 class CountingAnswerGenerator:
@@ -18,6 +24,15 @@ class CountingAnswerGenerator:
     def generate(self, *, question, evidence_units, prompt) -> str:  # noqa: ANN001
         self.calls += 1
         return "不应该调用 provider [S1]。"
+
+
+class CapturingAnswerGenerator:
+    def __init__(self) -> None:
+        self.evidence_texts: list[str] = []
+
+    def generate(self, *, question, evidence_units, prompt) -> str:  # noqa: ANN001
+        self.evidence_texts = [item.text for item in evidence_units]
+        return f"基于支持证据回答 [{evidence_units[0].marker}]。"
 
 
 def test_support_gate_rejects_unsupported_answer_and_skips_provider() -> None:
@@ -228,11 +243,168 @@ def test_positive_paired_cases_remain_supported(question: str, evidence: str) ->
     assert decision.reason == REASON_SUPPORTED
 
 
+def test_attribute_provider_receives_only_entity_attribute_support() -> None:
+    generator = CapturingAnswerGenerator()
+    candidates = [
+        _candidate(1, "Alice Chen 的办公地点是 Singapore。", "Alice Chen"),
+        _candidate(2, "Bob Li 的办公地点是 Shanghai。", "Bob Li"),
+        _candidate(3, "Carol Wang 的办公地点是 Beijing。", "Carol Wang"),
+    ]
+
+    result, retrieval_result = _answer_from_candidates(
+        question="Alice Chen 在哪里办公？",
+        candidates=candidates,
+        generator=generator,
+    )
+
+    assert result.answer_policy is not None
+    assert result.answer_policy.allow_provider_call is True
+    assert generator.evidence_texts == ["Alice Chen 的办公地点是 Singapore。"]
+    assert [item.text for item in retrieval_result.evidences] == generator.evidence_texts
+    assert retrieval_result.metadata["support_aware_narrowing_applied"] is True
+
+
+def test_exact_technical_provider_excludes_adjacent_config_keys() -> None:
+    generator = CapturingAnswerGenerator()
+    candidates = [
+        _candidate(
+            1,
+            "CHUNK_STRATEGY supports the values fixed and block_aware.",
+            "CHUNK_STRATEGY",
+        ),
+        _candidate(
+            2,
+            "EMBEDDING_PROVIDER supports fastembed and local_hashed_bow.",
+            "EMBEDDING_PROVIDER",
+        ),
+    ]
+
+    _, retrieval_result = _answer_from_candidates(
+        question="CHUNK_STRATEGY 支持哪些值？",
+        candidates=candidates,
+        generator=generator,
+    )
+
+    assert generator.evidence_texts == [
+        "CHUNK_STRATEGY supports the values fixed and block_aware."
+    ]
+    assert [item.text for item in retrieval_result.evidences] == generator.evidence_texts
+
+
+def test_relation_provider_requires_the_explicit_entity_relation() -> None:
+    generator = CapturingAnswerGenerator()
+    candidates = [
+        _candidate(1, "Alice Chen 的合作伙伴是 Bob Li。", "Relationships"),
+        _candidate(2, "Alice Chen 在 Singapore 办公。", "Alice Chen"),
+        _candidate(3, "Bob Li 在 Shanghai 办公。", "Bob Li"),
+    ]
+
+    _, retrieval_result = _answer_from_candidates(
+        question="Alice Chen 和 Bob Li 是什么关系？",
+        candidates=candidates,
+        generator=generator,
+    )
+
+    assert generator.evidence_texts == ["Alice Chen 的合作伙伴是 Bob Li。"]
+    assert [item.text for item in retrieval_result.evidences] == generator.evidence_texts
+
+
+def test_overview_provider_preserves_evidence_breadth() -> None:
+    generator = CapturingAnswerGenerator()
+    candidates = [
+        _candidate(1, "Structured ingestion preserves document blocks.", "Ingestion"),
+        _candidate(2, "Routed retrieval exposes the selected mode.", "Retrieval"),
+        _candidate(3, "Answer Policy blocks unsupported generation.", "Answers"),
+    ]
+
+    _, retrieval_result = _answer_from_candidates(
+        question="总结 PureLink 的主要能力。",
+        candidates=candidates,
+        generator=generator,
+        mode=RetrievalMode.OVERVIEW,
+    )
+
+    assert generator.evidence_texts == [item.text for item in candidates]
+    assert [item.text for item in retrieval_result.evidences] == generator.evidence_texts
+    assert retrieval_result.metadata["support_aware_narrowing_applied"] is False
+
+
 def _decision(question: str, text: str, *, score: float = 0.88):
     return evaluate_evidence_support(
         query=question,
         evidence_units=[_evidence(text=text, score=score)],
         profile=build_query_evidence_profile(question),
+    )
+
+
+def _answer_from_candidates(
+    *,
+    question: str,
+    candidates: list[CitationUnitCandidate],
+    generator: CapturingAnswerGenerator,
+    mode: RetrievalMode = RetrievalMode.CHUNK_ONLY,
+):
+    chunks = [
+        _chunk(
+            text=item.text,
+            score=item.score,
+            chunk_id=item.chunk_id,
+            section_title=item.section_title,
+        )
+        for item in candidates
+    ]
+    retrieval_result = RetrievalResult(
+        query=question,
+        mode=mode,
+        requested_mode=RetrievalMode.AUTO,
+        selected_mode=mode,
+        effective_mode=mode,
+        evidences=build_evidences(candidates),
+        context_text="\n".join(item.text for item in candidates),
+        metadata={
+            "retrieved_chunks": chunks,
+            "context_chunks": chunks,
+            "evidence_units": candidates,
+        },
+    )
+    result = answer_question(
+        question=question,
+        retrieved_chunks=chunks,
+        retrieval_result=retrieval_result,
+        generator=generator,
+    )
+    return result, retrieval_result
+
+
+def _candidate(
+    index: int,
+    text: str,
+    section_title: str,
+) -> CitationUnitCandidate:
+    return CitationUnitCandidate(
+        marker=f"S{index}",
+        citation_id=index,
+        citation_unit_id=index,
+        chunk_db_id=index,
+        chunk_id=f"1:{index}",
+        document_id=1,
+        knowledge_base_id=1,
+        scope="personal",
+        team_id=None,
+        document_name="support.txt",
+        text=text,
+        snippet=text,
+        source_type="text",
+        char_start=index * 100,
+        char_end=index * 100 + len(text),
+        page_number=None,
+        start_time=None,
+        end_time=None,
+        section_title=section_title,
+        source_locator=f"section:{section_title}",
+        heading_path=(section_title,),
+        lexical_relevance=0.9,
+        score=0.9,
     )
 
 
@@ -258,12 +430,18 @@ def _evidence(
     )
 
 
-def _chunk(*, text: str, score: float):
+def _chunk(
+    *,
+    text: str,
+    score: float,
+    chunk_id: str = "1:0",
+    section_title: str | None = None,
+):
     from app.models.enums import KnowledgeBaseScope
     from app.services.document_embedding import RetrievedChunk
 
     return RetrievedChunk(
-        chunk_id="1:0",
+        chunk_id=chunk_id,
         document_id=1,
         knowledge_base_id=1,
         scope=KnowledgeBaseScope.PERSONAL.value,
@@ -277,9 +455,9 @@ def _chunk(*, text: str, score: float):
         page_number=None,
         start_time=None,
         end_time=None,
-        section_title=None,
-        source_locator=None,
-        heading_path=None,
+        section_title=section_title,
+        source_locator=f"section:{section_title}" if section_title else None,
+        heading_path=(section_title,) if section_title else None,
         score=score,
         chunk_db_id=1,
     )

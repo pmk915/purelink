@@ -31,7 +31,8 @@ Run eval only when retrieval logic, graph retrieval, eval cases, or docs used as
 the eval corpus changed:
 
 ```bash
-make eval-rag-baseline
+make eval-rag-generalization
+make eval-rag-generalization-holdout
 ```
 
 ## Docker
@@ -62,7 +63,8 @@ Use `docker compose down -v` only for an intentional local data reset.
 - `README.md` is still a concise project entry point.
 - `docs/README.md` links to current product, RAG, ingestion, development, and interview docs.
 - `docs/interview/purelink-demo-guide.md` matches the current demo flow.
-- `docs/interview/rag-eval-baseline-summary.md` contains only actual runner output.
+- the 50-case deterministic and Runtime snapshots contain only actual runner output.
+- `docs/interview/rag-eval-baseline-summary.md` is clearly marked historical.
 - Known limitations are documented honestly.
 - `make docs-check` passes.
 

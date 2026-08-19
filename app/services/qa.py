@@ -37,6 +37,9 @@ from app.services.chunk_metadata import build_chunk_snippet, parse_chunk_metadat
 from app.services.document_embedding import RetrievedChunk, tokenize_text
 from app.services.evidence_support import (
     OVERVIEW_INTENT,
+    QUERY_TYPE_ENTITY_ATTRIBUTE,
+    QUERY_TYPE_ENTITY_RELATION,
+    QUERY_TYPE_EXACT_TECHNICAL,
     EvidenceSupportDecision,
     evaluate_evidence_support,
 )
@@ -571,6 +574,23 @@ def _answer_with_context_chunks(
         profile=evidence_profile,
         qa_intent=OVERVIEW_INTENT if intent == QAIntent.KB_OVERVIEW else None,
     )
+    evidence_units, final_evidences = select_supported_provider_evidence(
+        evidence_units=evidence_units,
+        final_evidences=final_evidences,
+        support_decision=support_decision,
+    )
+    if retrieval_result is not None:
+        previous_count = len(retrieval_result.evidences)
+        retrieval_result.evidences = list(final_evidences)
+        retrieval_result.metadata.update(
+            {
+                "evidence_units": list(evidence_units),
+                "support_aware_narrowing_applied": previous_count
+                != len(final_evidences),
+                "pre_support_narrowing_evidence_count": previous_count,
+                "provider_evidence_count": len(final_evidences),
+            }
+        )
     _record_evidence_support_metadata(
         db=db,
         retrieval_result=retrieval_result,
@@ -716,6 +736,78 @@ def _align_evidence_units_to_final_evidences(
         for evidence in final_evidences
         if (unit := units_by_key.get(_answer_evidence_key(evidence))) is not None
     ]
+
+
+SUPPORT_AWARE_NARROWING_QUERY_TYPES = frozenset(
+    {
+        QUERY_TYPE_ENTITY_ATTRIBUTE,
+        QUERY_TYPE_EXACT_TECHNICAL,
+        QUERY_TYPE_ENTITY_RELATION,
+    }
+)
+
+
+def select_supported_provider_evidence(
+    *,
+    evidence_units: Sequence[CitationUnitCandidate],
+    final_evidences: Sequence[RetrievedEvidence],
+    support_decision: EvidenceSupportDecision,
+) -> tuple[list[CitationUnitCandidate], list[RetrievedEvidence]]:
+    """Narrow provider evidence only when the support gate has explicit support ids.
+
+    Overview and generic factual questions preserve retrieval breadth. Unsupported
+    questions also keep the original evidence for diagnostics while Answer Policy
+    blocks the provider call.
+    """
+
+    original_units = list(evidence_units)
+    original_evidences = list(final_evidences)
+    if (
+        not support_decision.answerable
+        or support_decision.query_type not in SUPPORT_AWARE_NARROWING_QUERY_TYPES
+        or not support_decision.supporting_evidence_ids
+    ):
+        return original_units, original_evidences
+
+    supporting_ids = set(support_decision.supporting_evidence_ids)
+    selected_units = [
+        item for item in original_units if _provider_evidence_id(item) in supporting_ids
+    ]
+    selected_evidences = [
+        item
+        for item in original_evidences
+        if _provider_evidence_id(item) in supporting_ids
+    ]
+    selected_unit_ids = {_provider_evidence_id(item) for item in selected_units}
+    selected_evidence_ids = {
+        _provider_evidence_id(item) for item in selected_evidences
+    }
+    if (
+        not selected_units
+        or not selected_evidences
+        or selected_unit_ids != selected_evidence_ids
+    ):
+        return original_units, original_evidences
+    return selected_units, selected_evidences
+
+
+def _provider_evidence_id(item: object) -> str:
+    marker = getattr(item, "marker", None)
+    metadata = getattr(item, "metadata", None)
+    if not marker and isinstance(metadata, dict):
+        marker = metadata.get("marker")
+    if marker:
+        return str(marker)
+    citation_unit_id = getattr(item, "citation_unit_id", None)
+    if citation_unit_id is not None:
+        return f"citation_unit:{citation_unit_id}"
+    chunk_db_id = getattr(item, "chunk_db_id", None)
+    if chunk_db_id is not None:
+        return f"chunk_db:{chunk_db_id}"
+    return (
+        f"chunk:{getattr(item, 'document_id', 'unknown')}:"
+        f"{getattr(item, 'chunk_id', 'unknown')}"
+    )
 
 
 def _answer_evidence_key(item: object) -> tuple[int, str, int | None, str]:

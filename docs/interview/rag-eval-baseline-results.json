@@ -1,4 +1,7 @@
 {
+  "status": "historical",
+  "current_official_baseline": "tests/eval/baselines/answer-policy-auto-block-aware",
+  "note": "Earlier 20-case baseline; not the current interview evaluation result.",
   "generated_at": "2026-07-01T15:50:48.027664+00:00",
   "cases_path": "docs/interview/rag-eval-cases.json",
   "case_count": 20,

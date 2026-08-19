@@ -81,19 +81,38 @@ def main() -> None:
                 )
             )
 
-    payload = build_baseline_payload(
-        cases_path=args.cases,
-        cases=cases,
-        source_paths=source_paths,
-        baseline_summaries=baseline_summaries,
-    )
+    payload = {
+        "status": "historical",
+        "current_official_baseline": (
+            "tests/eval/baselines/answer-policy-auto-block-aware"
+        ),
+        "note": (
+            "Earlier 20-case baseline; not the current interview evaluation result."
+        ),
+        **build_baseline_payload(
+            cases_path=args.cases,
+            cases=cases,
+            source_paths=source_paths,
+            baseline_summaries=baseline_summaries,
+        ),
+    }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
 
-    markdown = render_summary_markdown(payload)
+    markdown = render_summary_markdown(payload).replace(
+        "# PureLink RAG Eval Baseline Summary\n",
+        "# PureLink RAG Eval Baseline Summary\n\n"
+        "> **Historical 20-case baseline — not the current interview evaluation result.** "
+        "The only current official regression suite is the "
+        "[50-case generalization evaluation]"
+        "(../../tests/eval/baselines/answer-policy-auto-block-aware/summary.md). "
+        "This file is retained for provenance and can be reproduced only with "
+        "`make eval-rag-legacy-20`.\n",
+        1,
+    )
     validate_summary_markdown(markdown)
     args.summary.parent.mkdir(parents=True, exist_ok=True)
     args.summary.write_text(markdown, encoding="utf-8")
@@ -306,19 +325,31 @@ def _baseline_environment(
     upload_root: Path,
     vector_root: Path,
     chunks_root: Path,
+    embedding_provider: str = "local_hashed_bow",
+    embedding_model: str = "hashed_bow_v1",
+    embedding_dimension: int | None = 128,
+    reranker_enabled: bool = False,
+    reranker_provider: str = "noop",
 ) -> Iterator[None]:
     overrides = {
         "CHUNK_STRATEGY": chunk_strategy,
         "UPLOAD_DIR": upload_root.as_posix(),
         "VECTOR_STORE_DIR": vector_root.as_posix(),
         "CHUNKS_DIR": chunks_root.as_posix(),
-        "EMBEDDING_PROVIDER": "local_hashed_bow",
-        "EMBEDDING_MODEL": "hashed_bow_v1",
-        "EMBEDDING_DIMENSION": "128",
-        "RERANKER_ENABLED": "false",
+        "EMBEDDING_PROVIDER": embedding_provider,
+        "EMBEDDING_MODEL": embedding_model,
+        "EMBEDDING_DIMENSION": (
+            str(embedding_dimension) if embedding_dimension is not None else None
+        ),
+        "RERANKER_ENABLED": str(reranker_enabled).lower(),
+        "RERANKER_PROVIDER": reranker_provider,
     }
     previous = {key: os.environ.get(key) for key in overrides}
-    os.environ.update(overrides)
+    for key, value in overrides.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
     _reset_settings_caches()
     try:
         yield

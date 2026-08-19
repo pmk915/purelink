@@ -178,6 +178,8 @@ RELATION_EVIDENCE_TERMS = RELATION_TERMS + (
     "draws",
     "produce",
     "produces",
+    "conflict",
+    "conflicts",
     "becomes",
     "become",
     "without blocking",
@@ -747,6 +749,36 @@ def _relation_entity_coverage(support_query: _SupportQuery, context: str) -> boo
     return len(hits) >= 2
 
 
+def _explicit_relation_entity_coverage(
+    support_query: _SupportQuery,
+    context: str,
+) -> bool:
+    if not support_query.entity_terms:
+        return True
+    context_tokens = set(_entity_tokens(context))
+    hits = []
+    for term in support_query.entity_terms:
+        tokens = _entity_tokens(term)
+        if tokens and all(
+            _explicit_relation_token_present(token, context_tokens)
+            for token in tokens
+        ):
+            hits.append(term)
+    if len(support_query.entity_terms) <= 1:
+        return bool(hits)
+    return len(hits) >= 2
+
+
+def _explicit_relation_token_present(
+    token: str,
+    context_tokens: set[str],
+) -> bool:
+    aliases = {
+        "显式锁": {"显式锁", "lock", "locks", "locking"},
+    }
+    return any(candidate in context_tokens for candidate in aliases.get(token, {token}))
+
+
 def _relation_support(
     support_query: _SupportQuery,
     evidence_units: Sequence[Any],
@@ -764,7 +796,10 @@ def _relation_support(
         direct_support = [
             item
             for item in document_units
-            if _relation_entity_coverage(support_query, _relation_context_text(item))
+            if _explicit_relation_entity_coverage(
+                support_query,
+                _relation_context_text(item),
+            )
             and _contains_any(_relation_context_text(item).casefold(), RELATION_EVIDENCE_TERMS)
         ]
         if direct_support:
@@ -974,12 +1009,38 @@ def _technical_support(
 
     identifier_seen = False
     for document_units in by_document.values():
-        aggregate = "\n".join(_technical_context_text(item) for item in document_units)
+        contexts = [_technical_context_text(item) for item in document_units]
+        aggregate = "\n".join(contexts)
         if not _exact_identifier_coverage(support_query.exact_identifiers, aggregate):
             continue
         identifier_seen = True
         if _technical_intent_coverage(support_query, aggregate):
-            return True, True, tuple(_evidence_id(item) for item in document_units)
+            identifier_units = [
+                item
+                for item, context in zip(document_units, contexts, strict=False)
+                if _exact_identifier_coverage(
+                    support_query.exact_identifiers,
+                    context,
+                )
+            ]
+            intent_units = [
+                item
+                for item, context in zip(document_units, contexts, strict=False)
+                if _technical_intent_coverage(support_query, context)
+            ]
+            direct_units = [
+                item for item in identifier_units if item in intent_units
+            ]
+            supporting_units = list(direct_units or identifier_units)
+            if not direct_units:
+                for item in intent_units:
+                    if item not in supporting_units:
+                        supporting_units.append(item)
+            if not supporting_units:
+                supporting_units = list(document_units)
+            return True, True, tuple(
+                dict.fromkeys(_evidence_id(item) for item in supporting_units)
+            )
     return identifier_seen, False, ()
 
 

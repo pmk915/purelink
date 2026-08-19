@@ -85,6 +85,11 @@ def main() -> None:
             upload_root=temp_dir / "uploads",
             vector_root=temp_dir / "vector_store",
             chunks_root=temp_dir / "chunks",
+            embedding_provider=args.embedding_provider,
+            embedding_model=args.embedding_model,
+            embedding_dimension=args.embedding_dimension,
+            reranker_enabled=args.reranker_enabled,
+            reranker_provider=args.reranker_provider,
         ):
             results = asyncio.run(
                 run_generalization_cases(
@@ -144,6 +149,33 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--baseline-snapshot-dir", type=Path)
     parser.add_argument("--mode", default=os.environ.get("EVAL_MODE", "auto"))
     parser.add_argument("--chunk-strategy", default=os.environ.get("EVAL_CHUNK_STRATEGY", "block_aware"))
+    parser.add_argument(
+        "--embedding-provider",
+        default=os.environ.get("EVAL_EMBEDDING_PROVIDER", "local_hashed_bow"),
+    )
+    parser.add_argument(
+        "--embedding-model",
+        default=os.environ.get("EVAL_EMBEDDING_MODEL", "hashed_bow_v1"),
+    )
+    parser.add_argument(
+        "--embedding-dimension",
+        type=int,
+        default=(
+            int(os.environ["EVAL_EMBEDDING_DIMENSION"])
+            if os.environ.get("EVAL_EMBEDDING_DIMENSION")
+            else None
+        ),
+    )
+    parser.add_argument(
+        "--reranker-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=os.environ.get("EVAL_RERANKER_ENABLED", "false").strip().lower()
+        in {"1", "true", "yes", "on"},
+    )
+    parser.add_argument(
+        "--reranker-provider",
+        default=os.environ.get("EVAL_RERANKER_PROVIDER", "noop"),
+    )
     parser.add_argument("--run-id")
     return parser.parse_args(argv)
 

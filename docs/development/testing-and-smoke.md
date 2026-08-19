@@ -27,7 +27,8 @@ make test
 cd frontend && npm run lint
 cd frontend && npm run build
 make smoke
-make eval-rag-baseline
+make eval-rag-generalization
+make eval-rag-generalization-holdout
 ```
 
 What each command proves:
@@ -37,15 +38,16 @@ What each command proves:
 - `npm run build`: Next.js production build and TypeScript checks pass.
 - `make smoke`: Docker personal flow can register, create a KB, upload/process a document, retrieve, ask, and persist a conversation.
 - `make smoke`: also checks upload validation failures and the KB processing jobs list endpoint after document processing is submitted.
-- `make eval-rag-baseline`: the reproducible retrieval/citation baseline still runs.
+- `make eval-rag-generalization`: the official 50-case deterministic regression still runs.
+- `make eval-rag-generalization-holdout`: independent cases do not regress.
 
 If `make smoke` fails with Docker socket permissions, the issue is local Docker
 access rather than PureLink app logic. Ensure Docker is running and the current
 user can access `/var/run/docker.sock`, then open a new shell and rerun.
 
-`make eval-rag-baseline` uses repository docs as the eval corpus. Results can
-change slightly after documentation changes, so update
-`docs/interview/rag-eval-baseline-summary.md` only from actual runner output.
+The generalization suite uses the committed cross-domain corpus, not repository
+docs. `make eval-rag-runtime` runs the same cases with fixed chunking and the
+default FastEmbed model; it requires FastEmbed and a local/downloadable model cache.
 
 For Docker-specific startup, production-like Compose, backup/restore, and
 security checklist details, see [Docker Deployment](docker-deployment.md).
@@ -101,13 +103,15 @@ docker compose stop
 
 ```bash
 make eval-rag
-make eval-rag-baseline
+make eval-rag-generalization
+make eval-rag-generalization-holdout
+make eval-rag-runtime
 make eval-rag EVAL_CASES=tests/eval/purelink_rag_interview_cases.local.jsonl
 ```
 
-Run `make eval-rag-baseline` after retrieval or graph lifecycle changes. It
-rebuilds temporary eval KBs and verifies the fixed/block-aware and retrieval
-mode baseline report still runs, including `graph_vector_mix`.
+Run the generalization suite and holdout after retrieval, evidence support, or
+answer-policy changes. The historical 20-case comparison remains available as
+`make eval-rag-legacy-20`, but it is not a release or interview gate.
 
 ## Graph Lifecycle Checks
 

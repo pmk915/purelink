@@ -34,9 +34,21 @@ Key pieces:
 - Processing Job Dashboard exposes running/failed/completed jobs and retryable failures.
 - Upload validation and unified error envelopes make edge cases visible to users.
 - Docker/deployment docs and release checks make the project repeatable for reviewers.
-- RAG eval baseline compares chunking and retrieval modes with deterministic metrics.
+- The 50-case generalization suite separates deterministic regression from the default Runtime evaluation.
 
-## 3. Engineering Decisions
+## 3. Engineering Decisions and Trade-offs
+
+`DocumentBlock`: parser-specific output and chunking were coupled, so PureLink persists a parser-neutral intermediate representation. PDF, DOCX, Markdown, and text parsing can now evolve separately from chunk policy; the cost is more rows and processing stages.
+
+Hybrid retrieval: semantic embeddings are weak on paths, config keys, and CLI commands, so `hybrid_text` merges a deterministic lexical channel with vector candidates. The implementation is observable and low-dependency, but it is not a production inverted index.
+
+Rule router: different query types benefit from a small explicit retrieval strategy space, so AUTO uses deterministic rules and records the reason. An LLM router would add latency, cost, and nondeterminism without a justified benefit at this scale.
+
+PostgreSQL graph: relation questions need explicit candidates with source provenance, so lightweight entities and one-hop relations use the existing database. Current requirements do not justify Neo4j, deep traversal, or graph analytics.
+
+Evidence gate and backend citations: semantically related evidence can still omit the requested fact, and models can fabricate markers. Support is checked before generation; explicit supporting evidence is conservatively narrowed for attribute, technical, and relation queries; backend-owned markers are validated afterward. The gate is heuristic and is not semantic entailment.
+
+Trace and inspector: failures span parsing, indexing, routing, retrieval, selection, support, and generation. Those states are exposed in product/debug metadata instead of requiring SSH or worker-log inspection.
 
 PureLink deliberately avoids several tempting but premature additions.
 
@@ -104,7 +116,7 @@ The ingestion pipeline persists `DocumentBlock` records and can use block-aware 
 
 On the product side, the KB workspace includes Ask, Documents, Graph, Retrieval Debug, Health, and Settings. M19 added a Document Processing Inspector so users can see whether a document is RAG-ready. M20 added a list-based Graph Explorer for entity search, relation filtering, one-hop neighborhoods, source inspection, and graph export. M21 added product polish around upload validation, consistent error states, processing job retry, Docker deployment, and release readiness.
 
-The eval baseline compares fixed chunking, block-aware chunking, hybrid text, graph-vector mix, and auto mode across 20 repository-doc cases. The important point is not that every mode wins. The important point is that the tradeoffs are visible and reproducible.
+The current official baseline is one 50-case cross-domain generalization suite. A deterministic block-aware/hashed run answers whether code changes caused regression; a separate fixed/FastEmbed run describes the actual Demo defaults. The important point is not that one stack wins, but that retrieval, evidence selection, answerability, citations, and failure trade-offs are visible and reproducible.
 
 ### 5-minute version
 

@@ -1,6 +1,6 @@
 # RAG Evaluation
 
-PureLink includes a lightweight JSONL evaluation harness.
+PureLink includes a lightweight JSONL evaluation harness. The only current official interview regression suite is the 50-case generalization set; the earlier 20-case repository-doc comparison is retained as historical material and is not a current result.
 
 Runner:
 
@@ -18,6 +18,12 @@ Independent generalization holdout:
 
 ```bash
 make eval-rag-generalization-holdout
+```
+
+Default Runtime evaluation over the same 50 cases:
+
+```bash
+make eval-rag-runtime
 ```
 
 Custom cases:
@@ -100,7 +106,8 @@ Run output is written under `data/eval_runs/<run-id>/`:
 
 The generated reports should be interpreted as phrase/doc based approximations. Latency is useful only for comparison on the same machine and configuration.
 
-The committed 50-case generalization set is a deterministic regression suite.
+The committed 50-case generalization set is the deterministic regression suite. Its block-aware + hashed-BOW configuration answers whether a code change caused regression. The separate [fixed + FastEmbed snapshot](../../tests/eval/baselines/runtime-fastembed-fixed/summary.md) answers how the actual local Demo defaults perform. The two snapshots share cases and metric definitions but are not ranked as competing model benchmarks.
+
 The independent holdout uses `tests/eval/holdout_corpus/` and
 `tests/eval/rag_generalization_holdout_cases.jsonl`; it must remain separate
 from the production-rule tuning loop. A fixture whose corpus does not contain
@@ -111,10 +118,10 @@ To write a sanitized local preview that can later become a committed baseline sn
 
 ```bash
 make eval-rag-generalization \
-  GENERALIZATION_BASELINE_SNAPSHOT_DIR=tests/eval/baselines/generalization-auto-block-aware
+  GENERALIZATION_BASELINE_SNAPSHOT_DIR=tests/eval/baselines/answer-policy-auto-block-aware
 ```
 
-The snapshot removes live trace ids, temporary database ids, absolute local paths, and secret-like configuration. Do not commit a dirty-worktree snapshot as the official baseline; rerun on a clean commit first.
+The snapshot removes live trace ids, temporary database ids, absolute local paths, and secret-like configuration. It records commit SHA and dirty-worktree state. A dirty snapshot is acceptable evidence during review, but rerun it from the final clean commit before release/tagging.
 
 Supported modes include:
 

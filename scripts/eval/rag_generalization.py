@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -269,10 +270,14 @@ def render_summary_markdown(*, run_metadata: dict[str, Any], results: list[RagEv
 
 
 def git_commit_sha() -> str:
+    if override := os.environ.get("EVAL_COMMIT_SHA", "").strip():
+        return override
     return _git_output(["git", "rev-parse", "--short", "HEAD"]) or "unknown"
 
 
 def git_worktree_dirty() -> bool:
+    if (override := os.environ.get("EVAL_DIRTY_WORKTREE")) is not None:
+        return override.strip().lower() in {"1", "true", "yes", "on"}
     return bool(_git_output(["git", "status", "--porcelain"]))
 
 

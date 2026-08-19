@@ -1,38 +1,22 @@
-# PureLink Interview Demo Guide
+# PureLink 5-Minute Interview Demo
 
-## 1. Demo Goal
+## Goal
 
-Show PureLink as an engineering-focused RAG knowledge base system, not a one-off prompt demo. The demo should make these points visible:
+Demonstrate one engineering story:
 
-- documents are processed through a structured ingestion pipeline
-- retrieval modes can be inspected and compared
-- citations are grounded in backend evidence
-- retrieval traces and document status make failures diagnosable
-- lightweight GraphRAG is source-grounded and maintainable
-- processing jobs expose failures and retry without backend logs
-- eval results are reproducible and honestly reported
-
-## 2. Local Setup
-
-For local test and lint commands:
-
-```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-cd frontend
-npm install
-cd ..
+```text
+Structured Ingestion
+→ Routed Retrieval
+→ Evidence Selection
+→ Evidence Support
+→ Answer Policy
+→ Backend-grounded Citations
+→ Retrieval Trace / Evaluation
 ```
 
-Run core checks:
+PureLink is an engineering-focused RAG knowledge workspace. The main demo is deliberately limited to five steps; supporting features are available only for follow-up questions.
 
-```bash
-make test
-cd frontend && npm run lint
-cd frontend && npm run build
-```
-
-## 3. Docker Setup
+## Before the Interview
 
 ```bash
 cp .env.example .env
@@ -40,249 +24,118 @@ docker compose up -d --build db redis api worker frontend
 docker compose ps
 ```
 
-Open:
+Open `http://localhost:3000`, register a local user, and create a personal knowledge base. Use a real text document that contains the `CHUNK_STRATEGY`, `fixed`, and `block_aware` terms; [`docs/ingestion/document-blocks.md`](../ingestion/document-blocks.md) is suitable. Keep a second unsupported question ready whose answer is absent from the uploaded corpus.
 
-- Frontend: `http://localhost:3000`
-- API: `http://localhost:8000`
-- Swagger: `http://localhost:8000/docs`
+## Main Flow
 
-Useful commands:
+### Step 1 — Upload
 
-```bash
-docker compose logs -f api worker frontend
-docker compose restart api worker frontend
-docker compose down
-docker compose down -v
-```
-
-`docker compose down -v` deletes the database volume. Use it only when you want a clean local reset.
-
-## 4. Recommended Demo Flow
-
-### Step 1: Open KB Workspace
-
-Create or open a personal KB. If you want to demonstrate team permissions, create a team KB and add a member through the invite flow.
-
-Upload a small set of text documents. Good demo sources are:
-
-- `README.md`
-- `docs/rag/retrieval-layer.md`
-- `docs/retrieval-and-citations.md`
-- `docs/ingestion/file-processing-pipeline.md`
-- `docs/ingestion/document-blocks.md`
-- `docs/rag/lightweight-graphrag.md`
-- `docs/product/kb-workspace.md`
-- `docs/development/testing-and-smoke.md`
-
-### Step 2: Upload and Inspect Documents
-
-Open the Documents tab and wait for processing to finish. Show that the document row exposes status/debug instead of requiring backend logs.
-
-### Step 3: Ask a Normal Factual Question
-
-Use the Ask tab:
+Upload the document and show the processing transition:
 
 ```text
-What retrieval modes does PureLink support?
+processing → blocks → chunks → citation units → index
 ```
 
-Show the answer and citations.
+Say: “The system persists a parser-neutral `DocumentBlock` representation, then creates retrieval chunks and smaller citation units. Parsing policy can evolve separately from chunking and citation policy.”
 
-### Step 4: Ask a Technical API or Config Question
+Trade-off: structured ingestion creates more rows and processing stages than flattening every file into one text stream.
 
-Use:
+### Step 2 — Document Processing Inspector
 
-```text
-Where is CHUNK_STRATEGY configured?
-```
+Open the document inspector and show:
 
-Explain that technical tokens are better suited to `hybrid_text` or `auto -> hybrid_text`.
-
-### Step 5: Ask a Relation or Dependency Question
-
-Use:
-
-```text
-How are DocumentBlock and chunks related?
-```
-
-Explain how relation/dependency queries can route toward `graph_vector_mix` through the rule-based router.
-
-### Step 6: Show Retrieval Details and Trace
-
-Open Retrieval Details or Retrieval Debug. Show:
-
-- requested mode
-- selected mode
-- router reason for `auto`
-- citations
-- trace id
-- retrieved evidence list
-
-### Step 7: Show Document Processing Inspector
-
-From the Documents tab, open document status. Highlight:
-
-- processing status
-- RAG-ready badge
-- block, chunk, citation unit, vector index, and graph index counts
-- warnings/errors
-- copyable debug JSON
-
-### Step 8: Show Processing Jobs
-
-Open the Processing Jobs panel in the Documents tab. Highlight:
-
-- running, failed, and completed job counts
-- status filter and document search
-- current step and attempt count
-- error code/message for failed jobs
-- retry behavior for owner/admin users
-
-Frame retry honestly: it creates a new queued worker job. It does not run parsing
-synchronously in the browser or API request.
-
-### Step 9: Show Graph Explorer
-
-Open the Graph tab. Demonstrate:
-
-- entity search
-- relation type filter
-- selecting an entity to inspect one-hop relations
-- opening relation sources
-- jumping from a source document to Document Processing Inspector
-- exporting JSON or CSV
-
-Keep the framing honest: this is a lightweight source-grounded graph explorer, not a Neo4j-style graph canvas.
-
-### Step 10: Show RAG Eval Baseline
-
-Open [rag-eval-baseline-summary.md](rag-eval-baseline-summary.md), then run:
-
-```bash
-make eval-rag-baseline
-```
-
-Explain that the runner builds temporary KBs from repository docs and compares fixed chunking, block-aware chunking, hybrid text, graph-vector mix, and auto router.
-
-## 5. Suggested Demo Questions
-
-Overview:
-
-```text
-What is PureLink's retrieval layer responsible for?
-Give me an overview of the KB workspace.
-```
-
-Technical/API/config:
-
-```text
-Where is CHUNK_STRATEGY configured?
-What does hybrid_text retrieval do?
-Which trace metadata is returned for auto mode?
-```
-
-Relation/dependency:
-
-```text
-How are DocumentBlock and chunks related?
-How does GraphRAG relation provenance work?
-What is the relationship between graph maintenance and team permissions?
-```
-
-Factual QA:
-
-```text
-What retrieval modes does PureLink support?
-Is the reranker required?
-What does the RAG eval baseline compare?
-```
-
-Citation/debug:
-
-```text
-Which sources support this answer?
-What selected retrieval mode and trace id did this answer use?
-```
-
-Document processing:
-
-```text
-Is this document RAG-ready?
-Which processing step failed?
-Can this failed document be retried?
-```
-
-Graph explorer:
-
-```text
-Show entities related to DocumentBlock.
-Which source snippets support this relation?
-```
-
-## 6. What to Say in Interviews
-
-Short version:
-
-```text
-PureLink is a personal and team knowledge-base RAG system focused on engineering reliability. I built ingestion, block-aware chunking, multiple retrieval modes, query routing, citation grounding, retrieval traces, lightweight GraphRAG, eval baselines, and product-facing debugging tools such as the Document Inspector, Graph Explorer, and Processing Job Dashboard.
-```
-
-When showing Ask:
-
-```text
-The answer is not the only product. The evidence, citations, selected retrieval mode, and trace id are also part of the user-facing debugging loop.
-```
-
-When showing Graph Explorer:
-
-```text
-This is intentionally list-based and source-grounded. The goal is to inspect graph evidence and provenance, not to build a complex graph visualization system.
-```
-
-When showing eval:
-
-```text
-The eval is a small regression baseline over repository docs. It is useful because it is repeatable and exposes tradeoffs, not because it claims statistical significance.
-```
-
-## 7. Known Limitations
-
-- The current GraphRAG is lightweight and rule-based.
-- GraphRAG is lightweight, not Neo4j-scale.
-- There is no external graph database.
-- There is no graph canvas visualization.
-- Auto router is rule-based, not LLM planning.
-- Reranker is optional.
-- Local hashed embedding is for deterministic tests, not production quality.
-- The default local LLM provider can be heuristic for offline demos.
-- The eval baseline is small and docs-based.
-- `answer_contains_expected` is not calculated in the current baseline because the baseline evaluates retrieval and citation evidence, not generated answers.
-- Production deployment still needs HTTPS, reverse proxy hardening, secret management, monitoring, and backup operations.
-- OCR, ASR, and multimodal RAG are not part of the default Core path.
-
-## 8. Troubleshooting
-
-If smoke fails with Docker permissions:
-
-```text
-permission denied while trying to connect to the docker API at unix:///var/run/docker.sock
-```
-
-Fix Docker access, then open a new shell and rerun `make smoke`.
-
-If documents are not RAG-ready, open Document Processing Inspector and check:
-
+- RAG Ready
+- block count
 - chunk count
-- citation unit count
-- vector index status
-- latest processing job step
-- error code/message
+- citation-unit count
+- vector index
+- graph index
 
-If retrieval quality looks wrong, check:
+Say: “A user should not need worker logs to learn why a file is not searchable. Readiness and failure states are product-visible.”
 
-- retrieval mode
-- selected mode when using `auto`
-- trace id and trace metadata
-- whether vector index metadata matches current embedding provider/model
-- whether the expected source document was indexed
+### Step 3 — Technical Question and Citations
+
+Ask:
+
+```text
+CHUNK_STRATEGY 支持哪些值？
+```
+
+Show `AUTO → hybrid_text`, the grounded answer, inline markers, and Citation Drawer.
+
+Say: “Semantic embeddings are not ideal for config keys, API paths, and CLI commands. The keyword channel adds observable exact-match candidates; the trade-off is a simple local scan rather than a production inverted index. Citation identities come from the backend, and provider markers are validated after generation.”
+
+### Step 4 — Retrieval Trace
+
+Show:
+
+- requested, selected, and effective mode
+- router reason
+- candidate and final-evidence scores
+- trace id
+- Evidence Support and Answer Policy metadata
+
+Say: “When an answer fails, I need to distinguish routing, retrieval, selection, evidence support, and answer-policy failures. A deterministic rule router is sufficient for this small explicit strategy space; an LLM router would add latency, cost, and nondeterminism.”
+
+### Step 5 — Unsupported Question
+
+Ask a question whose requested fact is absent from the uploaded corpus, for example a nonexistent author or default value.
+
+Show:
+
+```text
+Evidence Support rejects
+→ Answer Policy refuses
+→ provider skipped
+→ citations=[]
+```
+
+Say: “Retrieved relevance is not answerability. Semantically related evidence can still lack the requested fact, so generation is gated before the model sees context.”
+
+## Evaluation Talking Point
+
+The only current official regression suite is the [50-case deterministic generalization baseline](../../tests/eval/baselines/answer-policy-auto-block-aware/summary.md):
+
+```bash
+make eval-rag-generalization
+make eval-rag-generalization-holdout
+```
+
+The [default Runtime snapshot](../../tests/eval/baselines/runtime-fastembed-fixed/summary.md) uses the same 50 cases with fixed chunking and FastEmbed:
+
+```bash
+make eval-rag-runtime
+```
+
+Frame them separately: deterministic evaluation detects regression; runtime evaluation describes the actual Demo defaults. Neither is an LLM-judge benchmark or a production-quality claim.
+
+## Optional / Follow-up Demo
+
+Only show these when the interviewer asks:
+
+- Graph Explorer and one-hop source provenance
+- team knowledge bases and review permissions
+- Processing Job Dashboard and retry
+- manual retrieval modes
+- optional reranker
+- graph lifecycle and export
+- production-like Docker Compose setup
+
+The graph is lightweight, one-hop/source-grounded, and PostgreSQL-backed. It is not multi-hop GraphRAG or a Neo4j-style analytics platform. The Python worker is the supported Compose path; `worker-go` is experimental and not feature-equivalent.
+
+## Honest Limits
+
+- The corpus is small and phrase/document metrics approximate evidence quality.
+- The rule-based router and Evidence Support Gate are deterministic heuristics.
+- Default FastEmbed still has expected-evidence and answerability failures recorded in its snapshot.
+- OCR, multimodal RAG, agent runtime, and multi-hop graph reasoning are outside the final Demo scope.
+- Public production deployment still needs environment-specific TLS, secrets, monitoring, backups, and capacity work.
+
+## Troubleshooting
+
+If a document is not ready, use the inspector before logs. If retrieval is surprising, check selected mode, trace id, candidate/final evidence, support reason, and index-provider compatibility. Docker commands:
+
+```bash
+docker compose logs --tail=200 api worker
+docker compose ps
+```
