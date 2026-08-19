@@ -2,10 +2,10 @@
 
 ## 1. Run Configuration
 
-- Run id: `20260819-143637-auto-fixed`
-- Created at: `2026-08-19T14:36:37.637799+00:00`
-- Commit: `c00a116`
-- Dirty worktree: `True`
+- Run id: `20260819-150435-auto-fixed`
+- Created at: `2026-08-19T15:04:35.980952+00:00`
+- Commit: `1bbcd65`
+- Dirty worktree: `False`
 - Case file: `tests/eval/rag_generalization_cases.jsonl`
 - Case count: 50
 - Chunk strategy: `fixed`
@@ -63,10 +63,10 @@
 
 In-process retrieval latency. Excludes ingestion, embedding/index construction, HTTP transport, LLM answer generation, and frontend rendering.
 
-- mean: 23.2 ms
-- p50: 22 ms
-- p95: 34 ms
-- max: 38 ms
+- mean: 24.1 ms
+- p50: 24 ms
+- p95: 33 ms
+- max: 39 ms
 
 ## 7. Failure Diagnostics
 

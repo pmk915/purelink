@@ -2,10 +2,10 @@
 
 ## 1. Run Configuration
 
-- Run id: `20260819-143232-auto-block_aware`
-- Created at: `2026-08-19T14:32:32.767555+00:00`
-- Commit: `c00a116`
-- Dirty worktree: `True`
+- Run id: `20260819-145411-auto-block_aware`
+- Created at: `2026-08-19T14:54:11.506083+00:00`
+- Commit: `1bbcd65`
+- Dirty worktree: `False`
 - Case file: `tests/eval/rag_generalization_cases.jsonl`
 - Case count: 50
 - Chunk strategy: `block_aware`
@@ -63,7 +63,7 @@
 
 In-process retrieval latency. Excludes ingestion, embedding/index construction, HTTP transport, LLM answer generation, and frontend rendering.
 
-- mean: 11.1 ms
+- mean: 10.7 ms
 - p50: 11 ms
 - p95: 16 ms
 - max: 26 ms
