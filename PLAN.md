@@ -1,6 +1,17 @@
 # PureLink 续聊交接摘要（给新对话 / 新 Codex）
 
-## 当前里程碑：M3 证据选择与受控消融
+## 当前里程碑：M4 公共英文检索验证
+
+- 干净基线：main / c76e889ae414b5506c5a2a8dde3566b40920b872。
+- 顺序：检查 FastEmbed 模型 API → query/passage provider 修复及定向回归 → 独立开发依赖 → 官方 NanoSciFact smoke → 预定义 NanoBEIR direct/PureLink dense 对照 → 解释差异后运行原生产 hybrid。
+- 固定模型 BAAI/bge-small-en-v1.5、归一化、官方 title/text 表示、qrels 与 top-k；不按公开结果调参，不触碰既有 Demo 默认、M1-M3 案例、配置或历史快照。
+- 评估只涉及检索，使用官方 MTEB 数据与 nDCG@10 / Recall@10 / MRR@10；记录失败任务和共同完成任务宏平均。网络运行显式触发，CI 只用小型内存数据。
+- 可选依赖与生成结果分别位于开发 requirements 和 data/eval_runs/external；不引入生产 MTEB 依赖，不 commit/push。
+- 用户在第 5 个 CPU 任务运行时将本轮范围限定为官方顺序前 6 个任务；第 6 个完成后停止，其余 7 个明确记为 not_run，只报告部分 NanoBEIR 验证，禁止按分数挑选或宣称完整 13 任务结果。
+- M4 已完成该授权范围：NanoSciFact 官方 smoke 成功；前 6 任务共 300 查询、约 60 分钟，所有 direct/dense 检查通过，无已评估任务失败。宏平均 nDCG/Recall@10/MRR@10：official=.6222/.6710/.6821，Dense=.6226/.6710/.6826，Hybrid=.5569/.6340/.6055；Hybrid 六任务 nDCG 全部下降，保留结果，停止调参，不增加 reranker。
+- 验证：完整后端 732 passed / 22 skipped；增加显式任务范围后定向 31 passed。50/24 例 hashed-BOW M3 指标不变；provider-only FastEmbed Recall@3 100%→97.7%、MRR .9318→.925，检索/引用/证据命中与可回答性不变。保留 API 正确性修复，既有 FastEmbed 索引必须完整重建；历史快照未覆盖。已同步 README 与 [公共验证结果](docs/rag/rag-evaluation.md#m4-cpu-result-first-six-nanobeir-tasks)，未 commit/push。
+
+## 已完成：M3 证据选择与受控消融
 
 - 干净基线：main / 8ec4dbe1814b6c95ed0e6273783c8710ed616bf9；先复跑 24/50 例并记录只读阶段诊断。
 - 主要问题：generic 候选按父块分数/词面重叠扩张，最多 8 个证据；每块 2 单元限制还会挤掉直接事实。

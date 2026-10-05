@@ -142,8 +142,62 @@ def test_fastembed_provider_embeds_fixed_dimension(
     assert len(vectors) == 2
     assert all(len(vector) == 4 for vector in vectors)
     assert len(query_vector) == 4
-    assert captured_texts[:2] == ["passage: first", "passage: second"]
-    assert captured_texts[2] == "query: question"
+    assert captured_texts == ["first", "second", "question"]
+
+
+@pytest.mark.parametrize("normalize", [True, False])
+def test_fastembed_uses_model_specific_encoding(monkeypatch, normalize) -> None:
+    calls = []
+
+    class Model:
+        def query_embed(self, texts, **kwargs):
+            calls.append(("query", texts, kwargs))
+            yield [3.0, 4.0]
+
+        def passage_embed(self, texts, **kwargs):
+            calls.append(("passage", texts, kwargs))
+            yield from ([3.0, 4.0] for _ in texts)
+
+        def embed(self, *args, **kwargs):
+            raise AssertionError("specialized API must be used")
+
+    monkeypatch.setattr("app.services.embedding_provider._load_fastembed_model", lambda **kwargs: Model())
+    provider = resolve_embedding_provider("fastembed", normalize=normalize)
+    expected = [0.6, 0.8] if normalize else [3.0, 4.0]
+    assert provider.embed_text(" passage: literal ", dimension=2) == expected
+    assert provider.embed_texts(["a", "b"], dimension=2) == [expected, expected]
+    assert provider.embed_query(" query: literal ", dimension=2) == expected
+    assert [(kind, texts) for kind, texts, _ in calls] == [
+        ("passage", [" passage: literal "]), ("passage", ["a", "b"]),
+        ("query", [" query: literal "]),
+    ]
+
+
+@pytest.mark.parametrize("query", [True, False])
+def test_fastembed_specialized_errors_are_wrapped(monkeypatch, query) -> None:
+    class Model:
+        def query_embed(self, texts, **kwargs):
+            raise RuntimeError("encoding failed")
+
+        passage_embed = query_embed
+
+    monkeypatch.setattr("app.services.embedding_provider._load_fastembed_model", lambda **kwargs: Model())
+    provider = resolve_embedding_provider("fastembed")
+    with pytest.raises(EmbeddingProviderError, match="Failed to encode") as error:
+        (provider.embed_query if query else provider.embed_text)("text")
+    assert isinstance(error.value.__cause__, RuntimeError)
+
+
+@pytest.mark.parametrize("vectors,dimension", [([[1.0, 2.0]], 3), ([[1.0], [1.0, 2.0]], 1), ([[1.0]], 1)])
+def test_fastembed_validates_dimensions_and_batch(monkeypatch, vectors, dimension) -> None:
+    class Model:
+        def passage_embed(self, texts, **kwargs):
+            return vectors
+
+    monkeypatch.setattr("app.services.embedding_provider._load_fastembed_model", lambda **kwargs: Model())
+    provider = resolve_embedding_provider("fastembed")
+    with pytest.raises(EmbeddingProviderError, match="dimension|batch"):
+        provider.embed_texts(["a", "b"] if dimension == 1 else ["a"], dimension=dimension)
 
 
 def test_sentence_transformers_provider_embeds_fixed_dimension(

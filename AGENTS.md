@@ -11,8 +11,9 @@
 - 已完成：认证、个人与团队知识库、上传审核、结构化处理、检索问答、引用与评估基础能力
 - 已完成 M1：轻量 PDF 有序文本块、bbox 与跨页引用来源修复
 - 已完成 M2：确定性排序/证据指标与独立 24 例格式切片
-- 当前里程碑：M3 证据选择与受控消融；只收紧 generic final evidence，另修责任属性的明确词形/实体绑定缺陷
-- M3 边界：不改候选检索、权重、embedding、reranker、router、PDF、chunk 策略、Answer Policy 或提示词；不改案例/标签，不对 holdout 调优；先记录基线与诊断，再实现并验证原 50 例
+- 已完成 M3：generic 证据选择与责任属性修复；受控消融与原 50 例回归已记录
+- 已完成 M4 授权范围：FastEmbed query/passage API 修正、官方 NanoSciFact smoke 与 NanoBEIR 官方顺序前 6 任务的 direct/dense/hybrid 对照；其余 7 个因用户运行范围限定明确未评估，结果已记录，停止实质优化
+- M4 边界：仅 provider 正确性修复与独立开发评估适配器；固定英文 BGE 模型，不调混合权重，不改 Demo 默认、M1-M3 案例/配置/历史快照、QA、证据选择、PDF、chunk 或 GraphRAG；数据/模型/运行结果均保持 gitignored，不 commit/push
 
 ## 工作原则
 

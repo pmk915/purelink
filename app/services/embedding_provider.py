@@ -102,19 +102,19 @@ class FastEmbedEmbeddingProvider:
         return self.model
 
     def embed_text(self, text: str, *, dimension: int | None = None) -> list[float]:
-        return self.embed_texts([_prepare_fastembed_passage(text)], dimension=dimension)[0]
+        return self.embed_texts([text], dimension=dimension)[0]
 
     def embed_query(self, text: str, *, dimension: int | None = None) -> list[float]:
-        return self._embed_prepared_texts([_prepare_fastembed_query(text)], dimension=dimension)[0]
+        return self._embed_texts([text], query=True, dimension=dimension)[0]
 
     def embed_texts(self, texts: list[str], *, dimension: int | None = None) -> list[list[float]]:
-        prepared_texts = [_prepare_fastembed_passage(text) for text in texts]
-        return self._embed_prepared_texts(prepared_texts, dimension=dimension)
+        return self._embed_texts(texts, query=False, dimension=dimension)
 
-    def _embed_prepared_texts(
+    def _embed_texts(
         self,
         texts: list[str],
         *,
+        query: bool,
         dimension: int | None = None,
     ) -> list[list[float]]:
         if not texts:
@@ -126,13 +126,21 @@ class FastEmbedEmbeddingProvider:
             cache_dir=self.cache_dir,
         )
         try:
-            encoded = list(model.embed(texts, batch_size=self.max_batch_size))
+            # FastEmbed owns model-specific instructions (BGE, E5, Nomic, etc.).
+            # Older implementations without the specialized API receive raw text
+            # through embed; do not invent a generic instruction prefix.
+            encode = getattr(model, "query_embed" if query else "passage_embed", None)
+            if not callable(encode):
+                encode = model.embed
+            encoded = list(encode(texts, batch_size=self.max_batch_size))
         except Exception as exc:  # pragma: no cover - provider-specific runtime guard
             raise EmbeddingProviderError(
                 f"Failed to encode text with fastembed model '{self.model or DEFAULT_FASTEMBED_MODEL}'."
             ) from exc
 
         vectors = _coerce_fastembed_vectors(encoded)
+        if len(vectors) != len(texts) or len({len(vector) for vector in vectors}) != 1:
+            raise EmbeddingProviderError("fastembed output does not match input batch or vector dimensions.")
         if dimension is not None and dimension > 0:
             actual_dimension = len(vectors[0]) if vectors else 0
             if actual_dimension != dimension:
@@ -544,17 +552,3 @@ def _coerce_fastembed_vectors(value: object) -> list[list[float]]:
     if not vectors:
         raise EmbeddingProviderError("fastembed provider returned no vectors.")
     return vectors
-
-
-def _prepare_fastembed_passage(text: str) -> str:
-    normalized = text.strip()
-    if normalized.startswith("passage: "):
-        return normalized
-    return f"passage: {normalized}"
-
-
-def _prepare_fastembed_query(text: str) -> str:
-    normalized = text.strip()
-    if normalized.startswith("query: "):
-        return normalized
-    return f"query: {normalized}"

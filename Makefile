@@ -21,6 +21,11 @@ GENERALIZATION_BASELINE_SNAPSHOT_DIR ?=
 RUNTIME_EVAL_SNAPSHOT_DIR ?= tests/eval/baselines/runtime-fastembed-fixed
 EVAL_MODE ?= auto
 EVAL_CHUNK_STRATEGY ?= block_aware
+PUBLIC_EVAL_MODES ?= official dense hybrid
+PUBLIC_EVAL_OUTPUT_DIR ?= $(EVAL_OUTPUT_DIR)/external
+PUBLIC_EVAL_BASELINE_SHA ?=
+PUBLIC_EVAL_SMOKE ?= 0
+PUBLIC_EVAL_TASK_LIMIT ?=
 
 ifneq ("$(wildcard .venv/bin/python)","")
 PYTHON ?= .venv/bin/python
@@ -115,6 +120,10 @@ eval-rag-generalization-holdout:
 
 eval-rag-runtime:
 	$(PYTHON) scripts/eval/run_rag_generalization_eval.py --cases $(GENERALIZATION_EVAL_CASES) --output-dir $(GENERALIZATION_EVAL_OUTPUT_DIR) --baseline-snapshot-dir $(RUNTIME_EVAL_SNAPSHOT_DIR) --mode auto --chunk-strategy fixed --embedding-provider fastembed --embedding-model BAAI/bge-small-zh-v1.5 --no-reranker-enabled --reranker-provider noop
+
+.PHONY: eval-retrieval-nanobeir
+eval-retrieval-nanobeir:
+	$(PYTHON) -B scripts/eval/run_public_retrieval.py --modes $(PUBLIC_EVAL_MODES) --output-dir $(PUBLIC_EVAL_OUTPUT_DIR) $(if $(filter 1,$(PUBLIC_EVAL_SMOKE)),--smoke,) $(if $(PUBLIC_EVAL_BASELINE_SHA),--baseline-sha $(PUBLIC_EVAL_BASELINE_SHA),) $(if $(PUBLIC_EVAL_TASK_LIMIT),--task-limit $(PUBLIC_EVAL_TASK_LIMIT),)
 
 e2e:
 	@set -euo pipefail; \

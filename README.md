@@ -100,6 +100,36 @@ The same 50 cases were also run through the normal user-facing local stack witho
 
 Source: [committed default-runtime snapshot](tests/eval/baselines/runtime-fastembed-fixed/summary.md). This run answers “how does the actual Demo default perform?” It is reported separately from the deterministic regression baseline; neither configuration is presented as universally superior. Latency is local in-process timing and excludes ingestion, HTTP, LLM generation, and frontend rendering.
 
+### Public English Retrieval Validation
+
+`make eval-retrieval-nanobeir` evaluates the official predefined MTEB NanoBEIR
+tasks using `BAAI/bge-small-en-v1.5`. It compares an official MTEB direct dense
+baseline with PureLink vector-only and the unchanged production Hybrid path,
+using official qrels and nDCG@10 / Recall@10 / MRR@10. The English embedding and
+document representation stay fixed across configurations. This developer-only
+benchmark uses [optional dependencies](requirements-benchmark.txt) and writes
+results under ignored `data/eval_runs/external/`; it supplements the internal
+suites and does not change the Chinese Demo defaults or establish an official
+MTEB leaderboard rank. See [installation and reproduction](docs/rag/rag-evaluation.md#public-retrieval-validation).
+
+The initial CPU validation completed the first **6 of 13 predefined tasks**
+(300 queries), at the user's runtime limit. Macro nDCG@10 / Recall@10 / MRR@10
+are **.6222 / .6710 / .6821** for official direct Dense,
+**.6226 / .6710 / .6826** for PureLink Dense, and
+**.5569 / .6340 / .6055** for PureLink Hybrid. Dense passes all six reference
+checks; Hybrid has lower nDCG on all six. We preserve this result without tuning.
+The other seven tasks are explicitly unrun in this comparison; the separate
+NanoSciFact smoke is excluded from these macros. See
+[per-task results and limitations](docs/rag/rag-evaluation.md#m4-cpu-result-first-six-nanobeir-tasks).
+Reproduce the partial scope with
+`make eval-retrieval-nanobeir PUBLIC_EVAL_TASK_LIMIT=6`.
+
+The FastEmbed provider now delegates query/document encoding to its model-specific
+APIs. Rebuild existing FastEmbed indexes after upgrading; the committed runtime
+snapshot above remains historical evidence. The provider-only regression keeps
+44/44 retrieval hits, 36/44 evidence hits, and 47/50 answerability; document
+Recall@3 changes from 100% to 97.7% and MRR from .9318 to .925 with M3 held fixed.
+
 ## Architecture and Request Flow
 
 ### System Context
@@ -214,6 +244,7 @@ The full [PureLink Code Tour](docs/interview/code-tour.md) follows the request p
 | QA orchestration | [`app/services/qa.py`](app/services/qa.py) |
 | Answer Policy | [`app/services/answer_policy.py`](app/services/answer_policy.py) |
 | Evaluation harness | [`scripts/eval/run_rag_generalization_eval.py`](scripts/eval/run_rag_generalization_eval.py) |
+| Public retrieval validation | [`scripts/eval/run_public_retrieval.py`](scripts/eval/run_public_retrieval.py) |
 
 ## Implemented Scope
 

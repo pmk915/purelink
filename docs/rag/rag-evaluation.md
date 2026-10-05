@@ -51,6 +51,201 @@ Custom cases:
 make eval-rag EVAL_CASES=tests/eval/purelink_rag_interview_cases.local.jsonl
 ```
 
+## Public Retrieval Validation
+
+The external developer benchmark uses the official [MTEB package](https://github.com/embeddings-benchmark/mteb)
+and its predefined `NanoBEIR` benchmark (13 tasks in MTEB 2.22.5). Start with
+`NanoSciFactRetrieval` to validate installation, model/data loading, official scoring,
+and serialization. Task membership comes from MTEB, rather than a selected list.
+
+This is separate from the internal 50-case deterministic regression, 24-case
+multi-format benchmark, and M2 → M3 evidence-selection ablation. Internal suites
+diagnose PureLink-specific ingestion, routing, evidence, and provenance behavior;
+NanoBEIR supplies a public retrieval reference. There is no QA generation, Answer
+Policy, evidence selection, citation processing, PDF ingestion, or GraphRAG in
+the external adapter. A local run does not give PureLink an official MTEB
+leaderboard rank; no results are submitted automatically.
+
+| Profile | Provider / model | Purpose |
+|---|---|---|
+| Internal regression | local_hashed_bow / hashed_bow_v1 | Deterministic system checks |
+| Local Demo | fastembed / BAAI/bge-small-zh-v1.5 | Existing default, unchanged |
+| Public English | fastembed / BAAI/bge-small-en-v1.5, normalize=true | English NanoBEIR corpus |
+
+The public profile is scoped to the runner process. It never writes `.env` or
+changes application defaults. MTEB stays out of production/Docker requirements.
+For the CPU environment used here:
+
+```bash
+.venv/bin/python -m pip install 'torch==2.5.1+cpu' --index-url https://download.pytorch.org/whl/cpu
+.venv/bin/python -m pip install -r requirements-benchmark.txt
+make eval-retrieval-nanobeir PUBLIC_EVAL_SMOKE=1 PUBLIC_EVAL_MODES=official
+make eval-retrieval-nanobeir PUBLIC_EVAL_MODES='official dense'
+make eval-retrieval-nanobeir
+```
+
+For a resource-limited validation, explicitly choose the first tasks in the
+predefined MTEB order: `make eval-retrieval-nanobeir PUBLIC_EVAL_TASK_LIMIT=6`.
+This is a partial NanoBEIR run. Remaining tasks are recorded as `not_run` with
+the scope limit as the reason, and excluded from the shared-task macro. Task
+selection never depends on scores. The M4 CPU run was limited to the first six
+tasks at the user's request while task five was running; the default command
+still attempts the full predefined benchmark.
+
+Pass `PUBLIC_EVAL_BASELINE_SHA=<full-clean-baseline-SHA>` to record the initial
+baseline separately from the run's current SHA and dirty flag. Optional command
+variables are `PUBLIC_EVAL_OUTPUT_DIR` and `PYTHON`; the Python runner also accepts
+`--cache-dir` and `--run-id`. External runs explicitly require network access for
+official datasets/model downloads. All default results and caches live under
+gitignored `data/eval_runs/external/`. CI uses synthetic in-memory data and never
+downloads public datasets or model weights.
+
+The first controlled run uses FastEmbed's quantized English ONNX model and
+`CPUExecutionProvider`, including for the direct official baseline. CUDA hardware
+alone does not make the CPU ONNX Runtime use a GPU. A GPU run would require a
+compatible GPU ONNX Runtime/CUDA/cuDNN environment and explicit, verified model
+execution providers; a CUDA PyTorch wheel alone does not accelerate FastEmbed.
+Keep the backend fixed across compared configurations and record it separately.
+
+Documents use nonempty official title + newline + official text, one benchmark
+document per chunk. No synthetic headings or task instructions are added. The
+direct embedding-only encoder reconstructs this representation from MTEB's
+original `title`/`body` fields, so title concatenation is consistent. FastEmbed
+owns model-specific query/document preprocessing. `query_embed()` and
+`passage_embed()` replace PureLink's previous generic `query:`/`passage:` prefixes;
+older implementations lacking those methods fall back narrowly to `embed()`
+with raw text. Encoding failures are propagated, rather than retried with a
+different preprocessing scheme. LocalHashedBow and other providers are unchanged.
+
+Existing FastEmbed indexes must be rebuilt after this semantic correction to
+avoid mixing previously prefixed document vectors with new query vectors. The
+model identity alone does not detect that old preprocessing. Historical committed
+snapshots remain historical; current runtime regressions go to fresh ignored run
+directories. Do not use `make eval-rag-runtime` to preserve those snapshots during
+this audit, because that existing target explicitly writes its snapshot directory.
+
+Primary metric is nDCG@10; Recall@10, MRR@10, and Recall@5 are also reported using
+official relevance judgments. Missing relevant documents remain in the recall
+and ideal-DCG denominators. Reports preserve per-task results, corpus/query counts,
+failures, versions, model/dimension, normalization, retrieval configuration,
+duration, and macros over tasks completed by every compared configuration. There
+is no combined score, phrase-based external metric, or LLM judge. Large unexplained
+direct/dense discrepancies block the corresponding hybrid comparison. Hybrid
+weights are kept at their production values; worse and mixed tasks remain visible.
+
+The narrow adapter constructs the existing vector-artifact schema and an ephemeral
+SQLite chunk table directly, without creating persisted users, teams, or product
+knowledge bases. Dense calls production `search_index`; Hybrid calls production
+`retrieve_hybrid_text_chunks`, including its inner lexical/metadata candidate
+selection and outer keyword fusion with the existing keyword scorer and weights.
+The same temporary vector index serves both PureLink modes.
+Official MTEB uses float32 matrix cosine, while PureLink uses its Python cosine
+scorer and normalizes query case/whitespace. Batch composition of quantized
+encoding and tie ordering can also introduce small direct/dense differences.
+The fixed discrepancy guard is 0.02 absolute for the reported metrics; it blocks
+the task's Hybrid run when exceeded, rather than automatically changing settings.
+
+Provider-only runtime comparison at the M4 baseline holds M3 code/cases and
+FastEmbed 0.8.1 fixed, loading the old provider from `git show` in a separate
+process. Recall@3 is 100% → 97.7%, MRR .9318 → .925, and Recall@1/5 remain
+86.4%/100%. Retrieval and citation hits remain 44/44, evidence hits 36/44,
+evidence recall 70.1%, precision 70.6% (41 cases), and answerability 47/50.
+The changed rank expectations are `def_alice`, `def_aurora_pro`, and
+`reason_low_score_refusal`; score/order details remain in ignored regression
+artifacts. The deterministic 50-case and format-24 M3 results remain unchanged.
+
+### M4 CPU result: first six NanoBEIR tasks
+
+The initial run completed the first six tasks in MTEB's predefined order, with
+50 queries per task (300 total) and 27,772 corpus records across tasks. The user
+limited the scope while task five was running because of CPU cost; selection
+was independent of scores. This is partial external validation, not a full
+NanoBEIR result. All six official/Dense/Hybrid comparisons completed, and all
+six direct/Dense discrepancy checks passed. There were no failed evaluated tasks.
+
+Baseline and run HEAD: `c76e889ae414b5506c5a2a8dde3566b40920b872`; the initial
+baseline was clean and the implementation run was dirty. Environment: Python
+3.12.3, MTEB 2.22.5, FastEmbed 0.8.1, ONNX Runtime 1.30.0,
+PyTorch 2.5.1+cpu, NumPy 2.2.6. Model: BAAI/bge-small-en-v1.5,
+384 dimensions, normalized, quantized ONNX, CPU; top-k=10, reranker disabled/noop.
+The cached model source is `Qdrant/bge-small-en-v1.5-onnx-Q`, revision
+`aa8f8b060edb00e03bfdd08813a2949946c8ba55` (source revision was recorded from the
+unchanged cache after the run). Evaluation wall time was 3,603 seconds, about
+60 minutes. Model, representation, index, qrels, and production Hybrid weights
+were held fixed for the PureLink comparison.
+
+The separate official NanoSciFact smoke succeeded: nDCG@10=.7548,
+Recall@10=.8200, MRR@10=.7392, Recall@5=.7950. It validates official MTEB
+installation/scoring/serialization and is excluded from the six-task macro.
+
+| Configuration | Macro nDCG@10 | Recall@10 | MRR@10 | Recall@5 |
+|---|---:|---:|---:|---:|
+| Official MTEB direct Dense | .6222 | .6710 | .6821 | .6034 |
+| PureLink Dense | .6226 | .6710 | .6826 | .6034 |
+| PureLink Hybrid | .5569 | .6340 | .6055 | .5516 |
+
+All scores below are fractions; each task has 50 queries.
+
+| Task | Corpus | Configuration | nDCG@10 | Recall@10 | MRR@10 |
+|---|---:|---|---:|---:|---:|
+| NanoArguAnaRetrieval | 3,635 | Official | .6362 | .9200 | .5436 |
+| NanoArguAnaRetrieval | 3,635 | Dense | .6387 | .9200 | .5467 |
+| NanoArguAnaRetrieval | 3,635 | Hybrid | .4926 | .9200 | .3595 |
+| NanoClimateFeverRetrieval | 3,408 | Official | .3059 | .3913 | .4033 |
+| NanoClimateFeverRetrieval | 3,408 | Dense | .3058 | .3913 | .4033 |
+| NanoClimateFeverRetrieval | 3,408 | Hybrid | .3001 | .3390 | .4245 |
+| NanoDBPediaRetrieval | 6,045 | Official | .5806 | .3202 | .7987 |
+| NanoDBPediaRetrieval | 6,045 | Dense | .5806 | .3202 | .7987 |
+| NanoDBPediaRetrieval | 6,045 | Hybrid | .5254 | .3187 | .7014 |
+| NanoFEVERRetrieval | 4,996 | Official | .9207 | .9633 | .9319 |
+| NanoFEVERRetrieval | 4,996 | Dense | .9207 | .9633 | .9319 |
+| NanoFEVERRetrieval | 4,996 | Hybrid | .8698 | .9233 | .8756 |
+| NanoFiQA2018Retrieval | 4,598 | Official | .4718 | .5711 | .5277 |
+| NanoFiQA2018Retrieval | 4,598 | Dense | .4718 | .5711 | .5277 |
+| NanoFiQA2018Retrieval | 4,598 | Hybrid | .3410 | .4431 | .3600 |
+| NanoHotpotQARetrieval | 5,090 | Official | .8178 | .8600 | .8872 |
+| NanoHotpotQARetrieval | 5,090 | Dense | .8178 | .8600 | .8872 |
+| NanoHotpotQARetrieval | 5,090 | Hybrid | .8126 | .8600 | .9117 |
+
+The remaining NanoMSMARCORetrieval, NanoNFCorpusRetrieval, NanoNQRetrieval,
+NanoQuoraRetrieval, NanoSCIDOCSRetrieval, NanoSciFactRetrieval, and
+NanoTouche2020Retrieval are explicitly `not_run` in all compared modes because
+of the user's scope limit. The already-running original loop was intentionally
+interrupted after the sixth task was saved, during task seven's initial data
+discovery; no seventh-task embedding/evaluation completed. This scope stop is
+recorded separately from task failures. Future partial runs use the task-limit
+parameter and finish normally. The optional reranker comparison was omitted;
+no new reranker model/dependency was introduced.
+
+PureLink Dense closely matches the independent official reference (largest
+task nDCG difference .00245). Hybrid lowers nDCG on all six tasks and its macro
+by .0656; Recall@10 drops .0370 and MRR@10 drops .0771. ClimateFever and HotpotQA
+MRR improve slightly, but their nDCG decreases. Keep the measured result and
+stop tuning. These six tasks do not establish the result for all NanoBEIR tasks
+or for the internal document/evidence benchmarks.
+
+Read-only diagnosis of ArguAna rankings found 26 queries with lower Hybrid nDCG,
+one with higher nDCG, and 23 unchanged. Some relevant rank-1 documents move to
+rank 3–4 while Recall@10 remains unchanged. A likely contributor is the existing
+substring term-coverage scorer without corpus-frequency weighting, together
+with title/technical bonuses and the two candidate/fusion stages. The outer
+merge normalizes candidates having both scores, while candidates having only
+one score retain its raw scale. These are hypotheses from code and saved
+rankings, not an isolated causal ablation; no scorer, weight, or cutoff changed.
+
+Keep the FastEmbed API correctness fix, with a full rebuild of existing
+FastEmbed indexes. The partial external results and their limitations are ready
+to describe in README as local validation; no official leaderboard submission
+or general Hybrid-improvement claim is warranted.
+
+Reproduce this scope with `make eval-retrieval-nanobeir PUBLIC_EVAL_TASK_LIMIT=6`.
+Generated artifacts remain ignored under
+`data/eval_runs/external/m4-nanobeir-initial/`: `run.json`, `summary.md`, official
+results/predictions, and Dense/Hybrid rankings. The original pre-finalization
+report and scope-stop event preserve how the running full attempt became a
+six-task report. Regression artifacts remain under the separate
+`data/eval_runs/external/m4-regression/` directory.
+
 ## Case Format
 
 Each JSONL line includes:
