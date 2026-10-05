@@ -11,6 +11,8 @@ It does not use LLM-as-judge, external APIs, or heavy evaluation frameworks. It 
 - trace availability
 - expected/forbidden evidence hit
 - evidence precision
+- document Recall@1/@3/@5 and document MRR (ordered raw retrieval candidates)
+- evidence recall (canonical final evidence)
 - router accuracy
 - no-answer answerability accuracy
 
@@ -89,6 +91,27 @@ make eval-rag-generalization \
 The snapshot removes live trace ids, temporary database ids, absolute local
 paths, and secret-like configuration. Rerun on a clean commit before committing
 an official baseline snapshot.
+
+## Separate Format Slice
+
+```bash
+make eval-rag-format
+```
+
+The existing generalization runner generates eight small local documents from
+`format_corpus.json`, ingests and indexes them in its temporary KB, and runs
+`rag_format_cases.jsonl`: six cases per TXT, Markdown, DOCX, and PDF (24 total;
+20 answerable, four no-answer). Each format covers technical, factual,
+section-scoped, distractor-sensitive, structured-fact, and no-answer questions.
+PDF has two explicit page-2 provenance checks. No advanced layout/table or OCR
+requirement is added.
+
+Defaults remain block-aware + hashed-BOW + auto + no reranker. Reports are
+written to `data/eval_runs/format-<run-id>/` with per-format metrics and fixture
+hashes. This is a deterministic engineering benchmark, separate from the
+official 50 cases and independent holdout. Failures are baseline data, not
+grounds to tune production in M2. See [metric definitions](../../docs/rag/rag-evaluation.md)
+and the [M2 measured baseline](../../docs/rag/format-benchmark-baseline.md).
 
 ## RAG v2 Baseline Evaluation
 
@@ -173,8 +196,11 @@ Local cases and generated reports depend on local KB IDs and should not be commi
   selection, or support-gate rejection. Successful and genuine no-answer cases
   are labeled separately.
 - Generalization summaries show `passed / applicable (percentage)` and skip `null` values from denominators.
-- Evidence-gate answerability means final evidence is present and reaches `RETRIEVAL_MIN_SCORE`; it is not semantic QA accuracy.
+- Evidence-gate answerability uses the production deterministic support checks, including requested attribute/identifier coverage; it is not semantic QA accuracy.
 - Final evidence metrics use `RetrievalResult.evidences`, not raw `initial_chunks` or intermediate `context_chunks`.
+- Document Recall@K/MRR deduplicate `initial_chunks` in first-occurrence order, prefer expected IDs, otherwise match case-insensitive document names. They never rank final citations. Missing raw ranking is non-applicable; empty ranking is a miss. No-answer cases are excluded from new recall/MRR denominators.
+- Evidence recall counts distinct normalized expected phrases once in final evidence from expected documents. Evidence precision stays relevant / (relevant + irrelevant), excluding unknown evidence.
+- Legacy top-1/top-3 hits still use final evidence positions; legacy stage `success` can coexist with forbidden evidence and low precision.
 
 Expected evidence phrases use lightweight presentation normalization for
 Markdown backticks/emphasis, repeated whitespace, case, quotes, Unicode
@@ -194,6 +220,6 @@ To compare `fixed` and `block_aware` chunking:
 4. Set `CHUNK_STRATEGY=block_aware`.
 5. Reindex the same documents.
 6. Run eval and save the second report.
-7. Compare retrieval hit, citation hit, keyword coverage, and top-1/top-3 document hit.
+7. Compare document Recall@K/MRR, evidence recall/precision, citation and answerability; retain legacy hits for historical comparisons.
 
 Do not assume block-aware chunking improves every query. Use the reports to compare behavior for your local corpus.

@@ -180,6 +180,8 @@ def _override_case(
         expected_evidence_phrases=case.expected_evidence_phrases,
         forbidden_evidence_phrases=case.forbidden_evidence_phrases,
         expected_answerable=case.expected_answerable,
+        document_format=case.document_format,
+        expected_page_numbers=case.expected_page_numbers,
     )
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from collections import Counter
 import json
 from pathlib import Path
 import re
@@ -35,6 +36,8 @@ class RagEvalCase:
     expected_evidence_phrases: tuple[str, ...] = ()
     forbidden_evidence_phrases: tuple[str, ...] = ()
     expected_answerable: bool | None = None
+    document_format: str | None = None
+    expected_page_numbers: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,6 +117,17 @@ class RagEvalCaseResult:
     failure_stage: str | None = None
     failure_reasons: tuple[str, ...] = ()
     error: str | None = None
+    document_format: str | None = None
+    expected_doc_ids: tuple[int, ...] = ()
+    document_ranking_source: str | None = None
+    ranked_retrieved_documents: tuple[dict[str, Any], ...] = ()
+    document_recall_at_1: float | None = None
+    document_recall_at_3: float | None = None
+    document_recall_at_5: float | None = None
+    document_mrr: float | None = None
+    evidence_recall: float | None = None
+    expected_page_numbers: tuple[int, ...] = ()
+    page_provenance_hit: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,6 +165,12 @@ def parse_case(payload: dict[str, Any], *, source: str = "case") -> RagEvalCase:
     case_id = _required_str(payload, "id", source=source)
     question = _required_str(payload, "question", source=source)
     knowledge_base_id = _required_int(payload, "knowledge_base_id", source=source)
+    document_format = payload.get("document_format")
+    if document_format is not None and document_format not in {"txt", "markdown", "docx", "pdf"}:
+        raise ValueError(f"Invalid document_format at {source}.")
+    pages = payload.get("expected_page_numbers", [])
+    if not isinstance(pages, list) or any(type(page) is not int or page < 1 for page in pages):
+        raise ValueError(f"expected_page_numbers must be positive physical page numbers at {source}.")
     return RagEvalCase(
         id=case_id,
         question=question,
@@ -182,6 +202,8 @@ def parse_case(payload: dict[str, Any], *, source: str = "case") -> RagEvalCase:
             if payload.get("expected_answerable") is not None
             else None
         ),
+        document_format=document_format,
+        expected_page_numbers=tuple(pages),
     )
 
 
@@ -198,6 +220,11 @@ def evaluate_retrieval_result(
 ) -> RagEvalCaseResult:
     evidences = get_final_evidences(result)
     raw_candidates = _metadata_items(result.metadata, "initial_chunks")
+    ranking_available = isinstance(result.metadata.get("initial_chunks"), (list, tuple))
+    ranked_documents = ranked_document_snapshot(raw_candidates)
+    ranked_metrics = _case_document_metrics(case, ranked_documents) if ranking_available else {}
+    applicable = _recall_case_applicable(case)
+    page_provenance_hit = calculate_page_provenance_hit(case, evidences) if applicable else None
     final_context = _metadata_items(result.metadata, "context_chunks")
     keyword_result = calculate_keyword_coverage(
         text=result.context_text,
@@ -300,6 +327,8 @@ def evaluate_retrieval_result(
         expected_answerable=case.expected_answerable,
         predicted_answerable=predicted_answerable,
     )
+    if page_provenance_hit is False:
+        failure_reasons = (*failure_reasons, "page_provenance_miss")
     return RagEvalCaseResult(
         id=case.id,
         mode=case.mode,
@@ -414,6 +443,19 @@ def evaluate_retrieval_result(
         expected_evidence_in_final_selection=expected_evidence_hit,
         failure_stage=failure_stage,
         failure_reasons=failure_reasons,
+        document_format=case.document_format,
+        expected_doc_ids=case.expected_doc_ids,
+        document_ranking_source="initial_chunks" if ranking_available else None,
+        ranked_retrieved_documents=ranked_documents,
+        **ranked_metrics,
+        evidence_recall=calculate_evidence_recall(
+            evidences,
+            expected_phrases=case.expected_evidence_phrases,
+            expected_doc_names=case.expected_doc_names,
+            expected_doc_ids=case.expected_doc_ids,
+        ) if applicable else None,
+        expected_page_numbers=case.expected_page_numbers,
+        page_provenance_hit=page_provenance_hit,
     )
 
 
@@ -471,6 +513,13 @@ def failed_case_result(case: RagEvalCase, *, error: str) -> RagEvalCaseResult:
         failure_stage="evaluation_error",
         failure_reasons=("unexpected_no_answer",) if case.expected_answerable else (),
         error=error,
+        document_format=case.document_format,
+        expected_doc_ids=case.expected_doc_ids,
+        **_case_document_metrics(case, ()),
+        evidence_recall=calculate_evidence_recall((), expected_phrases=case.expected_evidence_phrases)
+        if _recall_case_applicable(case) else None,
+        expected_page_numbers=case.expected_page_numbers,
+        page_provenance_hit=False if _recall_case_applicable(case) and case.expected_page_numbers else None,
     )
 
 
@@ -502,6 +551,158 @@ def summarize_results(results: list[RagEvalCaseResult]) -> RagEvalSummary:
         latency_summary=latency_summary,
         cases=tuple(results),
     )
+
+
+def ranked_document_snapshot(items: tuple[Any, ...] | list[Any]) -> tuple[dict[str, Any], ...]:
+    """Distinct documents in retriever order, before context/evidence selection."""
+    documents = []
+    seen = set()
+    for item in items:
+        document_id = _item_value(item, "document_id")
+        document_name = _item_value(item, "document_name")
+        if document_id is None and not document_name:
+            continue
+        key = ("id", document_id) if document_id is not None else ("name", str(document_name).casefold())
+        if key in seen:
+            continue
+        seen.add(key)
+        score = _item_value(item, "score")
+        if score is None:
+            score = _item_value(item, "final_score")
+        documents.append({
+            "rank": len(documents) + 1,
+            "document_id": document_id,
+            "document_name": document_name,
+            "score": score,
+        })
+    return tuple(documents)
+
+
+def _item_value(item: Any, key: str) -> Any:
+    return item.get(key) if isinstance(item, dict) else getattr(item, key, None)
+
+
+def _document_relevance(ranked_documents, expected_doc_names, expected_doc_ids):  # noqa: ANN001
+    key = "document_id" if expected_doc_ids else "document_name"
+    expected = set(expected_doc_ids) if expected_doc_ids else {name.casefold() for name in expected_doc_names}
+    retrieved = [
+        document.get(key) if expected_doc_ids else str(document.get(key) or "").casefold()
+        for document in ranked_documents
+    ]
+    return expected, retrieved
+
+
+def calculate_document_recall(
+    ranked_documents: tuple[dict[str, Any], ...],
+    *,
+    expected_doc_names: tuple[str, ...] = (),
+    expected_doc_ids: tuple[int, ...] = (),
+    k: int,
+) -> float | None:
+    expected, retrieved = _document_relevance(ranked_documents, expected_doc_names, expected_doc_ids)
+    if not expected:
+        return None
+    return len(expected.intersection(retrieved[:max(0, k)])) / len(expected)
+
+
+def calculate_document_mrr(
+    ranked_documents: tuple[dict[str, Any], ...],
+    *,
+    expected_doc_names: tuple[str, ...] = (),
+    expected_doc_ids: tuple[int, ...] = (),
+) -> float | None:
+    expected, retrieved = _document_relevance(ranked_documents, expected_doc_names, expected_doc_ids)
+    if not expected:
+        return None
+    return next((1.0 / rank for rank, identity in enumerate(retrieved, 1) if identity in expected), 0.0)
+
+
+def _recall_case_applicable(case: RagEvalCase) -> bool:
+    return case.expected_answerable is not False and case.category != "no_answer"
+
+
+def _case_document_metrics(case: RagEvalCase, ranked_documents) -> dict[str, float | None]:  # noqa: ANN001
+    expectations = {"expected_doc_names": case.expected_doc_names, "expected_doc_ids": case.expected_doc_ids}
+    applicable = _recall_case_applicable(case)
+    return {
+        **{
+            f"document_recall_at_{k}": calculate_document_recall(ranked_documents, k=k, **expectations)
+            if applicable else None
+            for k in (1, 3, 5)
+        },
+        "document_mrr": calculate_document_mrr(ranked_documents, **expectations) if applicable else None,
+    }
+
+
+def calculate_evidence_recall(
+    evidences: tuple[RetrievedEvidence, ...] | list[RetrievedEvidence],
+    *,
+    expected_phrases: tuple[str, ...],
+    expected_doc_names: tuple[str, ...] = (),
+    expected_doc_ids: tuple[int, ...] = (),
+) -> float | None:
+    phrases = {normalized for phrase in expected_phrases if (normalized := normalize_eval_text(phrase))}
+    if not phrases:
+        return None
+    relevant = [
+        evidence for evidence in evidences
+        if not (expected_doc_names or expected_doc_ids)
+        or _evidence_matches_expected(evidence, expected_doc_names, expected_doc_ids)
+    ]
+    found = sum(any(_contains_keyword(evidence.text, phrase) for evidence in relevant) for phrase in phrases)
+    return found / len(phrases)
+
+
+def calculate_page_provenance_hit(case: RagEvalCase, evidences) -> bool | None:  # noqa: ANN001
+    if not case.expected_page_numbers:
+        return None
+    pages = {
+        evidence.page_number
+        for evidence in evidences
+        if evidence.citation_unit_id is not None
+        and evidence.source_locator == f"page:{evidence.page_number}"
+        and (
+            not (case.expected_doc_names or case.expected_doc_ids)
+            or _evidence_matches_expected(evidence, case.expected_doc_names, case.expected_doc_ids)
+        )
+        and (
+            not case.expected_evidence_phrases
+            or any(_contains_keyword(evidence.text, phrase) for phrase in case.expected_evidence_phrases)
+        )
+    }
+    return set(case.expected_page_numbers).issubset(pages)
+
+
+def mean_metric(values: Any) -> dict[str, float | int | None]:
+    numbers = [float(value) for value in values if value is not None]
+    return {"mean": sum(numbers) / len(numbers) if numbers else None, "applicable": len(numbers)}
+
+
+def summarize_stage_metrics(results: list[RagEvalCaseResult]) -> dict[str, Any]:
+    return {
+        **{
+            name: mean_metric(getattr(item, name) for item in results)
+            for name in (
+                "document_recall_at_1", "document_recall_at_3", "document_recall_at_5",
+                "document_mrr", "evidence_recall", "evidence_precision",
+            )
+        },
+        **{
+            name: _nullable_metric(getattr(item, name) for item in results)
+            for name in (
+                "retrieval_hit", "expected_evidence_hit", "citation_hit",
+                "answerability_accuracy", "page_provenance_hit",
+            )
+        },
+    }
+
+
+def summarize_formats(results: list[RagEvalCaseResult]) -> dict[str, Any]:
+    grouped = {}
+    for name in sorted({item.document_format for item in results if item.document_format}):
+        group = [item for item in results if item.document_format == name]
+        grouped[name] = {"cases": len(group), **summarize_stage_metrics(group)}
+    return grouped
 
 
 def calculate_retrieval_hit(
@@ -816,6 +1017,9 @@ def summary_to_dict(summary: RagEvalSummary) -> dict[str, Any]:
         "top_3_doc_hit_rate": summary.top_3_doc_hit_rate,
         "average_latency_ms": summary.average_latency_ms,
         "latency_summary": summary.latency_summary,
+        "stage_metrics": summarize_stage_metrics(list(summary.cases)),
+        "by_format": summarize_formats(list(summary.cases)),
+        "failure_stage_counts": dict(Counter(item.failure_stage or "unclassified" for item in summary.cases)),
         "cases": [case_result_to_dict(item) for item in summary.cases],
     }
 
@@ -824,6 +1028,17 @@ def case_result_to_dict(result: RagEvalCaseResult) -> dict[str, Any]:
     payload = {
         "id": result.id,
         "mode": result.mode,
+        "document_format": result.document_format,
+        "expected_doc_ids": list(result.expected_doc_ids),
+        "document_ranking_source": result.document_ranking_source,
+        "ranked_retrieved_documents": list(result.ranked_retrieved_documents),
+        "document_recall_at_1": result.document_recall_at_1,
+        "document_recall_at_3": result.document_recall_at_3,
+        "document_recall_at_5": result.document_recall_at_5,
+        "document_mrr": result.document_mrr,
+        "evidence_recall": result.evidence_recall,
+        "expected_page_numbers": list(result.expected_page_numbers),
+        "page_provenance_hit": result.page_provenance_hit,
         "retrieval_hit": result.retrieval_hit,
         "citation_hit": result.citation_hit,
         "keyword_coverage": result.keyword_coverage,

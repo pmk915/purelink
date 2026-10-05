@@ -271,13 +271,14 @@ def _ingest_sources(
     chunks_root: Path,
     vector_root: Path,
     chunk_strategy: str,
+    source_root: Path = ROOT,
 ) -> None:
     upload_root.mkdir(parents=True, exist_ok=True)
     chunks_root.mkdir(parents=True, exist_ok=True)
     vector_root.mkdir(parents=True, exist_ok=True)
 
     for index, source_path in enumerate(source_paths, start=1):
-        source = ROOT / source_path
+        source = source_root / source_path
         storage_path = Path("eval") / chunk_strategy / f"{index:02d}-{source.name}"
         destination = upload_root / storage_path
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -383,6 +384,10 @@ def _file_type_for_path(path: Path) -> str:
         return "text/markdown"
     if suffix == ".txt":
         return "text/plain"
+    if suffix == ".pdf":
+        return "application/pdf"
+    if suffix == ".docx":
+        return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     return "application/octet-stream"
 
 

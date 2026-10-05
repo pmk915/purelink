@@ -67,6 +67,10 @@ Source: [committed answer-policy baseline](tests/eval/baselines/answer-policy-au
 
 This baseline answers “did a system change cause a regression?” It emphasizes repeatability for CI and local checks; it is not a production-scale benchmark or the default Docker model stack. Remaining failures stay visible in the committed report.
 
+### Format Coverage Benchmark
+
+`make eval-rag-format` runs a separate 24-case deterministic engineering benchmark: six questions each for TXT, Markdown, DOCX, and PDF, including two PDF page-2 citation checks. It reuses the existing temporary-KB ingestion, indexing, retrieval, and QA runner. Reports add document Recall@1/@3/@5, document MRR, final-evidence recall, and per-format metrics while preserving the official regression and holdout suites. See the [M2 measured baseline](docs/rag/format-benchmark-baseline.md) and [metric definitions](docs/rag/rag-evaluation.md). This slice measures current behavior; it does not tune retrieval or QA.
+
 ### Default Runtime Evaluation
 
 The default local Docker path follows [`.env.example`](.env.example):
@@ -213,6 +217,7 @@ The full [PureLink Code Tour](docs/interview/code-tour.md) follows the request p
 
 - Personal and team knowledge bases with ownership, membership, and admin boundaries.
 - `.txt`, `.md`, `.docx`, and text-based `.pdf` ingestion with processing diagnostics.
+- Native PDF text uses PyMuPDF page-aware blocks with block-level bounding boxes and physical page provenance; [PDF limitations](docs/ingestion/file-processing-pipeline.md#native-pdf-extraction) remain explicit.
 - Fixed and block-aware chunking, persisted citation units, vector index metadata, and lightweight graph data.
 - `chunk_only`, `overview`, `hybrid_text`, `graph_vector_mix`, and rule-based `auto` retrieval modes.
 - Evidence-gated Q&A, deterministic Answer Policy, clickable citations, Retrieval Trace, and eval tooling.

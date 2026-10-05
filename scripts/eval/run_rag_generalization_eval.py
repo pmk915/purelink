@@ -59,6 +59,7 @@ def main() -> None:
         mode=args.mode,
         chunk_strategy=args.chunk_strategy,
         created_at=created_at,
+        suite=args.suite,
     )
     run_dir = args.output_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -74,12 +75,19 @@ def main() -> None:
         args.corpus_dir,
         cases,
         required_files=required_files,
-    )
+    ) if args.suite == "generalization" else []
     source_paths = tuple(item["path"] for item in corpus_manifest)
 
     started = time.perf_counter()
     with TemporaryDirectory(prefix="purelink-rag-generalization-") as temp_dir_name:
         temp_dir = Path(temp_dir_name)
+        source_root = ROOT
+        if args.suite == "format":
+            from scripts.eval.rag_format import generate_format_corpus
+
+            source_root = temp_dir / "format_corpus"
+            corpus_manifest = generate_format_corpus(args.corpus_spec, source_root, cases)
+            source_paths = tuple(item["name"] for item in corpus_manifest)
         with _baseline_environment(
             chunk_strategy=args.chunk_strategy,
             upload_root=temp_dir / "uploads",
@@ -97,6 +105,7 @@ def main() -> None:
                     source_paths=source_paths,
                     mode=args.mode,
                     root=temp_dir,
+                    source_root=source_root,
                 )
             )
             settings = get_settings()
@@ -116,7 +125,17 @@ def main() -> None:
     run_payload = {
         **run_metadata,
         "case_category_counts": category_counts(cases),
+        "suite": args.suite,
     }
+    if args.suite == "format":
+        import hashlib
+        import fitz
+
+        run_payload.update({
+            "corpus_spec": args.corpus_spec.as_posix(),
+            "corpus_spec_sha256": hashlib.sha256(args.corpus_spec.read_bytes()).hexdigest(),
+            "pymupdf_version": fitz.VersionBind,
+        })
     results_json = results_payload(results)
     summary = render_summary_markdown(run_metadata=run_payload, results=results)
 
@@ -143,6 +162,8 @@ def main() -> None:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run PureLink cross-domain RAG generalization eval.")
+    parser.add_argument("--suite", choices=("generalization", "format"), default="generalization")
+    parser.add_argument("--corpus-spec", type=Path, default=Path("tests/eval/format_corpus.json"))
     parser.add_argument("--cases", type=Path, default=Path("tests/eval/rag_generalization_cases.jsonl"))
     parser.add_argument("--corpus-dir", type=Path, default=Path("tests/eval/corpus"))
     parser.add_argument("--output-dir", type=Path, default=Path("data/eval_runs"))
@@ -186,6 +207,7 @@ async def run_generalization_cases(
     source_paths: tuple[str, ...],
     mode: str,
     root: Path,
+    source_root: Path = ROOT,
 ):
     load_all_models()
     engine = create_engine(
@@ -212,6 +234,7 @@ async def run_generalization_cases(
                 chunks_root=root / "chunks",
                 vector_root=root / "vector_store",
                 chunk_strategy=os.environ.get("CHUNK_STRATEGY", "block_aware"),
+                source_root=source_root,
             )
             db.commit()
             documents = list_documents_for_knowledge_base(db, knowledge_base_id=knowledge_base.id)
@@ -302,6 +325,8 @@ def _case_for_temp_kb(case: RagEvalCase, *, knowledge_base_id: int, user_id: int
         expected_evidence_phrases=case.expected_evidence_phrases,
         forbidden_evidence_phrases=case.forbidden_evidence_phrases,
         expected_answerable=case.expected_answerable,
+        document_format=case.document_format,
+        expected_page_numbers=case.expected_page_numbers,
     )
 
 

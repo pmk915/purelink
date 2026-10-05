@@ -166,6 +166,16 @@ def _chunk_section_blocks(
                 previous.metadata.get("source_block_order_indexes"),
                 _block_order_indexes(current),
             )
+            if source_type == "pdf":
+                merged_metadata["source_locators"] = _merge_unique(
+                    previous.metadata.get("source_locators"),
+                    current_draft.metadata.get("source_locators", []),
+                )
+                previous_page = previous.metadata.get("page_number")
+                current_page = current_draft.metadata.get("page_number")
+                if previous_page is None or previous_page != current_page:
+                    merged_metadata.pop("page_number", None)
+                    merged_metadata.pop("source_locator", None)
             span_offset = len(previous.text) + 2
             chunks.append(
                 ChunkDraft(
@@ -335,6 +345,14 @@ def _build_metadata(
         metadata["source_locator"] = source_locators[0]
         metadata["source_locators"] = _unique(source_locators)
     _copy_single_value_metadata(metadata, blocks, "page_number")
+    if source_type == "pdf":
+        page_numbers = {
+            page_number
+            for block in blocks
+            if (page_number := _metadata_int(_block_metadata(block), "page_number")) is not None
+        }
+        if len(page_numbers) > 1:
+            metadata.pop("source_locator", None)
     _copy_single_value_metadata(metadata, blocks, "extractor")
     _copy_single_value_metadata(metadata, blocks, "line_role")
     return metadata

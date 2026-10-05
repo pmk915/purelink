@@ -11,6 +11,9 @@ LEGACY_EVAL_OUTPUT ?= docs/interview/rag-eval-baseline-results.json
 LEGACY_EVAL_SUMMARY ?= docs/interview/rag-eval-baseline-summary.md
 GENERALIZATION_EVAL_CASES ?= tests/eval/rag_generalization_cases.jsonl
 GENERALIZATION_EVAL_OUTPUT_DIR ?= $(EVAL_OUTPUT_DIR)
+FORMAT_EVAL_CASES ?= tests/eval/rag_format_cases.jsonl
+FORMAT_EVAL_CORPUS_SPEC ?= tests/eval/format_corpus.json
+FORMAT_EVAL_OUTPUT_DIR ?= $(EVAL_OUTPUT_DIR)
 GENERALIZATION_HOLDOUT_CASES ?= tests/eval/rag_generalization_holdout_cases.jsonl
 GENERALIZATION_HOLDOUT_CORPUS_DIR ?= tests/eval/holdout_corpus
 GENERALIZATION_EVAL_SELECTED_CASES := $(if $(filter command line environment,$(origin EVAL_CASES)),$(EVAL_CASES),$(GENERALIZATION_EVAL_CASES))
@@ -25,7 +28,7 @@ else
 PYTHON ?= python3
 endif
 
-.PHONY: up down logs ps build restart docker-up docker-down docker-logs docker-ps docker-smoke docker-prod-up docker-prod-down test test-python test-go check docs-check release-check smoke smoke-docx-rag e2e eval-rag eval-rag-legacy-20 eval-rag-generalization eval-rag-generalization-holdout eval-rag-runtime
+.PHONY: up down logs ps build restart docker-up docker-down docker-logs docker-ps docker-smoke docker-prod-up docker-prod-down test test-python test-go check docs-check release-check smoke smoke-docx-rag e2e eval-rag eval-rag-legacy-20 eval-rag-generalization eval-rag-generalization-holdout eval-rag-format eval-rag-runtime
 
 up:
 	$(COMPOSE) up --build -d
@@ -103,6 +106,9 @@ eval-rag-legacy-20:
 
 eval-rag-generalization:
 	EVAL_MODE=$(EVAL_MODE) EVAL_CHUNK_STRATEGY=$(EVAL_CHUNK_STRATEGY) $(PYTHON) scripts/eval/run_rag_generalization_eval.py --cases $(GENERALIZATION_EVAL_SELECTED_CASES) --output-dir $(GENERALIZATION_EVAL_OUTPUT_DIR) --mode $(EVAL_MODE) --chunk-strategy $(EVAL_CHUNK_STRATEGY) $(if $(GENERALIZATION_BASELINE_SNAPSHOT_DIR),--baseline-snapshot-dir $(GENERALIZATION_BASELINE_SNAPSHOT_DIR),)
+
+eval-rag-format:
+	$(PYTHON) scripts/eval/run_rag_generalization_eval.py --suite format --cases $(FORMAT_EVAL_CASES) --corpus-spec $(FORMAT_EVAL_CORPUS_SPEC) --output-dir $(FORMAT_EVAL_OUTPUT_DIR) --mode $(EVAL_MODE) --chunk-strategy $(EVAL_CHUNK_STRATEGY)
 
 eval-rag-generalization-holdout:
 	EVAL_MODE=$(EVAL_MODE) EVAL_CHUNK_STRATEGY=$(EVAL_CHUNK_STRATEGY) $(PYTHON) scripts/eval/run_rag_generalization_eval.py --cases $(GENERALIZATION_HOLDOUT_CASES) --corpus-dir $(GENERALIZATION_HOLDOUT_CORPUS_DIR) --output-dir $(GENERALIZATION_EVAL_OUTPUT_DIR) --mode $(EVAL_MODE) --chunk-strategy $(EVAL_CHUNK_STRATEGY)

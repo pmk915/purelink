@@ -689,17 +689,23 @@ def extract_pdf_page_segments_with_pymupdf(
         for page_index in range(page_count):
             page = pdf_document.load_page(page_index)
             page_number = page_index + 1
-            raw_segments.append(
-                ExtractedTextSegment(
-                    text=page.get_text("text") or "",
-                    metadata={
-                        "source_type": "pdf",
-                        "page_number": page_number,
-                        "source_locator": f"page:{page_number}",
-                        "extractor": "pymupdf",
-                    },
+            for block in page.get_text("blocks", sort=True):
+                # PyMuPDF returns (x0, y0, x1, y1, text, block_no, block_type).
+                # Image descriptions are not native text evidence.
+                if block[6] != 0 or not block[4].strip():
+                    continue
+                raw_segments.append(
+                    ExtractedTextSegment(
+                        text=block[4],
+                        metadata={
+                            "source_type": "pdf",
+                            "page_number": page_number,
+                            "source_locator": f"page:{page_number}",
+                            "extractor": "pymupdf",
+                            "bbox": [float(coordinate) for coordinate in block[:4]],
+                        },
+                    )
                 )
-            )
     finally:
         pdf_document.close()
 

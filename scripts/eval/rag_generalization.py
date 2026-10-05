@@ -10,7 +10,10 @@ import subprocess
 import sys
 from typing import Any
 
-from scripts.eval.rag_eval import RagEvalCase, RagEvalCaseResult, case_result_to_dict, summarize_latencies
+from scripts.eval.rag_eval import (
+    RagEvalCase, RagEvalCaseResult, case_result_to_dict, summarize_latencies,
+    summarize_stage_metrics, summarize_formats,
+)
 
 
 REQUIRED_CORPUS_FILES = (
@@ -90,9 +93,10 @@ def build_corpus_manifest(corpus_dir: Path) -> list[dict[str, Any]]:
     return manifest
 
 
-def build_run_id(*, mode: str, chunk_strategy: str, created_at: datetime | None = None) -> str:
+def build_run_id(*, mode: str, chunk_strategy: str, created_at: datetime | None = None, suite: str = "generalization") -> str:
     timestamp = (created_at or datetime.now(UTC)).strftime("%Y%m%d-%H%M%S")
-    return f"{timestamp}-{mode}-{chunk_strategy}"
+    prefix = "format-" if suite == "format" else ""
+    return f"{prefix}{timestamp}-{mode}-{chunk_strategy}"
 
 
 def build_run_metadata(
@@ -128,7 +132,15 @@ def build_run_metadata(
 
 
 def results_payload(results: list[RagEvalCaseResult]) -> dict[str, Any]:
-    return {"case_count": len(results), "cases": [case_result_to_dict(item) for item in results]}
+    return {
+        "case_count": len(results),
+        "cases": [case_result_to_dict(item) for item in results],
+        "stage_metrics": summarize_stage_metrics(results),
+        "by_format": summarize_formats(results),
+        "failure_stage_counts": dict(Counter(item.failure_stage or "unclassified" for item in results)),
+        "retrieval_latency_summary": summarize_latencies(item.retrieval_latency_ms for item in results),
+        "total_eval_latency_summary": summarize_latencies(item.total_eval_latency_ms for item in results),
+    }
 
 
 def write_sanitized_snapshot(
@@ -169,6 +181,10 @@ def sanitize_run_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "retrieval_min_score",
         "python_version",
         "duration_ms",
+        "suite",
+        "corpus_spec",
+        "corpus_spec_sha256",
+        "pymupdf_version",
     }
     sanitized = {key: payload[key] for key in allowed_keys if key in payload}
     sanitized["corpus_manifest"] = [
@@ -178,6 +194,7 @@ def sanitize_run_payload(payload: dict[str, Any]) -> dict[str, Any]:
             "char_count": item.get("char_count"),
             "heading_count": item.get("heading_count"),
             "sha256": item.get("sha256"),
+            **{key: item[key] for key in ("format", "size_bytes") if key in item},
         }
         for item in payload.get("corpus_manifest", [])
     ]
@@ -188,6 +205,10 @@ def sanitize_results_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "case_count": payload.get("case_count"),
         "cases": [_sanitize_case_result(item) for item in payload.get("cases", [])],
+        **{key: payload[key] for key in (
+            "stage_metrics", "by_format", "failure_stage_counts",
+            "retrieval_latency_summary", "total_eval_latency_summary",
+        ) if key in payload},
     }
 
 
@@ -202,9 +223,11 @@ def render_summary_markdown(*, run_metadata: dict[str, Any], results: list[RagEv
         item.total_eval_latency_ms if item.total_eval_latency_ms is not None else item.latency_ms
         for item in results
     )
+    retrieval_latency = summarize_latencies(item.retrieval_latency_ms for item in results)
 
     lines = [
-        "# PureLink RAG Generalization Eval Summary",
+        "# PureLink RAG Format Eval Summary" if run_metadata.get("suite") == "format"
+        else "# PureLink RAG Generalization Eval Summary",
         "",
         "## 1. Run Configuration",
         "",
@@ -237,12 +260,17 @@ def render_summary_markdown(*, run_metadata: dict[str, Any], results: list[RagEv
         "",
         "## 6. Latency Summary",
         "",
-        "In-process retrieval latency. Excludes ingestion, embedding/index construction, HTTP transport, LLM answer generation, and frontend rendering.",
+        "In-process retrieval latency excludes ingestion, index construction, QA, HTTP transport, and frontend rendering. Total eval includes retrieval and heuristic QA; it excludes ingestion, index construction, and metric evaluation.",
         "",
-        f"- mean: {_number(latency['mean'])} ms",
-        f"- p50: {_number(latency['p50'])} ms",
-        f"- p95: {_number(latency['p95'])} ms",
-        f"- max: {_number(latency['max'])} ms",
+        "| Stage | mean (ms) | p50 (ms) | p95 (ms) | max (ms) | n |",
+        "|---|---:|---:|---:|---:|---:|",
+        *[
+            f"| {name} | {_number(values['mean'])} | {_number(values['p50'])} | {_number(values['p95'])} | {_number(values['max'])} | {count} |"
+            for name, values, count in (
+                ("retrieval", retrieval_latency, sum(item.retrieval_latency_ms is not None for item in results)),
+                ("total eval", latency, sum(item.total_eval_latency_ms is not None or item.latency_ms is not None for item in results)),
+            )
+        ],
         "",
         "## 7. Failure Diagnostics",
         "",
@@ -257,6 +285,8 @@ def render_summary_markdown(*, run_metadata: dict[str, Any], results: list[RagEv
         "## 8. Known Limitations",
         "",
         "- This baseline is deterministic and does not use LLM-as-judge.",
+        "- Document Recall@K and MRR use distinct documents in initial_chunks order, before context/evidence selection; they do not rank citations.",
+        "- Evidence recall counts distinct normalized expected phrases in canonical final evidence; no-answer cases are excluded.",
         "- Evidence precision is approximated with expected/forbidden phrases and expected document names.",
         "- Expected evidence phrase matching removes presentation-only Markdown and punctuation differences, but preserves numbers, identifiers, paths, and CLI flags.",
         "- Evidence-gate answerability uses the production deterministic Evidence Support Gate, including query-type mandatory checks and support signals.",
@@ -264,8 +294,12 @@ def render_summary_markdown(*, run_metadata: dict[str, Any], results: list[RagEv
         "- No-answer failures expose limitations of the production support gate, not full QA accuracy.",
         "- In-process retrieval latency is only useful for comparison on the same local environment.",
         "- A failed case records retrieval or routing behavior; it is not hidden or rewritten by the runner.",
+        "- The legacy success stage means expected evidence survived and passed support checks; forbidden evidence or low precision can still be present. Review failure reasons and precision separately.",
         "",
     ]
+    formats = summarize_formats(results)
+    if formats:
+        lines.extend(["## 9. Metrics by Document Format", "", _group_table(formats), ""])
     return "\n".join(lines)
 
 
@@ -351,8 +385,22 @@ def _sanitize_case_result(item: dict[str, Any]) -> dict[str, Any]:
         "total_eval_latency_ms",
         "failure_reasons",
         "error",
+        "document_format",
+        "document_ranking_source",
+        "document_recall_at_1",
+        "document_recall_at_3",
+        "document_recall_at_5",
+        "document_mrr",
+        "evidence_recall",
+        "expected_page_numbers",
+        "page_provenance_hit",
     }
     sanitized = {key: item.get(key) for key in allowed_keys if key in item}
+    if "ranked_retrieved_documents" in item:
+        sanitized["ranked_retrieved_documents"] = [
+            {"rank": document.get("rank"), "document_name": document.get("document_name"), "score": document.get("score")}
+            for document in item["ranked_retrieved_documents"]
+        ]
     if "answer_allowed_markers" in sanitized:
         markers = sanitized["answer_allowed_markers"]
         sanitized["answer_allowed_markers"] = (
@@ -408,6 +456,7 @@ def _group_metrics(results: list[RagEvalCaseResult], *, key) -> dict[str, dict[s
 
 def _metrics_for_group(results: list[RagEvalCaseResult], *, total: int) -> dict[str, Any]:
     return {
+        **summarize_stage_metrics(results),
         "cases": total,
         "retrieval_hit": _nullable_metric(item.retrieval_hit for item in results),
         "citation_hit": _nullable_metric(item.citation_hit for item in results),
@@ -430,29 +479,39 @@ def _metrics_table(metrics: dict[str, Any]) -> str:
             "| Metric | Value |",
             "|---|---:|",
             f"| cases | {metrics['cases']} |",
+            *[
+                f"| {name} | {_mean_count(metrics[name])} |"
+                for name in ("document_recall_at_1", "document_recall_at_3", "document_recall_at_5")
+            ],
+            f"| document_mrr | {_mrr_count(metrics['document_mrr'])} |",
             f"| retrieval_hit | {_metric_count(metrics['retrieval_hit'])} |",
             f"| citation_hit | {_metric_count(metrics['citation_hit'])} |",
             f"| expected_evidence_hit | {_metric_count(metrics['expected_evidence_hit'])} |",
+            f"| evidence_recall | {_mean_count(metrics['evidence_recall'])} |",
             f"| forbidden_evidence_clean | {_metric_count(metrics['forbidden_evidence_clean'])} |",
             f"| router_accuracy | {_metric_count(metrics['router_accuracy'])} |",
             f"| evidence-gate answerability_accuracy | {_metric_count(metrics['answerability_accuracy'])} |",
             f"| mean_evidence_precision | {_mean_count(metrics['mean_evidence_precision'])} |",
             f"| trace_available | {_metric_count(metrics['trace_available'])} |",
+            f"| page_provenance_hit | {_metric_count(metrics['page_provenance_hit'])} |",
         ]
     )
 
 
 def _group_table(grouped: dict[str, dict[str, Any]]) -> str:
     lines = [
-        "| Group | Cases | retrieval_hit | citation_hit | expected_evidence_hit | router_accuracy | evidence-gate answerability | evidence_precision |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|",
+        "| Group | Cases | recall@5 | MRR | retrieval_hit | citation_hit | expected_evidence_hit | evidence_recall | router_accuracy | evidence-gate answerability | evidence_precision | page_provenance_hit |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for group, metrics in grouped.items():
         lines.append(
-            f"| `{group}` | {metrics['cases']} | {_metric_count(metrics['retrieval_hit'])} | "
+            f"| `{group}` | {metrics['cases']} | {_mean_count(metrics['document_recall_at_5'])} | "
+            f"{_mrr_count(metrics['document_mrr'])} | {_metric_count(metrics['retrieval_hit'])} | "
             f"{_metric_count(metrics['citation_hit'])} | {_metric_count(metrics['expected_evidence_hit'])} | "
-            f"{_metric_count(metrics['router_accuracy'])} | {_metric_count(metrics['answerability_accuracy'])} | "
-            f"{_mean_count(metrics['mean_evidence_precision'])} |"
+            f"{_mean_count(metrics['evidence_recall'])} | "
+            f"{_metric_count(metrics.get('router_accuracy', {})) if 'router_accuracy' in metrics else 'n/a'} | "
+            f"{_metric_count(metrics['answerability_accuracy'])} | "
+            f"{_mean_count(metrics['evidence_precision'])} | {_metric_count(metrics['page_provenance_hit'])} |"
         )
     return "\n".join(lines)
 
@@ -488,11 +547,15 @@ def _failed_cases_table(results: list[RagEvalCaseResult]) -> str:
             for unit in item.final_evidence_units[:2]
         )
         lines.append(
-            f"| `{item.id}` | {item.question or ''} | {expected or '-'} | {actual or '-'} | "
+            f"| `{item.id}` | {_table_cell(item.question or '')} | {_table_cell(expected or '-')} | {_table_cell(actual or '-')} | "
             f"`{item.selected_mode or 'unknown'}` | `{item.failure_stage or 'unclassified'}` | "
-            f"{', '.join(item.failure_reasons) or item.error or '-'} |"
+            f"{_table_cell(', '.join(item.failure_reasons) or item.error or '-')} |"
         )
     return "\n".join(lines)
+
+
+def _table_cell(value: str) -> str:
+    return value.replace("|", "\\|").replace("\n", " ")
 
 
 def _failure_stage_table(stages: Counter[str]) -> str:
@@ -550,6 +613,10 @@ def _bool_or_na(value: bool | None) -> str:
     if value is None:
         return "n/a"
     return "true" if value else "false"
+
+
+def _mrr_count(metric: dict[str, Any]) -> str:
+    return f"{metric['mean']:.3f} (n={metric['applicable']})" if metric["applicable"] else "n/a"
 
 
 def _number(value: float | int | None) -> str:

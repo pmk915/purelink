@@ -29,6 +29,35 @@ conservative Markdown-like structure, such as multiple headings with body text,
 PureLink parses it into structured text blocks while keeping `source_type=text`.
 This is intentionally conservative; not every TXT file is treated as Markdown.
 
+## Native PDF Extraction
+
+Native born-digital PDF text uses PyMuPDF `page.get_text("blocks", sort=True)`.
+Each retained text block becomes a `DocumentBlock.TEXT`, ordered first by
+physical page and then by PyMuPDF's supported block ordering. Empty blocks and
+image descriptions are excluded. Existing text normalization and processed-text
+character ranges are retained; identifiers such as `RETRIEVAL_MIN_SCORE` and
+`graph_vector_mix` remain intact.
+
+PDF blocks carry `source_type=pdf`, `extractor=pymupdf`, a physical one-based
+`page_number`, the existing `page:N` source locator, and `bbox` metadata.
+The bbox is a JSON array of four finite floating-point coordinates
+`[x0, y0, x1, y1]` in PyMuPDF page coordinates (points, with a top-left origin).
+It describes the extracted block, not individual citation sentences. Bboxes are
+persisted in existing block JSON metadata; they are not a new retrieval evidence
+or source-preview contract. `order_index` records stable retained-block order.
+Empty pages do not emit text blocks, but subsequent page numbers are not shifted.
+
+This is lightweight supporting infrastructure for retrieval and citation
+grounding. Limitations are deliberate:
+
+- `sort=True` does not guarantee perfect multi-column reading order.
+- No advanced heading hierarchy or font-based heading inference.
+- No dedicated table structure extraction; tables remain extracted text blocks.
+- OCR fallback remains optional and disabled by default (`ENABLE_OCR=false`).
+  Its existing document-level quality checks and provider behavior are unchanged;
+  mixed native/scanned-page completeness is not guaranteed.
+- Complex document understanding systems such as Docling are outside Core scope.
+
 ## ParsedDocument
 
 Parsers return structured blocks and backward-compatible text. `ParsedDocument.text` preserves the legacy path, while `ParsedDocument.blocks` gives chunking and future GraphRAG a structured source.
@@ -52,6 +81,12 @@ metadata. Citation units use those spans so they do not cross hard boundaries
 such as document blocks, PDF pages, heading sections, field-like lines, or list
 items. Field facts such as `声：小泽亚李` or `形似动物：兔子` are allowed to stay
 short because they contain both label and value.
+
+Fixed PDF chunks preserve page boundaries. Block-aware chunks may contain text
+from multiple pages. Such chunks omit singular `page_number` and `source_locator`
+metadata and retain their per-page `source_locators` and internal source spans.
+Citation units recover the precise originating `page:N` from those spans, and
+that page provenance survives into final `RetrievalResult.evidences`.
 
 Inline Markdown cleanup removes paired presentation markers without changing
 technical identifiers such as `RETRIEVAL_MIN_SCORE`, `graph_vector_mix`, or

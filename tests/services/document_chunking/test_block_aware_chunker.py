@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import pytest
+
 from app.models.enums import DocumentBlockType
+from app.services.document_parsing.block_normalizer import assign_block_char_ranges
 from app.services.document_chunking.block_aware_chunker import build_block_aware_chunks
 from app.services.document_parsing.types import DocumentBlock
 
@@ -194,3 +197,35 @@ def test_large_block_split_source_spans_keep_original_offsets() -> None:
         assert chunk.text == text[span.source_char_start - 100:span.source_char_end - 100]
         assert span.local_start == 0
         assert span.local_end == len(chunk.text)
+
+
+@pytest.mark.parametrize(("target_chars", "with_heading"), [(1000, False), (40, True)])
+def test_cross_page_chunk_omits_single_page_locator_even_after_small_tail_merge(
+    target_chars, with_heading,
+) -> None:
+    blocks = assign_block_char_ranges([
+        *([_block(DocumentBlockType.HEADING, "Manual", -1, heading_level=1)] if with_heading else []),
+        _block(
+            DocumentBlockType.TEXT,
+            "PDF page one identity text.",
+            0,
+            source_locator="page:1",
+            metadata={"page_number": 1, "extractor": "pymupdf"},
+        ),
+        _block(
+            DocumentBlockType.TEXT,
+            "PDF page two relationship text.",
+            1,
+            source_locator="page:2",
+            metadata={"page_number": 2, "extractor": "pymupdf"},
+        ),
+    ])
+
+    chunks = _chunk(blocks, source_type="pdf", target_chars=target_chars, min_chars=40)
+
+    assert len(chunks) == 1
+    assert "page_number" not in chunks[0].metadata
+    assert "source_locator" not in chunks[0].metadata
+    assert chunks[0].metadata["source_locators"] == ["page:1", "page:2"]
+    assert [span.page_number for span in chunks[0].source_spans] == [1, 2]
+    assert [span.source_locator for span in chunks[0].source_spans] == ["page:1", "page:2"]

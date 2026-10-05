@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import fitz
 import pytest
 from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import sessionmaker
@@ -24,6 +26,7 @@ from app.models.enums import (
 from app.models.knowledge_base import KnowledgeBase
 from app.models.user import User
 from app.services.document_chunking.types import ChunkSourceSpan
+from app.services.document_indexing import build_document_index
 from app.services.document_processing import (
     filter_generated_citation_units,
     GeneratedCitationUnitPayload,
@@ -38,6 +41,7 @@ from app.services.document_processing import (
     validate_generated_citation_units,
 )
 from app.services.document_processing import ExtractedTextSegment
+from app.services.retrieval import RetrievalMode, RetrievalRequest, retrieve
 from app.services.source_locator import build_preview_target_for_chunk
 
 
@@ -756,6 +760,105 @@ def test_fixed_pdf_round_trip_keeps_page_locator_behavior(
     assert metadata["page_number"] == 1
     assert metadata["source_locator"] == "page:1"
     assert _citation_preview_target(units[0]).locator_kind == "pdf_page"
+
+
+@pytest.mark.parametrize("strategy", ["fixed", "block_aware"])
+def test_multi_page_pdf_provenance_survives_processing_and_final_retrieval(
+    session_factory: sessionmaker,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    strategy: str,
+) -> None:
+    _set_chunk_strategy(monkeypatch, strategy)
+    storage_path = "two-pages.pdf"
+    page_texts = [
+        "PDF evidence on the first page remains searchable.",
+        "PDF evidence on the second page remains searchable.",
+    ]
+    with fitz.open() as pdf:
+        for text in page_texts:
+            page = pdf.new_page()
+            page.insert_text((72, 72), text)
+        pdf.save(tmp_path / storage_path)
+
+    with session_factory() as db:
+        document = _create_document(
+            db,
+            original_filename=storage_path,
+            storage_path=storage_path,
+            file_type="application/pdf",
+        )
+        process_document(db, document=document, upload_root=tmp_path)
+        blocks = list(db.scalars(
+            select(DocumentBlock)
+            .where(DocumentBlock.document_id == document.id)
+            .order_by(DocumentBlock.order_index)
+        ))
+        assert [block.text for block in blocks] == page_texts
+        assert [block.source_locator for block in blocks] == ["page:1", "page:2"]
+        processed_text = "\n\n".join(page_texts)
+        for page_number, block in enumerate(blocks, start=1):
+            metadata = _metadata_json(block.metadata_json)
+            assert metadata["page_number"] == page_number
+            assert len(metadata["bbox"]) == 4
+            assert processed_text[metadata["char_start"]:metadata["char_end"]] == block.text
+
+        chunks = list(db.scalars(
+            select(DocumentChunk)
+            .where(DocumentChunk.document_id == document.id)
+            .order_by(DocumentChunk.chunk_index)
+        ))
+        if strategy == "block_aware":
+            assert len(chunks) == 1
+            metadata = _metadata_json(chunks[0].metadata_json)
+            assert "page_number" not in metadata
+            assert "source_locator" not in metadata
+            assert metadata["source_locators"] == ["page:1", "page:2"]
+        else:
+            assert len(chunks) == 2
+            assert [_metadata_json(chunk.metadata_json)["page_number"] for chunk in chunks] == [1, 2]
+
+        units = list(db.scalars(
+            select(DocumentCitationUnit)
+            .where(DocumentCitationUnit.document_id == document.id)
+            .order_by(DocumentCitationUnit.unit_index)
+        ))
+        assert [unit.unit_text for unit in units] == page_texts
+        for page_number, unit in enumerate(units, start=1):
+            metadata = _metadata_json(unit.metadata_json)
+            assert metadata["page_number"] == page_number
+            assert metadata["source_locator"] == f"page:{page_number}"
+            assert metadata["extractor"] == "pymupdf"
+            assert processed_text[unit.start_char:unit.end_char] == unit.unit_text
+
+        build_document_index(
+            db,
+            document=document,
+            chunks_root=tmp_path / "chunks",
+            vector_root=tmp_path / "vector_store",
+        )
+        db.commit()
+        result = asyncio.run(retrieve(RetrievalRequest(
+            db=db,
+            documents=[document],
+            vector_root=tmp_path / "vector_store",
+            knowledge_base_id=document.knowledge_base_id,
+            user_id=document.owner_id,
+            scope=KnowledgeBaseScope.PERSONAL,
+            required_review_status=DocumentReviewStatus.NOT_REQUIRED,
+            query="What PDF evidence remains searchable?",
+            mode=RetrievalMode.CHUNK_ONLY,
+            top_k=8,
+            enable_trace=False,
+        )))
+
+        assert {evidence.text for evidence in result.evidences} == set(page_texts)
+        for evidence in result.evidences:
+            page_number = page_texts.index(evidence.text) + 1
+            assert evidence.page_number == page_number
+            assert evidence.source_locator == f"page:{page_number}"
+            assert evidence.citation_unit_id in {unit.id for unit in units}
+            assert processed_text[evidence.char_start:evidence.char_end] == evidence.text
 
 
 def test_document_chunk_and_citation_unit_have_parent_child_relationship(

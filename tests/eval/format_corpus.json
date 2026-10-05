@@ -1,0 +1,242 @@
+[
+  {
+    "name": "cedar-current.txt",
+    "format": "txt",
+    "pages": [
+      [
+        {
+          "title": "Cedar Current Runtime",
+          "paragraphs": [
+            "This manual describes the current Cedar runtime.",
+            "CEDAR_RETRY_LIMIT defaults to 6 retries in the current Cedar runtime.",
+            "Cedar is maintained by Mira Chen."
+          ]
+        },
+        {
+          "title": "Cedar Recovery",
+          "paragraphs": [
+            "Cedar Recovery says to stop the worker and restore the journal before restarting."
+          ]
+        }
+      ],
+      [
+        {
+          "title": "Cedar Audit Retention",
+          "paragraphs": [
+            "The current Cedar retains audit records for 14 days."
+          ]
+        },
+        {
+          "title": "Cedar Deployment Profiles",
+          "paragraphs": [
+            "| Profile | Reserved memory |",
+            "| --- | --- |",
+            "| Cedar compact | 384 MiB |",
+            "| Cedar standard | 768 MiB |"
+          ]
+        }
+      ]
+    ]
+  },
+  {
+    "name": "cedar-archive.txt",
+    "format": "txt",
+    "pages": [
+      [
+        {
+          "title": "Cedar Archived Runtime",
+          "paragraphs": [
+            "This historical manual describes retired settings for Cedar; it does not describe the current runtime.",
+            "CEDAR_RETRY_LIMIT defaults to 2 retries in the archived Cedar runtime.",
+            "Cedar was previously maintained by Rowan Lee."
+          ]
+        },
+        {
+          "title": "Cedar Archived Audit Retention",
+          "paragraphs": [
+            "The archived Cedar retains audit records for 90 days."
+          ]
+        }
+      ]
+    ]
+  },
+  {
+    "name": "maple-current.md",
+    "format": "markdown",
+    "pages": [
+      [
+        {
+          "title": "Maple Current Runtime",
+          "paragraphs": [
+            "This manual describes the current Maple runtime.",
+            "MAPLE_RETRY_LIMIT defaults to 6 retries in the current Maple runtime.",
+            "Maple is maintained by Mira Chen."
+          ]
+        },
+        {
+          "title": "Maple Recovery",
+          "paragraphs": [
+            "Maple Recovery says to stop the worker and restore the journal before restarting."
+          ]
+        }
+      ],
+      [
+        {
+          "title": "Maple Audit Retention",
+          "paragraphs": [
+            "The current Maple retains audit records for 14 days."
+          ]
+        },
+        {
+          "title": "Maple Deployment Profiles",
+          "paragraphs": [
+            "| Profile | Reserved memory |",
+            "| --- | --- |",
+            "| Maple compact | 384 MiB |",
+            "| Maple standard | 768 MiB |"
+          ]
+        }
+      ]
+    ]
+  },
+  {
+    "name": "maple-archive.md",
+    "format": "markdown",
+    "pages": [
+      [
+        {
+          "title": "Maple Archived Runtime",
+          "paragraphs": [
+            "This historical manual describes retired settings for Maple; it does not describe the current runtime.",
+            "MAPLE_RETRY_LIMIT defaults to 2 retries in the archived Maple runtime.",
+            "Maple was previously maintained by Rowan Lee."
+          ]
+        },
+        {
+          "title": "Maple Archived Audit Retention",
+          "paragraphs": [
+            "The archived Maple retains audit records for 90 days."
+          ]
+        }
+      ]
+    ]
+  },
+  {
+    "name": "birch-current.docx",
+    "format": "docx",
+    "pages": [
+      [
+        {
+          "title": "Birch Current Runtime",
+          "paragraphs": [
+            "This manual describes the current Birch runtime.",
+            "BIRCH_RETRY_LIMIT defaults to 6 retries in the current Birch runtime.",
+            "Birch is maintained by Mira Chen."
+          ]
+        },
+        {
+          "title": "Birch Recovery",
+          "paragraphs": [
+            "Birch Recovery says to stop the worker and restore the journal before restarting."
+          ]
+        }
+      ],
+      [
+        {
+          "title": "Birch Audit Retention",
+          "paragraphs": [
+            "The current Birch retains audit records for 14 days."
+          ]
+        },
+        {
+          "title": "Birch Deployment Profiles",
+          "paragraphs": [
+            "Birch compact profile memory: 384 MiB.",
+            "Birch standard profile memory: 768 MiB."
+          ]
+        }
+      ]
+    ]
+  },
+  {
+    "name": "birch-archive.docx",
+    "format": "docx",
+    "pages": [
+      [
+        {
+          "title": "Birch Archived Runtime",
+          "paragraphs": [
+            "This historical manual describes retired settings for Birch; it does not describe the current runtime.",
+            "BIRCH_RETRY_LIMIT defaults to 2 retries in the archived Birch runtime.",
+            "Birch was previously maintained by Rowan Lee."
+          ]
+        },
+        {
+          "title": "Birch Archived Audit Retention",
+          "paragraphs": [
+            "The archived Birch retains audit records for 90 days."
+          ]
+        }
+      ]
+    ]
+  },
+  {
+    "name": "aspen-current.pdf",
+    "format": "pdf",
+    "pages": [
+      [
+        {
+          "title": "Aspen Current Runtime",
+          "paragraphs": [
+            "This manual describes the current Aspen runtime.",
+            "ASPEN_RETRY_LIMIT defaults to 6 retries in the current Aspen runtime.",
+            "Aspen is maintained by Mira Chen."
+          ]
+        },
+        {
+          "title": "Aspen Recovery",
+          "paragraphs": [
+            "Aspen Recovery says to stop the worker and restore the journal before restarting."
+          ]
+        }
+      ],
+      [
+        {
+          "title": "Aspen Audit Retention",
+          "paragraphs": [
+            "The current Aspen retains audit records for 14 days."
+          ]
+        },
+        {
+          "title": "Aspen Deployment Profiles",
+          "paragraphs": [
+            "Aspen compact profile memory: 384 MiB.",
+            "Aspen standard profile memory: 768 MiB."
+          ]
+        }
+      ]
+    ]
+  },
+  {
+    "name": "aspen-archive.pdf",
+    "format": "pdf",
+    "pages": [
+      [
+        {
+          "title": "Aspen Archived Runtime",
+          "paragraphs": [
+            "This historical manual describes retired settings for Aspen; it does not describe the current runtime.",
+            "ASPEN_RETRY_LIMIT defaults to 2 retries in the archived Aspen runtime.",
+            "Aspen was previously maintained by Rowan Lee."
+          ]
+        },
+        {
+          "title": "Aspen Archived Audit Retention",
+          "paragraphs": [
+            "The archived Aspen retains audit records for 90 days."
+          ]
+        }
+      ]
+    ]
+  }
+]

@@ -1,5 +1,26 @@
 # PureLink 续聊交接摘要（给新对话 / 新 Codex）
 
+## 当前里程碑：M2 RAG 评估基础
+
+- 扩展现有 eval：按原始检索候选的首次出现顺序去重文档，计算 Recall@1/@3/@5 和文档 MRR；最终证据使用 RetrievalResult.evidences 计算短语召回。
+- 保留旧 hit / evidence precision 定义和原 50 例、独立 holdout、历史结果；无回答案例不进入新增召回与 MRR 的分母。
+- 新增独立 24 例格式切片（TXT / Markdown / DOCX / PDF 各 6 例），使用小型受控语料、相关事实与过期干扰文档；PDF 校验第 2 页引用。
+- 复用现有临时 KB、处理、索引、检索、QA 和报告代码；提供 eval-rag-format，记录分格式指标、排序诊断、失败阶段和基线。
+- 本轮只测量，不改生产检索权重、模型、reranker、提示词或 Answer Policy，不对 holdout 调优，不引入 LLM judge 或新评估框架。
+- M2 已实现并验证：eval 80 passed；后端 697 passed / 22 skipped。24 例格式基线 Recall@5=100%、MRR=0.925、证据召回=90%、精度=29.6%；原 50 例旧指标逐例一致。结果与两项待验证假设见 [格式基线](docs/rag/format-benchmark-baseline.md)，M3 优化尚未实施。
+
+## 已完成：M1 轻量 PDF 结构升级
+
+本轮围绕面试与作品集收口，保留本地优先、自部署定位。核心技术重点仍是检索工程、证据选择、引用溯源和评估；PDF 是辅助基础设施。
+
+- 使用现有 PyMuPDF 路径提取按 `sort=True` 排序的页面文本块，保留物理页码、`page:N`、bbox 和块顺序。
+- 继续使用 ParsedDocument / DocumentBlock 和现有 JSON 元数据，无新增文档中间表示或数据库迁移。
+- 修复跨页 block-aware chunk 的单页来源歧义，保留 citation unit 的准确页码。
+- 用生成的小 PDF 验证排序、内容、bbox、页码、字符范围和最终检索证据；验证现有格式及 OCR 回退兼容性。
+- 不实现标题推断、专用表格解析、自定义阅读顺序或 OCR 重构；不改检索策略、评估数据与默认配置，不引入 Docling 等重型框架。
+
+以下 M26 与更早内容保留为历史交接背景；本轮范围以此 M2 为准。
+
 ## M26 当前定位更新
 
 PureLink 当前定位为：**本地优先、云端兼容的自部署 AI 知识库系统**，而不是官方托管 SaaS。
