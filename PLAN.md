@@ -1,6 +1,16 @@
 # PureLink 续聊交接摘要（给新对话 / 新 Codex）
 
-## 当前里程碑：M2 RAG 评估基础
+## 当前里程碑：M3 证据选择与受控消融
+
+- 干净基线：main / 8ec4dbe1814b6c95ed0e6273783c8710ed616bf9；先复跑 24/50 例并记录只读阶段诊断。
+- 主要问题：generic 候选按父块分数/词面重叠扩张，最多 8 个证据；每块 2 单元限制还会挤掉直接事实。
+- 主假设：generic selection 在所有已检索 context citation units 中按自身文本的有效问题词覆盖做增量选择，覆盖不再增加就停止；保留多事实的增量覆盖与原 citation provenance，不改实体/技术/overview 选择。
+- 独立缺陷：责任属性的 maintains / maintained by 未共享，Who 问句实体含功能词；补齐共享匹配与此类问句绑定，不降低 support 门槛或改 Answer Policy。
+- 取舍：更少噪声与冗余，但少词面重叠/同词描述多个独立事实可能召回下降；完整保留 before/after 和原 50 例回归，不按案例 ID 调优。
+- 禁止修改语料、期待/禁用短语、embedding、候选 top-k、混合权重、router、PDF、chunk、GraphRAG；不对 holdout 调优，不 commit/push。结束后只做结果捕获与 demo/interview 包装。
+- M3 已实现并验证：定向 276 passed；完整后端 709 passed / 22 skipped。格式精度 29.6%→72.5%、证据召回 90%→100%、禁用证据案例 10→7；排序/页码保持，原 50 例指标、失败阶段与证据数逐例一致。保留组合修改，详情见 [受控消融报告](docs/rag/evidence-selection-ablation.md)，停止进一步实质优化。
+
+## 已完成：M2 RAG 评估基础
 
 - 扩展现有 eval：按原始检索候选的首次出现顺序去重文档，计算 Recall@1/@3/@5 和文档 MRR；最终证据使用 RetrievalResult.evidences 计算短语召回。
 - 保留旧 hit / evidence precision 定义和原 50 例、独立 holdout、历史结果；无回答案例不进入新增召回与 MRR 的分母。

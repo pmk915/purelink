@@ -846,7 +846,9 @@ def test_multi_page_pdf_provenance_survives_processing_and_final_retrieval(
             user_id=document.owner_id,
             scope=KnowledgeBaseScope.PERSONAL,
             required_review_status=DocumentReviewStatus.NOT_REQUIRED,
-            query="What PDF evidence remains searchable?",
+            # Request both independent page facts explicitly. Generic selection
+            # may compress evidence that repeats the same question terms.
+            query="What PDF evidence on the first and second pages remains searchable?",
             mode=RetrievalMode.CHUNK_ONLY,
             top_k=8,
             enable_trace=False,

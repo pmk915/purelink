@@ -48,6 +48,7 @@ from app.services.overview_retrieval import collect_overview_chunks
 from app.services.query_analysis import (
     EVIDENCE_QUERY_ATTRIBUTE,
     EVIDENCE_QUERY_DEFINITION,
+    EVIDENCE_QUERY_GENERIC,
     EVIDENCE_QUERY_OVERVIEW,
     EVIDENCE_QUERY_REASON,
     EVIDENCE_QUERY_TECHNICAL,
@@ -93,6 +94,12 @@ QUERY_SYNONYMS: dict[str, tuple[str, ...]] = {
     "有什么用": ("作用", "用途", "功能"),
     "怎么保证": ("可靠性", "保证", "机制", "设计"),
 }
+
+GENERIC_QUERY_FUNCTION_WORDS = frozenset({
+    "a", "an", "the", "is", "are", "was", "were", "be", "been",
+    "do", "does", "did", "what", "which", "who", "how", "many", "much",
+    "in", "on", "at", "to", "of", "for", "by", "and", "or", "it",
+})
 
 ENTITY_QUERY_TYPES = {
     "entity_definition",
@@ -1248,6 +1255,11 @@ def select_evidence_units(
         not use_query_evidence_profile
         and analysis.query_type == EVIDENCE_QUERY_OVERVIEW
     )
+    generic_coverage = (
+        use_query_evidence_profile
+        and analysis.query_type == EVIDENCE_QUERY_GENERIC
+        and not evidence_profile.is_entity_query
+    )
     per_chunk_limit = (
         max_evidence_units
         if overview_coverage
@@ -1309,7 +1321,7 @@ def select_evidence_units(
             if candidate_key in seen_keys:
                 rejection_reason_counts["duplicate"] += 1
                 continue
-            if accepted_count >= per_chunk_limit:
+            if not generic_coverage and accepted_count >= per_chunk_limit:
                 rejection_reason_counts["lower_rank"] += 1
                 continue
             selected.append(candidate)
@@ -1318,7 +1330,11 @@ def select_evidence_units(
             if not use_query_evidence_profile and not overview_coverage and len(selected) >= max_evidence_units:
                 break
 
-    if overview_coverage:
+    if generic_coverage:
+        selected = _select_generic_coverage_candidates(
+            selected, question_features=question_features, max_evidence_units=max_evidence_units,
+        )
+    elif overview_coverage:
         selected = _select_overview_coverage_candidates(
             selected,
             max_evidence_units=max_evidence_units,
@@ -1399,6 +1415,51 @@ def select_evidence_units(
             }
         )
     return _assign_evidence_markers(selected)
+
+
+def _select_generic_coverage_candidates(
+    candidates: list[CitationUnitCandidate],
+    *,
+    question_features: set[str],
+    max_evidence_units: int,
+) -> list[CitationUnitCandidate]:
+    """Keep facts adding query coverage, without inheriting parent-block words."""
+    features = question_features - GENERIC_QUERY_FUNCTION_WORDS
+    remaining = []
+    for candidate in candidates:
+        text_features = _build_text_features(candidate.text) - GENERIC_QUERY_FUNCTION_WORDS
+        hits = text_features & features
+        # A label repeating the question is not a factual answer.
+        if hits and text_features - features:
+            remaining.append((candidate, hits))
+    # Low lexical coverage cannot justify compressing a paraphrased answer.
+    # Preserve the existing breadth rather than pretending one weak hit suffices.
+    if not remaining or max(len(hits) for _, hits in remaining) * 2 < len(features):
+        selected = []
+        per_chunk_count: dict[tuple[int, str], int] = defaultdict(int)
+        for candidate in sorted(candidates, key=lambda item: (-item.score, item.document_id, item.chunk_id, item.citation_unit_id or 0)):
+            key = (candidate.document_id, candidate.chunk_id)
+            if per_chunk_count[key] >= MAX_EVIDENCE_UNITS_PER_CHUNK:
+                continue
+            if len(selected) >= max_evidence_units:
+                break
+            selected.append(candidate)
+            per_chunk_count[key] += 1
+        return selected
+
+    covered: set[str] = set()
+    selected: list[CitationUnitCandidate] = []
+    while remaining and len(selected) < max_evidence_units:
+        index = max(range(len(remaining)), key=lambda i: (
+            len(remaining[i][1] - covered), remaining[i][0].score, -i,
+        ))
+        candidate, hits = remaining.pop(index)
+        gain = hits - covered
+        if not gain:
+            break
+        selected.append(replace(candidate, coverage_gain=len(gain) / max(1, len(features))))
+        covered.update(hits)
+    return selected
 
 
 def build_citation_ready_fallback_units(

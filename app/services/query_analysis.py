@@ -99,7 +99,10 @@ EVIDENCE_ATTRIBUTE_ALIASES: dict[str, tuple[str, ...]] = {
     "weight": ("重量", "多重", "weight"),
     "height": ("身高", "height"),
     "role": ("角色", "职位", "职务", "role", "position", "title"),
-    "responsibility": ("负责", "职责", "责任", "responsibility", "responsibilities", "owns"),
+    "responsibility": (
+        "负责", "职责", "责任", "responsibility", "responsibilities", "owns",
+        "maintains", "maintained by", "maintainer",
+    ),
     "group": ("隶属", "属于哪个组", "属于哪个团队", "group", "team", "belongs to"),
     "configuration": ("配置", "环境变量", "config", "configuration", "environment variable"),
     "default_value": ("默认值", "缺省值", "default value", "defaults to", "default"),
@@ -304,6 +307,20 @@ def _extract_evidence_entities(
     requested_attributes: tuple[str, ...],
     technical_identifiers: tuple[str, ...],
 ) -> tuple[str, ...]:
+    if query_type == EVIDENCE_QUERY_ATTRIBUTE and "responsibility" in requested_attributes:
+        # Bind an English owner question to its object, not the interrogative
+        # or verb. Prefer the explicit proper name within descriptive wording.
+        owner_question = re.fullmatch(
+            r"\s*who\s+(?:maintains|owns)\s+(.+?)\s*[?？]?",
+            query, re.IGNORECASE,
+        )
+        if owner_question:
+            target = owner_question.group(1).rstrip("?？").strip()
+            target = re.sub(r"^(?:the\s+)?(?:current\s+)?", "", target, flags=re.IGNORECASE)
+            names = re.findall(r"\b[A-Z][A-Za-z0-9_-]*(?:\s+[A-Z][A-Za-z0-9_-]*)*\b", target)
+            if names:
+                return tuple(dict.fromkeys(names))
+            return (_clean_entity_text(target),) if target else ()
     if query_type == EVIDENCE_QUERY_RELATION:
         match = re.search(
             r"(.+?)(?:和|与|跟|\band\b)(.+?)(?:是什么关系|有.*关系|\brelationship\b|\brelated\b|[？?]?$)",

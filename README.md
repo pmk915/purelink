@@ -71,6 +71,8 @@ This baseline answers “did a system change cause a regression?” It emphasize
 
 `make eval-rag-format` runs a separate 24-case deterministic engineering benchmark: six questions each for TXT, Markdown, DOCX, and PDF, including two PDF page-2 citation checks. It reuses the existing temporary-KB ingestion, indexing, retrieval, and QA runner. Reports add document Recall@1/@3/@5, document MRR, final-evidence recall, and per-format metrics while preserving the official regression and holdout suites. See the [M2 measured baseline](docs/rag/format-benchmark-baseline.md) and [metric definitions](docs/rag/rag-evaluation.md). This slice measures current behavior; it does not tune retrieval or QA.
 
+The [M3 controlled evidence-selection ablation](docs/rag/evidence-selection-ablation.md) improves format-slice evidence precision from 29.6% to 72.5% and evidence recall from 90% to 100%, with Recall@5=100%, MRR=.925, and PDF page provenance 2/2 preserved. Seven cases still contain forbidden evidence. The official 50-case metrics remain unchanged; this is a small deterministic engineering result, with archive and table limitations recorded explicitly.
+
 ### Default Runtime Evaluation
 
 The default local Docker path follows [`.env.example`](.env.example):

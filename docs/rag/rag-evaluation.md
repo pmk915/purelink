@@ -28,6 +28,17 @@ make eval-rag-format
 
 This reuses the generalization runner and current production ingestion/index/retrieval/QA path. It supplements the official 50-case suite and independent holdout. It does not replace either suite or change retrieval settings. See the [M2 measured baseline](format-benchmark-baseline.md).
 
+The subsequent [M3 evidence-selection ablation](evidence-selection-ablation.md)
+records baseline, coverage-only, and combined results with fixed cases/corpus and
+retrieval configuration. Generic factual selection now adds units only for new
+meaningful query-term coverage when direct lexical support is strong; weak
+signals retain the old per-chunk quotas. Existing entity profiles, technical
+queries, and overview selection preserve their paths. A separate shared
+responsibility alias/owner-binding correction resolves valid passive maintainer
+support without relaxing mandatory checks or changing Answer Policy. Final
+units retain their source text, IDs, locators and spans. The report includes
+precision denominators, intermediate regressions, and remaining failures.
+
 Default Runtime evaluation over the same 50 cases:
 
 ```bash
