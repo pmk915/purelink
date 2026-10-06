@@ -2,6 +2,10 @@
 
 This page is the main map for PureLink's product, RAG architecture, ingestion, GraphRAG, development, and interview demo documentation.
 
+[English project overview](../README.md) | [简体中文项目简介](../README.zh-CN.md).
+The project is feature-frozen after M1–M4. Start with the storyline/demo for
+portfolio presentation; detailed metrics remain under RAG Evaluation.
+
 ## Product
 
 - [Knowledge Base Workspace](product/kb-workspace.md): Ask, Documents, Graph, Retrieval Debug, Health, and Settings tabs.
@@ -25,7 +29,9 @@ This page is the main map for PureLink's product, RAG architecture, ingestion, G
 - [Index Metadata](rag/index-metadata.md): vector index compatibility and stale index safety.
 - [RAG Evaluation](rag/rag-evaluation.md): deterministic retrieval/citation eval harness.
 - [RAG Generalization Eval](rag/rag-evaluation.md#generalization-corpus): cross-domain corpus, evidence precision, router, and no-answer metrics.
-- [RAG Evaluation Talking Points](interview/eval-talking-points.md): current 50-case deterministic and default-Runtime results.
+- [Evidence Selection Ablation](rag/evidence-selection-ablation.md): retained M3 change and rejected precision/recall trade-off.
+- [Public Retrieval Validation](rag/rag-evaluation.md#public-retrieval-validation): six-task partial NanoBEIR Dense/Hybrid results.
+- [RAG Evaluation Talking Points](interview/eval-talking-points.md): three distinct regression, ablation, and public experiments.
 
 ## Ingestion
 
@@ -47,6 +53,7 @@ This page is the main map for PureLink's product, RAG architecture, ingestion, G
 - [Docker Deployment](development/docker-deployment.md): local and production-like Docker Compose, env files, backup/restore, and troubleshooting.
 - [Error Handling](development/error-handling.md): API error envelope, request ids, frontend error states, and troubleshooting.
 - [Release Checklist](development/release-checklist.md): final verification, docs checks, data hygiene, and optional tag commands.
+- [Portfolio Verification](development/portfolio-verification.md): exact final commands, actual outputs, and environment boundaries.
 - [Frontend-Backend Integration Test](development/frontend-backend-integration-test.md): local integration checks.
 - [Troubleshooting](troubleshooting.md): operational and debugging notes.
 - [Environment Variables](../.env.example): local configuration template.
@@ -55,8 +62,9 @@ This page is the main map for PureLink's product, RAG architecture, ingestion, G
 
 - **Recommended start:** [PureLink Code Tour](interview/code-tour.md): a verified ten-minute path through processing, retrieval, answer control, citations, trace, and eval code.
 - [Technical Deep Dives](interview/deep-dives/README.md): interview-oriented request flow, chunking, retrieval, evidence policy, citations, and failure analysis grounded in current code.
-- [Project Storyline](interview/project-storyline.md): problem, solution, engineering decisions, timeline, and talk tracks.
+- [Project Storyline](interview/project-storyline.md): five-minute hypothesis, measurement, finding, and decision narrative.
 - [PureLink Interview Demo Guide](interview/purelink-demo-guide.md): step-by-step demo runbook.
+- [Limitations](interview/limitations.md): retrieval, evidence, PDF, evaluation, and deployment boundaries.
 - [Feature Map](interview/feature-map.md): feature-to-code-to-docs-to-tests mapping.
 - [Eval Talking Points](interview/eval-talking-points.md): how to explain the RAG baseline honestly.
 - [RAG Resume Description](interview/purelink-rag-resume-description.md): resume-oriented summary.

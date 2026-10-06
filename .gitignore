@@ -11,6 +11,14 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 *.tsbuildinfo
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+*.sqlite
+*.sqlite3
+*.db
+:memory:.ses
 
 # Runtime artifacts
 /data/*

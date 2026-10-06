@@ -7,13 +7,15 @@
 ## 当前阶段定位
 
 - 项目名称：PureLink
-- 当前阶段：本地优先、自部署 RAG 项目的面试与作品集收口
+- 当前阶段：功能冻结；完成本地优先、自部署 RAG 项目的双语作品集、面试材料和最终验证
 - 已完成：认证、个人与团队知识库、上传审核、结构化处理、检索问答、引用与评估基础能力
 - 已完成 M1：轻量 PDF 有序文本块、bbox 与跨页引用来源修复
 - 已完成 M2：确定性排序/证据指标与独立 24 例格式切片
 - 已完成 M3：generic 证据选择与责任属性修复；受控消融与原 50 例回归已记录
 - 已完成 M4 授权范围：FastEmbed query/passage API 修正、官方 NanoSciFact smoke 与 NanoBEIR 官方顺序前 6 任务的 direct/dense/hybrid 对照；其余 7 个因用户运行范围限定明确未评估，结果已记录，停止实质优化
-- M4 边界：仅 provider 正确性修复与独立开发评估适配器；固定英文 BGE 模型，不调混合权重，不改 Demo 默认、M1-M3 案例/配置/历史快照、QA、证据选择、PDF、chunk 或 GraphRAG；数据/模型/运行结果均保持 gitignored，不 commit/push
+- M4 已独立提交：c25c7c30da7ec12909d1cc1a272da7e64f642e11；公共基准复用已记录结果，收口不改 provider 或检索逻辑
+- 收口边界：只做 README 英文/中文、面试与必要文档同步、最终测试和 Docker/smoke 验证；不启动 M5、不新增 RAG 功能、不调 Hybrid、不改 Demo 模型、不重构架构
+- 本轮用户已明确授权审查、文档提交和验证通过后 push origin/main；数据/模型/原始运行结果均保持 gitignored，不创建 tag 或 GitHub Release
 
 ## 工作原则
 

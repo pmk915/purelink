@@ -1,6 +1,16 @@
 # PureLink 续聊交接摘要（给新对话 / 新 Codex）
 
-## 当前里程碑：M4 公共英文检索验证
+## 最终作品集收口（功能冻结）
+
+- 起点：干净 main / c25c7c30da7ec12909d1cc1a272da7e64f642e11，M4 已独立提交且 origin/main 一致；复核通过，不重复提交 M4。
+- 顺序：审查 M4 → 英文 README 与现有面试文档收口 → 对等中文 README → 后端/前端/文档/Compose/smoke/50 与 24 例最终验证 → 干净文档提交 → push main。
+- 不启动 M5、不新增功能、不调混合权重、不更换 Demo 模型、不改检索/provider/架构，不创建 tag/Release。公共六任务结果复用；历史快照保留，最终内部运行另存 ignored 目录。
+- 环境记录：用户重启后 Docker Desktop/WSL 集成已恢复；Node 22 与仓库 Node 24 要求不同，使用隔离临时 Node 24.21.0 做前端验证。既有 .env 的 DeepSeek/block-aware 设置保持不变，Compose 显式使用 .env.example 验证默认配置。
+- 最终验证完成：后端 733 passed / 22 Core 可选扩展 skipped，Go 测试通过，Node 24 lint/build 通过，docs-check 与 diff 检查通过；Compose 四项 healthy、Python worker running，PostgreSQL head、现有 personal smoke PASS。默认配置 PDF API 彩排验证 14 days/page 2、6 retries/page 1 与无引用拒答。
+- 50/24 例最终内部指标与 M4 捕获一致，使用现有 sanitizer 新增 portfolio-final 快照，历史文件未覆盖。英文/中文 README、面试文档与实际验证记录已同步；不复跑公共 CPU 基准。
+- 已知部署风险：额外 npm audit 报告 17 项（2 moderate、14 high、1 critical），建议包含 Next.js 主版本升级，本轮未改依赖。结论仅为本地面试/作品集 READY，非公开部署安全保证；细节见 [最终验证](docs/development/portfolio-verification.md)。
+
+## 已完成：M4 公共英文检索验证（历史阶段记录）
 
 - 干净基线：main / c76e889ae414b5506c5a2a8dde3566b40920b872。
 - 顺序：检查 FastEmbed 模型 API → query/passage provider 修复及定向回归 → 独立开发依赖 → 官方 NanoSciFact smoke → 预定义 NanoBEIR direct/PureLink dense 对照 → 解释差异后运行原生产 hybrid。
@@ -8,8 +18,8 @@
 - 评估只涉及检索，使用官方 MTEB 数据与 nDCG@10 / Recall@10 / MRR@10；记录失败任务和共同完成任务宏平均。网络运行显式触发，CI 只用小型内存数据。
 - 可选依赖与生成结果分别位于开发 requirements 和 data/eval_runs/external；不引入生产 MTEB 依赖，不 commit/push。
 - 用户在第 5 个 CPU 任务运行时将本轮范围限定为官方顺序前 6 个任务；第 6 个完成后停止，其余 7 个明确记为 not_run，只报告部分 NanoBEIR 验证，禁止按分数挑选或宣称完整 13 任务结果。
-- M4 已完成该授权范围：NanoSciFact 官方 smoke 成功；前 6 任务共 300 查询、约 60 分钟，所有 direct/dense 检查通过，无已评估任务失败。宏平均 nDCG/Recall@10/MRR@10：official=.6222/.6710/.6821，Dense=.6226/.6710/.6826，Hybrid=.5569/.6340/.6055；Hybrid 六任务 nDCG 全部下降，保留结果，停止调参，不增加 reranker。
-- 验证：完整后端 732 passed / 22 skipped；增加显式任务范围后定向 31 passed。50/24 例 hashed-BOW M3 指标不变；provider-only FastEmbed Recall@3 100%→97.7%、MRR .9318→.925，检索/引用/证据命中与可回答性不变。保留 API 正确性修复，既有 FastEmbed 索引必须完整重建；历史快照未覆盖。已同步 README 与 [公共验证结果](docs/rag/rag-evaluation.md#m4-cpu-result-first-six-nanobeir-tasks)，未 commit/push。
+- M4 已完成该授权范围并独立提交为 c25c7c3：NanoSciFact 官方 smoke 成功；前 6 任务共 300 查询、约 60 分钟，所有 direct/dense 检查通过，无已评估任务失败。宏平均 nDCG/Recall@10/MRR@10：official=.6222/.6710/.6821，Dense=.6226/.6710/.6826，Hybrid=.5569/.6340/.6055；Hybrid 六任务 nDCG 全部下降，保留结果，停止调参，不增加 reranker。
+- 阶段验证：完整后端 732 passed / 22 skipped；增加显式任务范围后定向 31 passed。50/24 例 hashed-BOW M3 指标不变；provider-only FastEmbed Recall@3 100%→97.7%、MRR .9318→.925，检索/引用/证据命中与可回答性不变。保留 API 正确性修复，既有 FastEmbed 索引必须完整重建；历史快照未覆盖。公共结果见 [评估报告](docs/rag/rag-evaluation.md#m4-cpu-result-first-six-nanobeir-tasks)；最终收口验证以上文记录为准。
 
 ## 已完成：M3 证据选择与受控消融
 
@@ -40,7 +50,7 @@
 - 用生成的小 PDF 验证排序、内容、bbox、页码、字符范围和最终检索证据；验证现有格式及 OCR 回退兼容性。
 - 不实现标题推断、专用表格解析、自定义阅读顺序或 OCR 重构；不改检索策略、评估数据与默认配置，不引入 Docling 等重型框架。
 
-以下 M26 与更早内容保留为历史交接背景；本轮范围以此 M2 为准。
+以下 M26 与更早内容保留为历史交接背景，不构成当前开发路线；当前范围以顶部功能冻结与最终收口为准。
 
 ## M26 当前定位更新
 

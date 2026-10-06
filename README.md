@@ -1,215 +1,166 @@
-<div align="center">
-
 # PureLink
 
-PureLink is a local-first, self-hosted RAG knowledge workspace with structured document processing, routed retrieval, deterministic answer controls, traceable citations, and retrieval observability.
+**A local-first, self-hosted RAG knowledge workspace focused on measurable retrieval, evidence selection, grounded citations, and reproducible evaluation.**
+
+[English](README.md) | [简体中文](README.zh-CN.md)
 
 [![CI](https://github.com/pmk915/purelink/actions/workflows/ci.yml/badge.svg)](https://github.com/pmk915/purelink/actions/workflows/ci.yml)
 [![Smoke](https://github.com/pmk915/purelink/actions/workflows/smoke.yml/badge.svg)](https://github.com/pmk915/purelink/actions/workflows/smoke.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
-[![Next.js](https://img.shields.io/badge/Next.js-14-black.svg?logo=next.js)](frontend/)
-[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg?logo=docker&logoColor=white)](docker-compose.yml)
+[![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[Core decisions](#core-engineering-decisions) · [Evaluation](#evaluation-snapshot) · [Architecture](#architecture-and-request-flow) · [Demo](#product-walkthrough) · [Quick start](#quick-start) · [Documentation](#documentation)
+**Measured results:** evidence precision **29.6% → 72.5%**; evidence recall **90% → 100%** on the internal 24-case format benchmark. Public Dense nDCG@10: **0.6226**, versus **0.6222** for the MTEB reference, on six NanoBEIR tasks. These are separate experiments.
 
-</div>
+![Answer with a backend-grounded citation and source-provenance drawer](docs/assets/screenshots/citation-drawer.png)
 
-<p align="center">
-  <img src="docs/assets/screenshots/citation-drawer.png" alt="PureLink answer with an inline citation and the citation provenance drawer" width="100%">
-</p>
+## What PureLink Is
 
-PureLink is an engineering-focused RAG knowledge workspace that makes document processing, retrieval decisions, evidence sufficiency, citations, and failure states explicit, observable, and testable. It combines personal and team workspaces with backend-grounded citations, processing diagnostics, retrieval traces, and reproducible evaluation.
+PureLink combines personal and team knowledge bases with a complete document-to-answer workflow. Upload TXT, Markdown, DOCX, or a native-text PDF, inspect its processing state, ask a question, and follow a citation back to the supporting source. The workspace exposes retrieval decisions and final evidence alongside the answer.
 
-## Problem
+The project focuses on boundaries that make RAG understandable: parsing versus chunking, candidate retrieval versus evidence selection, and related text versus supported answers. A Python backend and worker own these decisions; the web interface makes their results inspectable. Local model and storage defaults support development and controlled self-hosting. The project is feature-frozen for portfolio presentation.
 
-Small RAG demos commonly flatten document structure, hide retrieval strategy, treat retrieved relevance as answerability, delegate citation markers to the model, require logs to diagnose failures, and evaluate quality changes only by anecdote. PureLink keeps those boundaries explicit. It is an engineering reference project, not a production-audited SaaS platform or a claim of state-of-the-art retrieval quality.
+## Why PureLink
 
-## Core Engineering Decisions
+Finding the right document is only one stage of answering a question. A retrieved chunk can contain the desired fact together with old settings, unrelated table rows, or another entity's attributes. Passing all of that text to generation can produce a plausible answer with weak support.
 
-1. **[Structured ingestion](docs/ingestion/file-processing-pipeline.md)** persists parser-neutral `DocumentBlock` records so PDF, DOCX, Markdown, and text parsing can evolve separately from chunking. The trade-off is more persisted state and processing work.
-2. **[Chunk and citation-unit dual granularity](docs/ingestion/document-blocks.md)** uses chunks for retrieval context and smaller source-located units for claims and citations. Block-aware chunking is available for regression experiments; the default runtime remains fixed chunking.
-3. **[Hybrid and routed retrieval](docs/rag/retrieval-layer.md)** provides vector, keyword, overview, and lightweight graph candidates behind one retrieval contract; `auto` uses a transparent rule-based query router.
-4. **[Evidence Support and Answer Policy](docs/rag/answer-policy.md)** check question-specific support before generation, conservatively narrow explicit attribute/technical/relation evidence, and skip the provider for unsupported questions.
-5. **[Backend-grounded citations](docs/retrieval-and-citations.md)** assign citation identities before generation, restrict allowed markers, validate provider output, and resolve the final drawer from backend evidence.
-6. **[Trace and deterministic evaluation](docs/rag/retrieval-trace.md)** expose routing, candidates, final evidence, support/policy decisions, processing readiness, and repeatable phrase/document metrics.
+PureLink makes those stages observable and measures them independently. Its internal format benchmark already had **100% document Recall@5**, while final-evidence precision was only **29.6%**. That finding directed the work toward evidence selection. A controlled change improved the selected evidence while preserving document ranking and the existing regression suite.
 
-## Evaluation Snapshot
+The public comparison supplied a second engineering lesson: the Dense path closely reproduced an independent MTEB reference, while the current Hybrid path reduced nDCG on every evaluated public task. Both the improvement and the negative result are retained with their experimental boundaries.
 
-### Deterministic Regression Baseline
+## Core Engineering Ideas
 
-The only current official interview regression suite is the 50-case generalization evaluation over a small cross-domain corpus: 44 answerable questions and 6 no-answer questions. It does not use an LLM as judge.
+### 1. Structured Ingestion
 
-The committed run uses a deliberately reproducible configuration rather than the default Docker model stack:
-
-```env
-CHUNK_STRATEGY=block_aware
-EMBEDDING_PROVIDER=local_hashed_bow
-EMBEDDING_MODEL=hashed_bow_v1
-RERANKER_ENABLED=false
-RERANKER_PROVIDER=noop
+```text
+TXT / Markdown / DOCX / PDF → DocumentBlock → Chunk → Citation Unit
 ```
 
-| Metric | Result |
-|---|---:|
-| Cases | 50 |
-| Retrieval hit | 43 / 44 |
-| Citation hit | 43 / 44 |
-| Expected evidence hit | 39 / 44 |
-| Router accuracy | 50 / 50 |
-| Answerability accuracy | 49 / 50 |
-| Forbidden evidence clean | 9 / 9 |
-| Mean evidence precision | 72.3% (42 applicable cases) |
-| No-answer cases | 6 / 6 |
-| Trace available | 50 / 50 |
+The parser registry returns a shared `ParsedDocument` contract, and ordered `DocumentBlock` records retain the structure each parser can recover. Chunking then operates through the existing fixed or block-aware strategy. Fixed chunking remains the Demo default; internal experiments explicitly use block-aware chunking.
 
-Source: [committed answer-policy baseline](tests/eval/baselines/answer-policy-auto-block-aware/summary.md). Metric definitions and reproduction details are in [RAG Evaluation](docs/rag/rag-evaluation.md).
+**Chunks are retrieval/context units. Citation units are smaller evidence units with source provenance.** This distinction lets retrieval gather useful context while the answer references a narrower supporting statement. Citation units preserve processed-text ranges and available section/page information.
 
-This baseline answers “did a system change cause a regression?” It emphasizes repeatability for CI and local checks; it is not a production-scale benchmark or the default Docker model stack. Remaining failures stay visible in the committed report.
+Native PDF extraction uses PyMuPDF page-aware text blocks, physical one-based page numbers, and block bounding boxes. Source spans preserve accurate citation pages even when a block-aware chunk spans multiple pages. This is deliberately lightweight extraction; its layout and OCR limits are documented below.
 
-### Format Coverage Benchmark
+### 2. Retrieval Engineering
 
-`make eval-rag-format` runs a separate 24-case deterministic engineering benchmark: six questions each for TXT, Markdown, DOCX, and PDF, including two PDF page-2 citation checks. It reuses the existing temporary-KB ingestion, indexing, retrieval, and QA runner. Reports add document Recall@1/@3/@5, document MRR, final-evidence recall, and per-format metrics while preserving the official regression and holdout suites. See the [M2 measured baseline](docs/rag/format-benchmark-baseline.md) and [metric definitions](docs/rag/rag-evaluation.md). This slice measures current behavior; it does not tune retrieval or QA.
+PureLink exposes dense/vector candidates, keyword candidates, Hybrid retrieval, overview retrieval, and lightweight graph candidates. The rule-based AUTO router selects among `chunk_only`, `hybrid_text`, `overview`, and `graph_vector_mix`, recording its reason and any effective fallback.
 
-The [M3 controlled evidence-selection ablation](docs/rag/evidence-selection-ablation.md) improves format-slice evidence precision from 29.6% to 72.5% and evidence recall from 90% to 100%, with Recall@5=100%, MRR=.925, and PDF page provenance 2/2 preserved. Seven cases still contain forbidden evidence. The official 50-case metrics remain unchanged; this is a small deterministic engineering result, with archive and table limitations recorded explicitly.
+The lexical channel handles technical identifiers such as config keys, API paths, and commands through a local deterministic scorer. The graph channel stores source-grounded entities and one-hop relations in PostgreSQL. These strategies reuse the current service boundaries and local indexes.
 
-### Default Runtime Evaluation
+Multiple strategies are traced and evaluated because their usefulness depends on the workload. The public experiment held the English embedding model and document representation fixed when comparing Dense with production Hybrid; it did not tune fusion weights to improve the scores.
 
-The default local Docker path follows [`.env.example`](.env.example):
+### 3. Evidence Grounding
 
-```env
-CHUNK_STRATEGY=fixed
-EMBEDDING_PROVIDER=fastembed
-EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
-RERANKER_ENABLED=false
-RERANKER_PROVIDER=noop
+```text
+Candidate Retrieval → Evidence Selection → Evidence Support Gate
+  → Answer Policy → Grounded Answer → Citation
 ```
 
-The same 50 cases were also run through the normal user-facing local stack without changing its defaults:
+**Retrieved candidates ≠ final evidence ≠ a supported answer.** Selection chooses citation units from retrieved context. The support gate checks whether that evidence contains the requested fact. Answer Policy determines whether generation may proceed; unsupported questions skip the provider and return a no-answer response without citations.
 
-| Metric | Result |
-|---|---:|
-| Retrieval hit | 44 / 44 |
-| Citation hit | 44 / 44 |
-| Expected evidence hit | 36 / 44 |
-| Router accuracy | 50 / 50 |
-| Answerability accuracy | 47 / 50 |
-| Forbidden evidence clean | 8 / 9 |
-| Mean evidence precision | 70.6% (41 applicable cases) |
-| Trace available | 50 / 50 |
+Citation identities originate in backend evidence. The provider receives an allowed marker set, and returned markers are validated before citations reach the UI. This protects source identity and provenance, while the heuristic support gate still has explicit limits.
 
-Source: [committed default-runtime snapshot](tests/eval/baselines/runtime-fastembed-fixed/summary.md). This run answers “how does the actual Demo default perform?” It is reported separately from the deterministic regression baseline; neither configuration is presented as universally superior. Latency is local in-process timing and excludes ingestion, HTTP, LLM generation, and frontend rendering.
+Retrieval Trace records requested/selected/effective modes, router reasons, candidate scores, selected evidence, filtering, and support/policy decisions. The Document Processing Inspector reports blocks, chunks, citation units, indexing, and readiness so failures can be investigated from the workspace.
 
-### Public English Retrieval Validation
+### 4. Evaluation-driven Engineering
 
-`make eval-retrieval-nanobeir` evaluates the official predefined MTEB NanoBEIR
-tasks using `BAAI/bge-small-en-v1.5`. It compares an official MTEB direct dense
-baseline with PureLink vector-only and the unchanged production Hybrid path,
-using official qrels and nDCG@10 / Recall@10 / MRR@10. The English embedding and
-document representation stay fixed across configurations. This developer-only
-benchmark uses [optional dependencies](requirements-benchmark.txt) and writes
-results under ignored `data/eval_runs/external/`; it supplements the internal
-suites and does not change the Chinese Demo defaults or establish an official
-MTEB leaderboard rank. See [installation and reproduction](docs/rag/rag-evaluation.md#public-retrieval-validation).
+The repository contains a 50-case deterministic regression, a separate 24-case multi-format benchmark, a controlled M2 → M3 evidence-selection ablation, and public six-task NanoBEIR validation. Each answers a different question. Expected-document and evidence-phrase metrics diagnose internal behavior; official relevance judgments provide the external retrieval reference.
 
-The initial CPU validation completed the first **6 of 13 predefined tasks**
-(300 queries), at the user's runtime limit. Macro nDCG@10 / Recall@10 / MRR@10
-are **.6222 / .6710 / .6821** for official direct Dense,
-**.6226 / .6710 / .6826** for PureLink Dense, and
-**.5569 / .6340 / .6055** for PureLink Hybrid. Dense passes all six reference
-checks; Hybrid has lower nDCG on all six. We preserve this result without tuning.
-The other seven tasks are explicitly unrun in this comparison; the separate
-NanoSciFact smoke is excluded from these macros. See
-[per-task results and limitations](docs/rag/rag-evaluation.md#m4-cpu-result-first-six-nanobeir-tasks).
-Reproduce the partial scope with
-`make eval-retrieval-nanobeir PUBLIC_EVAL_TASK_LIMIT=6`.
-
-The FastEmbed provider now delegates query/document encoding to its model-specific
-APIs. Rebuild existing FastEmbed indexes after upgrading; the committed runtime
-snapshot above remains historical evidence. The provider-only regression keeps
-44/44 retrieval hits, 36/44 evidence hits, and 47/50 answerability; document
-Recall@3 changes from 100% to 97.7% and MRR from .9318 to .925 with M3 held fixed.
+Experiments preserve configuration, failed cases, and denominators. No LLM judge or combined “PureLink score” joins these measurements. Detailed methodology and artifacts are linked from the evaluation section.
 
 ## Architecture and Request Flow
 
-### System Context
+The product stack uses Next.js, FastAPI, PostgreSQL, Redis, and a Python processing worker. Uploads create processing jobs; parsing and indexing run asynchronously, while retrieval and QA read persisted document state and local index artifacts.
 
 ```mermaid
 flowchart LR
-    User[User] --> Web[Next.js workspace]
-    Web --> API[FastAPI API]
+    Web[Next.js] --> API[FastAPI]
     API --> DB[(PostgreSQL)]
     API --> Redis[(Redis)]
-    Redis --> Worker[Python processing worker]
+    Redis --> Worker[Python Worker]
     Worker --> DB
-    API --> Retrieval[Retrieval layer]
-    Retrieval --> DB
-    Retrieval --> Index[(Vector and graph indexes)]
-    Worker --> Index
+    Worker --> Index[Retrieval / Index Services]
+    API --> Index
 ```
-
-### Document Processing
-
-```mermaid
-flowchart LR
-    Upload[Upload] --> Job[Processing Job]
-    Job --> Parser[Parser Registry]
-    Parser --> Blocks[DocumentBlock]
-    Blocks --> Strategy{Chunk strategy}
-    Strategy --> Fixed[Fixed chunking]
-    Strategy --> Aware[Block-aware chunking]
-    Fixed --> Units[Chunks and Citation Units]
-    Aware --> Units
-    Units --> Vector[Vector Index]
-    Units --> Graph[Lightweight Graph Index]
-```
-
-### Answer Flow
 
 ```mermaid
 flowchart TD
-    Question[Question] --> Requested{Requested mode}
-    Requested -->|auto| Router[AUTO Rule-based Router]
-    Requested -->|manual| Mode[Retrieval Mode]
-    Router --> Mode
-    Mode --> Candidates[Candidate Merge / Optional Rerank]
-    Candidates --> Evidence[Final Evidence]
-    Evidence --> Gate[Evidence Support Gate]
+    Docs[Documents] --> Parser[Parser Registry]
+    Parser --> Blocks[DocumentBlock]
+    Blocks --> Chunks[Chunking]
+    Chunks --> Units[Citation Units]
+    Chunks --> Index[Embedding / Index]
+    Query[Question] --> Analysis[Query Analysis]
+    Analysis --> Retrieve[Candidate Retrieval]
+    Index --> Retrieve
+    Units --> Select[Evidence Selection]
+    Retrieve --> Select
+    Select --> Gate[Support Gate]
     Gate --> Policy[Answer Policy]
-    Policy -->|supported| Provider[Answer Provider]
-    Policy -->|unsupported| Refusal[No-answer response]
-    Provider --> Validation[Marker Validation]
-    Validation --> Citation[CitationRead]
-    Citation --> Drawer[Clickable Citation Drawer]
-    Router -. metadata .-> Trace[Retrieval Trace]
-    Candidates -. candidates .-> Trace
-    Gate -. support decision .-> Trace
-    Policy -. provider decision .-> Trace
+    Policy --> Answer[Grounded Answer / No-answer]
+    Answer --> Trace[Citation / Trace]
+    Trace --> Eval[Evaluation]
 ```
 
-The detailed ingestion and retrieval diagrams live in [RAG Pipeline](docs/rag/rag-pipeline.md) and [RAG v2 Architecture](docs/architecture/rag-v2-architecture.md).
+`worker-go` is experimental, has different capabilities, and is not the default Compose worker. Detailed boundaries live in the [RAG architecture](docs/architecture/rag-v2-architecture.md) and the verified [Code Tour](docs/interview/code-tour.md).
 
-Docker Compose runs the Python worker entry point at [`app/workers/processing_worker_main.py`](app/workers/processing_worker_main.py). The separate [`worker-go`](worker-go/) implementation is experimental and is not feature-equivalent to, or used by, the default Compose stack. See [Docker Deployment](docs/development/docker-deployment.md#python-and-go-worker-positioning).
+## Evaluation
 
-## Product Walkthrough
+### A. Internal Regression
 
-### Retrieval Trace and Routed Evidence
+The 50-case suite contains **44 answerable and 6 no-answer cases** over a small cross-domain corpus. It uses block-aware chunking, `local_hashed_bow / hashed_bow_v1`, AUTO routing, and disabled/noop reranking for repeatability.
 
-An `auto` technical query routes to keyword + vector hybrid retrieval with an explicit reason, trace id, reranker status, and scored source evidence. Evidence Support and Answer Policy decisions are stored in backend trace metadata.
+| Metric | Result |
+|---|---:|
+| Retrieval hit / citation hit | 43/44 / 43/44 |
+| Expected evidence hit | 39/44 |
+| Answerability | 49/50 |
+| No-answer correctness | 6/6 |
 
-![PureLink Retrieval Debug showing AUTO routing, the selected hybrid mode, router reason, trace id, and evidence](docs/assets/screenshots/retrieval-trace.png)
+This is a deterministic engineering regression suite. The [final sanitized capture](tests/eval/baselines/portfolio-final-auto-block-aware/summary.md), preserved [historical baseline](tests/eval/baselines/answer-policy-auto-block-aware/summary.md), and [metric definitions](docs/rag/rag-evaluation.md) expose remaining failures. The normal Demo uses fixed chunking and Chinese FastEmbed, so its runtime results are documented separately from this fixture configuration.
 
-### Document Processing Inspector
+### B. Evidence Selection Ablation
 
-The document-level inspector shows an indexed, RAG-ready document and the persisted blocks, chunks, citation units, vector index, and graph index checks used to diagnose readiness without reading worker logs.
+The multi-format slice has **24 cases**, six each for TXT, Markdown, DOCX, and PDF: 20 answerable cases and four no-answer cases. It includes outdated distractor documents and two physical PDF page-2 citation checks.
 
-![PureLink Document Processing Inspector showing ready pipeline checks and index status](docs/assets/screenshots/processing-inspector.png)
+| Metric | M2 baseline | M3 retained change |
+|---|---:|---:|
+| Document Recall@5 | 100% | 100% |
+| Document MRR | .925 | .925 |
+| Expected evidence hit | 18/20 | 20/20 |
+| Evidence recall | 90% | 100% |
+| Evidence precision | 29.6% | 72.5% |
+| Answerability | 20/24 | 24/24 |
+| No-answer correctness | 4/4 | 4/4 |
 
-The [5-minute Demo Guide](docs/interview/purelink-demo-guide.md) keeps Graph Explorer, team KBs, processing jobs, manual modes, and rerankers as optional follow-ups rather than main-flow steps.
+The retained change combines incremental query-term coverage in generic selection with a shared responsibility-matching correction. Corpus, ranked documents, embedding, chunk strategy, and Answer Policy were held fixed. The original 50-case suite remained unchanged.
+
+A **coverage-only** variant reported 78.1% precision on 16 applicable cases but reduced evidence recall to **80%**. It was rejected. Unknown evidence is excluded from the precision formula, so precision must be read with its denominator and recall. Seven format cases still contain forbidden evidence, including archive facts and inseparable table rows. These are phrase-based engineering measurements, not semantic answer accuracy. See the [controlled ablation](docs/rag/evidence-selection-ablation.md) and [final format capture](tests/eval/baselines/portfolio-final-format-auto-block-aware/summary.md).
+
+### C. Public Retrieval Validation
+
+**Six-task partial NanoBEIR external validation**, with **300 queries**: NanoArguAna, NanoClimateFever, NanoDBPedia, NanoFEVER, NanoFiQA2018, and NanoHotpotQA, taken in MTEB's predefined order. The remaining seven tasks were explicitly unrun because of the runtime limit.
+
+All configurations use `BAAI/bge-small-en-v1.5`, FastEmbed quantized ONNX, 384 dimensions, normalized embeddings, CPU, top-k=10, and disabled reranking. Official title/text representation and qrels are shared. The independent direct encoder lets official MTEB perform reference search/scoring; the adapter exercises PureLink's production retrieval functions.
+
+| Pipeline | nDCG@10 | Recall@10 | MRR@10 |
+|---|---:|---:|---:|
+| MTEB Dense reference | .6222 | .6710 | .6821 |
+| PureLink Dense | .6226 | .6710 | .6826 |
+| PureLink Hybrid | .5569 | .6340 | .6055 |
+
+Dense passes the reference checks on all six tasks, providing an external sanity check of encoding, indexing, similarity, and ranking. **Hybrid underperforms Dense in nDCG@10 on all six**, although some secondary metrics improve on individual tasks. Lexical fusion is workload-dependent; the measured negative result is preserved without tuning these tasks. This local validation establishes neither an official MTEB leaderboard rank nor results for the full NanoBEIR suite.
+
+[Per-task scores, versions, limitations, and reproduction](docs/rag/rag-evaluation.md#public-retrieval-validation) remain separate from the internal evidence experiments. Optional benchmark dependencies stay outside the production Docker runtime.
+
+## Demo
+
+The [3–5 minute Demo Guide](docs/interview/purelink-demo-guide.md) uses an existing generated two-page PDF. Prepare the stack and model before presenting, upload the PDF to a fresh personal KB, wait for readiness, and ask about audit retention. Show the supported answer, open its citation, inspect the physical page-2 source, and then show selected evidence and retrieval trace. Finish with the three evaluation stories above.
+
+Graph Explorer, team approval, manual modes, and reranker configuration are optional follow-ups. Additional UI views: [Retrieval Trace](docs/assets/screenshots/retrieval-trace.png) and [Processing Inspector](docs/assets/screenshots/processing-inspector.png).
 
 ## Quick Start
 
-Docker Compose is the primary local runtime. The default heuristic answer provider requires no external API key; FastEmbed downloads its model on first use and caches it under `./models`.
+Use Docker Engine with Compose v2 or later, or Docker Desktop with integration enabled for your WSL distribution. Docker Compose is the primary runtime path.
 
 ```bash
 git clone https://github.com/pmk915/purelink.git
@@ -219,81 +170,62 @@ docker compose up -d --build db redis api worker frontend
 docker compose ps
 ```
 
-Open:
+Wait for PostgreSQL, Redis, API, and frontend health checks; the Python worker should be running. Then open:
 
-- Web app: `http://localhost:3000`
-- API: `http://localhost:8000`
-- OpenAPI: `http://localhost:8000/docs`
-- Health: `http://localhost:8000/api/v1/health`
-
-Register a local user, create a personal knowledge base, upload a file from `sample_docs/`, wait for processing, and ask a question. Source citations, retrieval details, and document readiness are available from the workspace.
-
-For provider settings and operational setup, use [.env.example](.env.example), [Model Providers](docs/rag/model-providers.md), [Docker Deployment](docs/development/docker-deployment.md), and [Troubleshooting](docs/troubleshooting.md).
-
-## Where to Start
-
-The full [PureLink Code Tour](docs/interview/code-tour.md) follows the request path with verified functions, tests, and design notes. The shortest reading path is:
-
-| Area | Entry point |
+| Service | URL |
 |---|---|
-| Document processing | [`app/services/document_processing.py`](app/services/document_processing.py) |
-| Parser routing | [`app/services/document_parsing/parser_registry.py`](app/services/document_parsing/parser_registry.py) |
-| Block-aware chunking | [`app/services/document_chunking/block_aware_chunker.py`](app/services/document_chunking/block_aware_chunker.py) |
-| Retrieval orchestration | [`app/services/retrieval/retrieval_service.py`](app/services/retrieval/retrieval_service.py) |
-| AUTO query router | [`app/services/retrieval/query_router.py`](app/services/retrieval/query_router.py) |
-| QA orchestration | [`app/services/qa.py`](app/services/qa.py) |
-| Answer Policy | [`app/services/answer_policy.py`](app/services/answer_policy.py) |
-| Evaluation harness | [`scripts/eval/run_rag_generalization_eval.py`](scripts/eval/run_rag_generalization_eval.py) |
-| Public retrieval validation | [`scripts/eval/run_public_retrieval.py`](scripts/eval/run_public_retrieval.py) |
+| Web | http://localhost:3000 |
+| API | http://localhost:8000 |
+| OpenAPI | http://localhost:8000/docs |
+| Health | http://localhost:8000/api/v1/health |
+
+Register/sign in, create a personal knowledge base, and upload a document. Simple files live in [sample_docs](sample_docs/README.md); the Demo Guide prepares the multi-page PDF from existing fixtures.
+
+The default heuristic answer provider requires no external API key. Chinese FastEmbed (`BAAI/bge-small-zh-v1.5`) downloads its model on first use, storing it in `/app/models/embedding`, backed by `./models/embedding` on the host. Allow download/indexing time before a live demo. After the M4 provider semantics correction, **fully rebuild existing FastEmbed indexes**; model identity alone does not detect vectors created with the old generic prefixes.
+
+For local development, use Python 3.12 and Node 24; [development commands](docs/development/dev-commands.md) cover installation. Verification entry points are `make test`, frontend `npm run lint` / `npm run build`, `make docs-check`, and `make KEEP_STACK_UP=1 smoke`. Evaluation reproduction is documented under [Testing and Smoke](docs/development/testing-and-smoke.md).
 
 ## Implemented Scope
 
-- Personal and team knowledge bases with ownership, membership, and admin boundaries.
-- `.txt`, `.md`, `.docx`, and text-based `.pdf` ingestion with processing diagnostics.
-- Native PDF text uses PyMuPDF page-aware blocks with block-level bounding boxes and physical page provenance; [PDF limitations](docs/ingestion/file-processing-pipeline.md#native-pdf-extraction) remain explicit.
-- Fixed and block-aware chunking, persisted citation units, vector index metadata, and lightweight graph data.
-- `chunk_only`, `overview`, `hybrid_text`, `graph_vector_mix`, and rule-based `auto` retrieval modes.
-- Evidence-gated Q&A, deterministic Answer Policy, clickable citations, Retrieval Trace, and eval tooling.
+- Authentication; personal KB ownership; team membership, admin boundaries, upload review, and conversations.
+- TXT/Markdown/DOCX/native-text PDF ingestion; asynchronous jobs, processing diagnostics, and retry/reprocessing.
+- Fixed and block-aware chunks, persisted citation units, local vector artifacts with compatibility metadata, and lightweight source-grounded graph data.
+- Dense, lexical, Hybrid, overview, and graph/vector candidate paths; explainable rule-based AUTO routing.
+- Evidence selection, support checks, Answer Policy, validated citations, retrieval traces, and deterministic/external evaluation tooling.
 
-Hybrid retrieval, lightweight GraphRAG, the rule-based router, and optional rerankers remain experimental engineering surfaces. The graph layer uses PostgreSQL and local extraction rules; it is not a dedicated graph database or a complex multi-hop reasoning engine.
+These features form one inspectable workspace; their existence does not imply enterprise deployment validation or equal quality across retrieval modes.
 
-Current non-goals include OCR for scanned PDFs, audio/video transcription, general multimodal understanding, billing, enterprise administration, and direct public-internet production hardening.
+## Known Limitations
 
-## Reproduce and Verify
+The internal datasets are small and deterministic. Phrase metrics approximate evidence quality, and the six public tasks provide a limited retrieval reference. The AUTO router's large-benchmark generalization is unproven. Reranking is optional and has no central demonstrated result here.
 
-```bash
-make test
-cd frontend && npm run lint && npm run build
-cd ..
-make docs-check
-make smoke
-make eval-rag-generalization
-```
+Evidence selection remains heuristic: outdated facts, cross-document noise, and multiple table rows can survive selection. Support checks and marker validation preserve explicit boundaries, but do not prove semantic entailment or eliminate all incorrect answers.
 
-The generalization runner creates a temporary local evaluation knowledge base and writes run artifacts under `data/eval_runs/`. See [Testing and Smoke](docs/development/testing-and-smoke.md) before running Docker or evaluation workflows.
+PDF extraction preserves page-aware blocks, bbox metadata, and citation provenance. Multi-column reading order is not guaranteed; there is no advanced heading inference or dedicated table-structure model. OCR is optional and disabled by default; mixed native/scanned completeness is limited. Audio/video and general multimodal understanding are outside this Demo.
+
+There is no enterprise security audit or production-scale load benchmark. See [focused limitations](docs/interview/limitations.md) for the engineering trade-offs.
 
 ## Documentation
 
-The complete map is [docs/README.md](docs/README.md). Recommended entry points:
+Start with the [documentation index](docs/README.md), then choose:
 
-- [PureLink Code Tour](docs/interview/code-tour.md)
-- [Technical Deep Dives](docs/interview/deep-dives/README.md)
-- [Project Storyline](docs/interview/project-storyline.md)
-- [RAG Pipeline](docs/rag/rag-pipeline.md)
-- [File Processing Pipeline](docs/ingestion/file-processing-pipeline.md)
-- [Retrieval and Citations](docs/retrieval-and-citations.md)
-- [Answer Policy](docs/rag/answer-policy.md)
-- [RAG Evaluation](docs/rag/rag-evaluation.md)
-- [Knowledge Base Workspace](docs/product/kb-workspace.md)
+- [Project Storyline](docs/interview/project-storyline.md): a five-minute explanation built around hypotheses and measurements.
+- [Code Tour](docs/interview/code-tour.md): upload → parse → chunk → index → evidence → answer → evaluation.
+- [Demo Guide](docs/interview/purelink-demo-guide.md): stable commands, PDF, questions, and fallback checks.
+- [RAG Evaluation](docs/rag/rag-evaluation.md) and [Evidence Ablation](docs/rag/evidence-selection-ablation.md): definitions, results, and reproducibility.
+- [File Processing](docs/ingestion/file-processing-pipeline.md), [Answer Policy](docs/rag/answer-policy.md), and [Retrieval Trace](docs/rag/retrieval-trace.md): implementation boundaries.
+- [Portfolio Verification](docs/development/portfolio-verification.md): actual final commands and results.
 
-## Security and Deployment
+Focused bug reports, documentation fixes, and tests are welcome under [CONTRIBUTING.md](CONTRIBUTING.md). Feature development is frozen for this portfolio closeout.
 
-The default stack is intended for local development and controlled self-hosting. Before broader exposure, replace development secrets and passwords, restrict CORS, use TLS and a reverse proxy, protect PostgreSQL and Redis from public access, and establish backup and upload-storage controls. See [SECURITY.md](SECURITY.md) and [Docker Deployment](docs/development/docker-deployment.md).
+## Security and Deployment Boundary
 
-## Contributing
+The default stack targets local development and controlled self-hosting. Authentication and ownership/membership checks are implemented, but public deployment still requires environment-specific security work. Replace development credentials, configure CORS, use TLS and a reverse proxy, isolate database/cache access, and establish backups and upload-storage controls. Review [SECURITY.md](SECURITY.md) and [Docker Deployment](docs/development/docker-deployment.md) before exposing the stack.
 
-Focused bug reports, documentation fixes, tests, and narrow engineering proposals are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and pull request checks.
+Provider choices can send text to external services when configured; local defaults and optional integrations should be understood separately. No enterprise SaaS maturity, security-audit, or production-capacity claim is made.
+
+The final frontend `npm audit` reported 17 advisories: 2 moderate, 14 high, and 1 critical. Suggested fixes include a major Next.js upgrade, which was not applied during this feature freeze. Passing build and smoke checks does not clear these advisories; resolve dependency security findings before public deployment.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE).

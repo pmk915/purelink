@@ -24,11 +24,11 @@ Run this set before recording or presenting a demo:
 
 ```bash
 make test
-cd frontend && npm run lint
-cd frontend && npm run build
+(cd frontend && npm run lint && npm run build)
 make smoke
 make eval-rag-generalization
 make eval-rag-generalization-holdout
+make eval-rag-format
 ```
 
 What each command proves:
@@ -40,6 +40,7 @@ What each command proves:
 - `make smoke`: also checks upload validation failures and the KB processing jobs list endpoint after document processing is submitted.
 - `make eval-rag-generalization`: the official 50-case deterministic regression still runs.
 - `make eval-rag-generalization-holdout`: independent cases do not regress.
+- `make eval-rag-format`: separate 24-case format/evidence/page-provenance checks.
 
 If `make smoke` fails with Docker socket permissions, the issue is local Docker
 access rather than PureLink app logic. Ensure Docker is running and the current
@@ -48,6 +49,15 @@ user can access `/var/run/docker.sock`, then open a new shell and rerun.
 The generalization suite uses the committed cross-domain corpus, not repository
 docs. `make eval-rag-runtime` runs the same cases with fixed chunking and the
 default FastEmbed model; it requires FastEmbed and a local/downloadable model cache.
+
+That existing runtime target explicitly overwrites its historical committed
+snapshot. For a fresh capture that preserves history, use the Python runner
+without `--baseline-snapshot-dir`; see [Evaluation](../rag/rag-evaluation.md).
+M4 fixed native FastEmbed query/passage semantics; fully rebuild existing
+FastEmbed indexes after upgrading. Public English evaluation is a separate
+explicit developer action: `make eval-retrieval-nanobeir PUBLIC_EVAL_TASK_LIMIT=6`.
+Do not rerun it for documentation-only changes. See
+[Portfolio Verification](portfolio-verification.md) for final commands/results.
 
 For Docker-specific startup, production-like Compose, backup/restore, and
 security checklist details, see [Docker Deployment](docker-deployment.md).

@@ -235,4 +235,6 @@ Only qa.py and query_analysis.py change production behavior. No migrations,
 models, retrieval/router/embedding/reranker configuration, PDF parsing, chunk
 strategy, benchmark corpus/labels, historical snapshots, Answer Policy or
 prompts were changed. The independent holdout benchmark was not used for
-tuning. Git status/diff were reviewed; all M3 changes remain uncommitted.
+tuning. These checks describe the M3 development capture; the retained work was
+subsequently committed at c76e889ae414b5506c5a2a8dde3566b40920b872. Historical
+snapshots remain intact; final portfolio verification is recorded separately.

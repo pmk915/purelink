@@ -9,6 +9,19 @@
 - 运行测试
 - 验证 worker 和 E2E
 
+本地开发使用 Python 3.12 和 Node 24（见 frontend/package.json engines）；
+Compose 为首选运行路径。安装开发依赖可从仓库根目录执行：
+
+```bash
+python3.12 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+cd frontend
+npm ci
+```
+
+MTEB 仅是可选公共评估依赖，安装与 CPU 复现见
+[公共检索验证](../rag/rag-evaluation.md#public-retrieval-validation)。
+
 默认项目根目录：
 
 ```bash

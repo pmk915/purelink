@@ -44,7 +44,7 @@ stored upload
 | `.txt` | `TextParser` | Decodes UTF-8/UTF-8-SIG/GB18030. Conservatively recognizes Markdown-like structure only when multiple headings and body text are present; `source_type` remains `text`. |
 | `.md` | `MarkdownParser` | Produces heading, text/list, table, and fenced-code blocks with heading metadata. |
 | `.docx` | `DocxParser` (`minimal_docx_text`) | Extracts WordprocessingML paragraph text and heading styles; it is not a full layout renderer. |
-| `.pdf` | `PdfTextParser` | Uses the current PDF text extraction path, normally PyMuPDF, preserving page segments. Scanned-PDF OCR fallback requires OCR to be explicitly enabled and a usable provider. |
+| `.pdf` | `PdfTextParser` | PyMuPDF `get_text("blocks", sort=True)` emits ordered text blocks with physical pages and block bbox; no heading/table structure inference. OCR fallback requires explicit enablement and a usable provider. |
 
 Image/audio/video extraction helpers exist behind feature settings, but they are not registered in the standard parser registry used by `process_document()` and are outside this standard four-format path.
 

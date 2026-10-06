@@ -1,59 +1,37 @@
-# PureLink RAG 简历描述草稿
+# PureLink 简历与面试描述
 
-## 简历项目描述：短版
+## 项目定位
 
-PureLink：面向团队知识库的工程化 Agent-ready RAG 系统
+PureLink：本地优先、可自部署的工程化 RAG 知识工作台，聚焦结构化处理、
+检索与证据选择的分离、回答支持、引用溯源和可复现评估。功能已冻结。
 
-基于 FastAPI、PostgreSQL、Redis、Next.js 构建团队知识库平台，支持个人/团队知识库、文档上传、异步解析、权限审核、引用溯源和 RAG 问答。围绕 RAG 内核完成工程化升级：设计统一 Retrieval Layer 和模型 Provider Layer，引入 optional reranker、document index metadata、retrieval trace、DocumentBlock parser routing 和轻量 GraphRAG；支持 graph-vector mixed retrieval，并通过 JSONL eval harness 评估 retrieval hit、citation hit、keyword coverage 和 top-k doc hit。
+## 简历 Bullet
 
-## 简历项目描述：Bullet 版
+- 基于 FastAPI、PostgreSQL、Redis、Next.js 与 Python worker 实现个人/团队
+  知识库、上传审核、异步处理、问答与会话，保持 ownership/membership 边界。
+- 建立 TXT/Markdown/DOCX/PDF → DocumentBlock → chunk → citation unit 链路，
+  保留来源范围和 PDF 物理页码；候选检索、最终证据、支持门禁和引用各自可追踪。
+- 用独立 24 例格式基准定位“文档 Recall@5=100%，证据精度只有 29.6%”的瓶颈；
+  受控证据选择与匹配修正将精度提升到 72.5%、证据召回从 90% 提升到 100%，
+  文档 MRR=.925、原 50 例回归保持；拒绝召回降至 80% 的 coverage-only 方案。
+- 使用官方 MTEB qrels 对六个 NanoBEIR 任务的 300 个查询做部分外部验证；
+  固定英文 BGE/FastEmbed/CPU，PureLink Dense nDCG@10=.6226，参考=.6222。
+  现有 Hybrid=.5569，六任务 nDCG 均下降，保留负面结果，不在公开任务上调参。
 
-- 基于 FastAPI、PostgreSQL、Redis、Next.js 构建团队知识库平台，支持个人/团队知识库、文档上传、异步解析、权限审核、引用溯源和 RAG 问答；
-- 设计统一 Retrieval Layer，将证据检索与答案生成解耦，支持 chunk-only、overview、graph-vector-mix 等检索模式；
-- 抽象 Embedding/Reranker/LLM Provider，支持轻量本地 embedding 与可选 reranker，避免模型实现与业务逻辑耦合；
-- 引入 `document_indexes` 记录索引使用的 provider、model 和向量维度，避免 embedding 模型切换后新旧向量混用；
-- 实现 retrieval trace，记录候选 evidence、向量分数、rerank 分数、过滤原因和最终引用证据，用于定位 RAG 质量问题；
-- 参考 LightRAG 思路实现轻量 GraphRAG，抽取实体/关系并绑定 citation source，将 graph candidates 与 vector candidates 合并后统一重排；
-- 构建 JSONL RAG eval harness，评估 retrieval hit、citation hit、keyword coverage 和 top-1/top-3 doc hit。
+## 面试展开
 
-## 面试追问准备
+使用 [Project Storyline](project-storyline.md) 的五分钟路径：假设 → 测量 →
+发现 → 工程决策。代码入口见 [Code Tour](code-tour.md)，演示见
+[Demo Guide](purelink-demo-guide.md)。详细定义与分母见
+[Evaluation](../rag/rag-evaluation.md) 和 [Ablation](../rag/evidence-selection-ablation.md)。
 
-### 为什么不直接用 LightRAG？
+Reranking 和轻量图候选是可选能力，不是本轮核心改善结果。图数据在 PostgreSQL
+中保存一跳关系及来源；AUTO 是规则式路由。公共验证不涉及 QA/PDF/证据选择，
+没有完整 NanoBEIR 或官方 MTEB 排名。内部短语指标不代表语义答案正确率。
 
-PureLink 有自己的团队知识库、权限、审核、citation、文档状态和异步处理系统。直接接入完整 LightRAG 容易造成状态重复和权限绕行，也会让 product workflow 和 retrieval workflow 脱节。
+## 限制与当前决策
 
-PureLink 的做法是借鉴 graph + vector mixed retrieval 思路，但保留自己的 evidence、citation、trace、index metadata 和 permission 模型。
-
-### GraphRAG 在项目里怎么参与检索？
-
-文档 indexed 后，系统从 chunk/citation unit 中抽取实体、关系和 mention，并把关系绑定到 source document、chunk、citation unit。
-
-查询时：
-
-```text
-query -> match entities -> graph candidates -> vector candidates -> merge -> optional rerank -> final evidences
-```
-
-最终答案仍然基于 citation-ready evidence，不让图谱结果脱离原文来源。
-
-### Reranker 和 embedding 检索有什么区别？
-
-embedding retrieval 是第一阶段召回，适合从大量 chunk 中快速找候选。
-
-reranker 是第二阶段排序，对 query-document pair 做更精细相关性判断。它通常更慢，但更准确，所以放在 top-N recall 之后，只处理候选集。
-
-### 为什么需要 document_indexes？
-
-embedding vectors 依赖 provider、model 和 dimension。不同 embedding model 的向量空间不能安全混用。
-
-`document_indexes` 记录每个文档的 vector index 是用哪个 provider/model/dim 生成的。当配置变化时，系统可以检测 stale 或 incompatible index，避免静默拿旧向量做新查询。
-
-### retrieval trace 解决什么问题？
-
-trace 把一次检索拆成可检查的记录：初始候选、vector score、rerank score、graph score、过滤原因、最终 evidence 和 trace id。
-
-当回答质量不好时，可以判断问题来自解析、chunking、embedding recall、rerank、index 兼容、citation selection 还是 prompt generation。
-
-### 这个项目还有哪些限制？
-
-GraphRAG 当前是轻量规则版，不是完整 LightRAG；没有外部图数据库、复杂多跳推理或 graph visualization。多模态能力默认关闭，也没有完整 Agent runtime。
+七个格式案例仍含 forbidden evidence；复杂 PDF 布局、表格和 OCR 完整性有限。
+没有企业安全审计或生产规模压力测试，Go worker 是实验性实现。M4 provider
+修正应保留，旧 FastEmbed 索引必须完整重建。详见 [Limitations](limitations.md)。
+当前决定是作品集收口和功能冻结，不启动 M5 或扩展新的 RAG 模块。

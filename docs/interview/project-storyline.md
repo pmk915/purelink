@@ -1,135 +1,106 @@
-# PureLink Project Storyline
+# PureLink: a Five-minute Project Story
 
-## 1. Problem
+Use this as a hypothesis → measurement → finding → engineering decision talk track.
+The project is feature-frozen. The [README](../../README.md) is the public summary;
+[Evaluation](../rag/rag-evaluation.md) owns detailed definitions and results.
 
-PureLink started from a practical problem: many RAG demos can answer a question once, but they do not expose enough engineering structure to be debugged, evaluated, or productized.
+## 0:00–0:40 — Problem and Architecture
 
-Common gaps:
+“I built a local-first RAG knowledge workspace because I wanted to inspect why
+an answer is supported. Finding a relevant document alone does not show that the
+selected text contains the requested fact.”
 
-- document structure is flattened before retrieval
-- retrieval strategy is not explicit or comparable
-- citations are fragile or delegated to the LLM
-- retrieval failures require reading backend logs
-- document processing failures are hard for users to diagnose
-- graph data can become stale after document deletion or reindexing
-- GraphRAG provenance is unclear
-- there is no repeatable eval baseline
+Next.js talks to FastAPI. PostgreSQL stores users, KBs, blocks, chunks, citation
+units, jobs, and traces. Redis queues work for the Python processing worker.
+Local embedding/index services support the default self-hosted path. The Go
+worker is experimental and does not replace the Compose worker.
 
-## 2. Solution Overview
+Ingestion separates parser output from chunking: TXT/Markdown/DOCX/native-text
+PDF → DocumentBlock → chunks → citation units. Chunks supply retrieval context;
+citation units supply narrower evidence with source ranges and physical pages.
+M1 added ordered PyMuPDF blocks and bbox metadata without a layout-AI framework.
 
-PureLink addresses those gaps by treating RAG as a product workflow plus an inspectable retrieval system.
+## 0:40–1:20 — Retrieval Hypothesis
 
-Key pieces:
+“My hypothesis was that exposing several candidate strategies would make
+technical and factual queries easier to diagnose. I implemented dense, keyword,
+overview, and lightweight graph candidates behind a rule-based AUTO router.”
 
-- `DocumentBlock` and block-aware chunking preserve document structure such as headings, tables, and code blocks.
-- Retrieval Layer separates evidence retrieval from answer generation.
-- `hybrid_text` retrieval adds deterministic keyword recall for API paths, config keys, file names, commands, and error codes.
-- Query Router supports `auto` mode and records `requested_mode`, `selected_mode`, and `router_reason`.
-- Citation grounding keeps source evidence under backend control.
-- Retrieval Trace records retrieval metadata for debugging candidates, scores, reranking, router decisions, and selected evidence.
-- Lightweight GraphRAG stores entities, mentions, and source-grounded relation evidence.
-- Graph lifecycle cleanup handles document deletion, rebuild, orphan cleanup, deduplication, and export.
-- Document Processing Inspector shows RAG readiness without backend logs.
-- Graph Explorer exposes source-grounded entity and relation inspection.
-- Processing Job Dashboard exposes running/failed/completed jobs and retryable failures.
-- Upload validation and unified error envelopes make edge cases visible to users.
-- Docker/deployment docs and release checks make the project repeatable for reviewers.
-- The 50-case generalization suite separates deterministic regression from the default Runtime evaluation.
+Technical keys and paths motivate a lexical channel; relation questions motivate
+source-grounded graph candidates. These are hypotheses, not guarantees of
+quality. Requested, selected, and effective modes, router reasons, candidate
+scores, and selected evidence appear in Retrieval Trace. Readiness diagnostics
+explain why a document is not searchable before reading worker logs.
 
-## 3. Engineering Decisions and Trade-offs
+## 1:20–2:10 — Measurement Revealed an Evidence Bottleneck
 
-`DocumentBlock`: parser-specific output and chunking were coupled, so PureLink persists a parser-neutral intermediate representation. PDF, DOCX, Markdown, and text parsing can now evolve separately from chunk policy; the cost is more rows and processing stages.
+“The separate 24-case format benchmark had 100% document Recall@5 and .925 MRR,
+but final-evidence precision was only 29.6% and evidence recall 90%. Candidate
+documents were already present. The loss occurred while selecting final evidence.”
 
-Hybrid retrieval: semantic embeddings are weak on paths, config keys, and CLI commands, so `hybrid_text` merges a deterministic lexical channel with vector candidates. The implementation is observable and low-dependency, but it is not a production inverted index.
+The slice has six cases per format, 20 answerable questions, four no-answer
+questions, and current/archive distractors. Evidence metrics are deterministic
+phrase proxies. Unknown evidence is excluded from precision; I report its
+applicability denominator together with recall.
 
-Rule router: different query types benefit from a small explicit retrieval strategy space, so AUTO uses deterministic rules and records the reason. An LLM router would add latency, cost, and nondeterminism without a justified benefit at this scale.
+This differs from the 50-case regression: 44 answerable plus six no-answer cases,
+retrieval/citation 43/44, expected evidence 39/44, answerability 49/50. That suite
+checks behavioral stability; it is not a public or production benchmark.
 
-PostgreSQL graph: relation questions need explicit candidates with source provenance, so lightweight entities and one-hop relations use the existing database. Current requirements do not justify Neo4j, deep traversal, or graph analytics.
+## 2:10–3:10 — Controlled Improvement and Rejected Variant
 
-Evidence gate and backend citations: semantically related evidence can still omit the requested fact, and models can fabricate markers. Support is checked before generation; explicit supporting evidence is conservatively narrowed for attribute, technical, and relation queries; backend-owned markers are validated afterward. The gate is heuristic and is not semantic entailment.
+“M3 selected generic evidence by incremental meaningful query-term coverage.
+A separately identified responsibility-matching fix handled active/passive
+maintainer wording and entity binding. I measured the selector-only variant
+and the combined change, keeping corpus, ranking, embedding, chunking, and
+Answer Policy fixed.”
 
-Trace and inspector: failures span parsing, indexing, routing, retrieval, selection, support, and generation. Those states are exposed in product/debug metadata instead of requiring SSH or worker-log inspection.
+Coverage-only appeared to improve precision to 78.1% on 16 applicable cases,
+but evidence recall fell to 80%. I rejected it. The retained combined change
+reached 72.5% precision on 20 applicable cases and 100% evidence recall;
+expected evidence rose 18/20 → 20/20 and answerability 20/24 → 24/24.
+Recall@5, MRR, no-answer 4/4, and physical PDF page checks 2/2 were preserved.
+The 50-case metrics, failure stages, and evidence counts remained unchanged.
 
-PureLink deliberately avoids several tempting but premature additions.
+Seven format cases still select forbidden evidence. Archive facts, inseparable
+table rows, and cross-document noise remain. The improvement is useful within
+these small fixtures; it does not prove semantic answer correctness.
 
-No Agent runtime:
+## 3:10–4:10 — Public Reference and Hybrid Negative Result
 
-- The current problem is retrieval quality, citation grounding, and observability.
-- Adding agents before retrieval is inspectable would make failures harder to debug.
+“I wanted an external retrieval reference beyond self-built fixtures. M4 first
+corrected FastEmbed to use model-native query_embed()/passage_embed(), then
+compared independent official MTEB search with PureLink production retrieval.”
 
-No LangGraph:
+The English experiment fixed BAAI/bge-small-en-v1.5, quantized ONNX, 384 normalized
+dimensions, CPU, top-k=10, official title/text and qrels, with reranking disabled.
+The user limited runtime to the first six predefined NanoBEIR tasks (300 queries).
+Seven tasks are explicitly unrun; the separate NanoSciFact smoke is excluded.
 
-- The workflow is currently a clear service pipeline, not a dynamic multi-step agent graph.
-- Keeping it explicit makes tests and smoke simpler.
+Macro nDCG@10 is .6222 for the MTEB reference, .6226 for PureLink Dense, and
+.5569 for production Hybrid. All Dense reference checks passed. Hybrid reduced
+nDCG on all six tasks. I kept the result and did not tune those tasks to win.
+This validates the Dense plumbing and shows that the current fusion is
+workload-dependent. It gives neither a full NanoBEIR result nor a leaderboard rank.
 
-No Neo4j or Memgraph:
+The FastEmbed correction is retained, with a required complete rebuild of
+existing FastEmbed indexes. Provider-only runtime Recall@3 changed 100% → 97.7%
+and MRR .9318 → .925; hits and answerability did not change. Historical snapshots
+are preserved and these differences are disclosed.
 
-- The graph is lightweight and source-grounded.
-- PostgreSQL tables are enough for the current entity/relation lifecycle.
+## 4:10–5:00 — Decision, Limits, and Next Steps
 
-No complex graph canvas:
+“Candidate retrieval, final evidence, support, answer policy, and citations are
+separate engineering decisions. The project value is being able to locate a
+failure, test a hypothesis, reject an attractive but lossy experiment, and
+retain a negative public result.”
 
-- The user need is inspection and provenance, not graph visualization.
-- A list-based Explorer is easier to test, easier to explain, and consistent with the KB workspace.
+The support gate and router are heuristics. Native PDF extraction does not
+solve multi-column layout, heading inference, structured tables, or complete
+OCR-heavy ingestion. There is no enterprise security audit or production-scale
+load benchmark. See [Limitations](limitations.md).
 
-No default multimodal RAG:
-
-- The Core path focuses on text KBs.
-- OCR, ASR, and VLM support would introduce heavier dependencies and different failure modes.
-
-## 4. Milestone Timeline
-
-- M1: Retrieval Layer boundary.
-- M2: Model provider standardization.
-- M3: Optional reranker.
-- M4: Index metadata and rebuild readiness.
-- M5: Retrieval trace.
-- M6: DocumentBlock schema and parser routing.
-- M7: Lightweight GraphRAG.
-- M8: Initial RAG eval harness.
-- M11-M13: smoke hardening, KB management, and workspace UX.
-- M14: block-aware chunking.
-- M15: hybrid text retrieval.
-- M16: rule-based Query Router.
-- M17: GraphRAG lifecycle cleanup.
-- M18: real RAG eval baseline.
-- M19: Document Processing Inspector UI.
-- M20: Graph Explorer enhancement.
-- M21.1: unified error envelope and frontend error states.
-- M21.2: Processing Job Dashboard and retry.
-- M21.3: upload limits and validation.
-- M21.4: Docker deployment hardening.
-- M21.5: interview demo packaging and docs index.
-- M21.6: final polish, release checklist, and docs link checks.
-
-## 5. Interview Summary
-
-### 1-minute version
-
-PureLink is an engineering-focused RAG knowledge base system for personal and team workspaces. The project goes beyond a basic chatbot by exposing the full RAG lifecycle: document parsing, block-aware chunking, retrieval modes, citation grounding, trace metadata, graph provenance, document readiness diagnostics, and a reproducible eval baseline. The core idea is that RAG quality should be inspectable and testable, not hidden behind a single answer string.
-
-### 3-minute version
-
-I built PureLink around the problems I saw in typical RAG demos. They often flatten document structure, hide retrieval behavior, let citations become unreliable, and lack any repeatable evaluation. PureLink turns those issues into explicit components.
-
-The ingestion pipeline persists `DocumentBlock` records and can use block-aware chunking so headings, tables, and code blocks are not treated as arbitrary text. The Retrieval Layer supports multiple modes: normal chunk retrieval, overview retrieval, graph-vector mixed retrieval, hybrid keyword/vector retrieval, and an `auto` router. The system records requested and selected modes, router reason, trace id, retrieved evidence, and citation-ready context.
-
-On the product side, the KB workspace includes Ask, Documents, Graph, Retrieval Debug, Health, and Settings. M19 added a Document Processing Inspector so users can see whether a document is RAG-ready. M20 added a list-based Graph Explorer for entity search, relation filtering, one-hop neighborhoods, source inspection, and graph export. M21 added product polish around upload validation, consistent error states, processing job retry, Docker deployment, and release readiness.
-
-The current official baseline is one 50-case cross-domain generalization suite. A deterministic block-aware/hashed run answers whether code changes caused regression; a separate fixed/FastEmbed run describes the actual Demo defaults. The important point is not that one stack wins, but that retrieval, evidence selection, answerability, citations, and failure trade-offs are visible and reproducible.
-
-### 5-minute version
-
-PureLink started as a text knowledge base with authentication, personal KBs, team KBs, document upload, and RAG Q&A. The RAG v2 work moved it toward an engineering system rather than a demo.
-
-First, I separated retrieval from answer generation. That created a stable Retrieval Layer with typed requests, evidence, modes, context building, and citation building. Then I standardized model providers so embedding, reranker, and LLM choices do not leak into business logic. After that, I added optional reranking, index metadata, and retrieval trace so retrieval quality and index compatibility could be inspected.
-
-The ingestion side then moved from flat text toward structured blocks. Documents are parsed into blocks such as headings, text, tables, and code. Block-aware chunking can use those boundaries to preserve structure. This was important because many RAG failures start before retrieval, when the document is split badly.
-
-For retrieval, I added `hybrid_text` for exact technical tokens and a rule-based `auto` router. The router is intentionally simple: it does not use an LLM or agent. It routes technical/config/path-like queries to `hybrid_text`, relationship queries to `graph_vector_mix`, overview queries to `overview`, and defaults to `chunk_only`.
-
-For GraphRAG, I kept the graph lightweight. It uses PostgreSQL tables for entities, mentions, and relations. Relations are source-grounded, and lifecycle operations can clean document graph data, rebuild one document's graph, remove orphan entities, deduplicate relation evidence, and export bounded graph JSON. The Graph Explorer exposes this graph as a diagnostic tool, not a visual graph canvas.
-
-Finally, I added productized debugging and evaluation. Document Processing Inspector shows block/chunk/citation/vector/graph status and copyable debug JSON. Retrieval Debug and Retrieval Details expose mode and trace behavior. The eval baseline runs real repository-doc cases and reports retrieval hit, citation hit, top-k doc hit, keyword coverage, trace availability, and selected modes.
-
-The result is a project that can be discussed as a RAG engineering platform: not production SaaS, not a full LightRAG clone, but a clear demonstration of how to make RAG systems observable, maintainable, and evaluable.
+The decision is feature freeze: preserve results, document reproduction, and
+prepare the [3–5 minute demo](purelink-demo-guide.md). Future research directions
+can be discussed as unimplemented hypotheses; no M5, reranker, router learning,
+new dataset, or retrieval tuning is part of this closeout.

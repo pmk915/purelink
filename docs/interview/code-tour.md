@@ -4,6 +4,11 @@ This tour is a ten-minute reading path through PureLink's document-to-answer flo
 
 Use this page to answer **where to inspect the code**. For design rationale, end-to-end behavior, trade-offs, and interview follow-ups, continue with the [Technical Deep Dives](deep-dives/README.md).
 
+The main reading path is upload → parse → chunk → persist → index → retrieve
+→ select evidence → support gate → answer policy/provider → citation → eval.
+Graph candidates and reranking are optional branches. M1–M4 are complete;
+this tour supports portfolio review rather than a new development milestone.
+
 ## 1. Start Here
 
 - **Responsibility:** assemble the FastAPI application, mount `/api/v1`, and expose personal, team, and conversation request paths.
@@ -12,6 +17,12 @@ Use this page to answer **where to inspect the code**. For design rationale, end
 - **What to look for:** authentication and ownership checks stay in the API layer; processing, retrieval, and QA work are delegated to services.
 - **Related tests:** [`tests/test_knowledge_bases.py`](../../tests/test_knowledge_bases.py), [`tests/test_team_knowledge_bases.py`](../../tests/test_team_knowledge_bases.py), and [`tests/test_documents.py`](../../tests/test_documents.py).
 - **Design note:** [Knowledge Base Workspace](../product/kb-workspace.md).
+
+Upload starts at `upload_document_to_personal_knowledge_base_endpoint()` in
+`app/api/v1/knowledge_bases.py`, then uses `create_document()` and
+`store_document_file()` in [`app/services/document.py`](../../app/services/document.py).
+Ownership and upload validation precede queued processing. Team uploads reuse
+membership/review boundaries; benchmark adapters bypass product upload flows.
 
 ## 2. Document Processing
 
@@ -27,7 +38,7 @@ Use this page to answer **where to inspect the code**. For design rationale, end
 - **Responsibility:** select a parser by filename/MIME type, normalize parser output, and persist ordered typed blocks with source locators and metadata.
 - **Verified code paths:** [`app/services/document_parsing/parser_registry.py`](../../app/services/document_parsing/parser_registry.py), [`app/services/document_parsing/block_normalizer.py`](../../app/services/document_parsing/block_normalizer.py), [`app/services/document_parsing/block_persistence.py`](../../app/services/document_parsing/block_persistence.py), and [`app/models/document_block.py`](../../app/models/document_block.py).
 - **Key entry points:** `get_parser()`, `assign_block_char_ranges()`, `blocks_to_plain_text()`, and `replace_document_blocks()`.
-- **What to look for:** the parser contract returns a `ParsedDocument`; headings, paragraphs, tables, code, pages, and source ranges survive as `DocumentBlock` data rather than being flattened immediately.
+- **What to look for:** the parser contract returns a `ParsedDocument`; available headings, paragraphs, tables, code, pages, and source ranges survive as `DocumentBlock` data. Capabilities differ by parser: native PDF emits ordered text blocks with physical pages and bbox, without heading inference or structured table recovery.
 - **Related tests:** [`tests/services/document_parsing/test_parser_registry.py`](../../tests/services/document_parsing/test_parser_registry.py), [`tests/services/document_parsing/test_block_normalizer.py`](../../tests/services/document_parsing/test_block_normalizer.py), and [`tests/services/document_parsing/test_block_persistence.py`](../../tests/services/document_parsing/test_block_persistence.py).
 - **Design note:** [Document Blocks and Parser Routing](../ingestion/document-blocks.md).
 
@@ -39,6 +50,22 @@ Use this page to answer **where to inspect the code**. For design rationale, end
 - **What to look for:** heading stacks are attached to section chunks, table/code blocks are handled independently, oversized blocks use bounded splitting, and fixed chunking remains the configured fallback path.
 - **Related tests:** [`tests/services/document_chunking/test_block_aware_chunker.py`](../../tests/services/document_chunking/test_block_aware_chunker.py) and [`tests/test_citation_units.py`](../../tests/test_citation_units.py).
 - **Design note:** [Document Blocks and Parser Routing](../ingestion/document-blocks.md) and [RAG Pipeline](../rag/rag-pipeline.md).
+
+Persistence uses `replace_document_blocks()`, `replace_document_chunks()`, and
+the existing citation-unit payload/persistence path. For PDF provenance, inspect
+[`pdf_text_parser.py`](../../app/services/document_parsing/parsers/pdf_text_parser.py)
+and the page/source-span tests in [`test_citation_units.py`](../../tests/test_citation_units.py).
+
+### Index Before Retrieval
+
+[`document_indexing.py`](../../app/services/document_indexing.py)'s
+`build_document_index()` coordinates the index job;
+[`document_embedding.py`](../../app/services/document_embedding.py)'s
+`embed_document_chunks()` and `search_index()` own the vector artifact/search.
+[`embedding_provider.py`](../../app/services/embedding_provider.py) now delegates
+FastEmbed query/document semantics to native query_embed()/passage_embed().
+Existing FastEmbed indexes need a complete rebuild after this M4 correction;
+identity metadata alone cannot detect the old manual prefixes.
 
 ## 5. Retrieval Entry Point
 
@@ -67,7 +94,7 @@ Use this page to answer **where to inspect the code**. For design rationale, end
 - **Related tests:** [`tests/services/retrieval/test_hybrid_text_retrieval.py`](../../tests/services/retrieval/test_hybrid_text_retrieval.py) and [`tests/services/retrieval/test_keyword_retriever.py`](../../tests/services/retrieval/test_keyword_retriever.py).
 - **Design note:** [RAG Pipeline](../rag/rag-pipeline.md) and [Retrieval Layer](../rag/retrieval-layer.md).
 
-## 8. Lightweight Graph Retrieval
+## 8. Lightweight Graph Retrieval (Optional Branch)
 
 - **Responsibility:** extract and persist a small relational layer, retrieve graph-linked chunks, and merge them with vector candidates.
 - **Verified code paths:** [`app/services/knowledge_graph/graph_extractor.py`](../../app/services/knowledge_graph/graph_extractor.py), [`app/services/knowledge_graph/graph_index_service.py`](../../app/services/knowledge_graph/graph_index_service.py), [`app/services/knowledge_graph/graph_retriever.py`](../../app/services/knowledge_graph/graph_retriever.py), and [`app/models/knowledge_graph.py`](../../app/models/knowledge_graph.py).
@@ -75,6 +102,19 @@ Use this page to answer **where to inspect the code**. For design rationale, end
 - **What to look for:** entities, mentions, relations, and source provenance live in PostgreSQL; graph retrieval augments vector retrieval and falls back when graph candidates are empty or weak.
 - **Related tests:** [`tests/services/retrieval/test_graph_vector_mix.py`](../../tests/services/retrieval/test_graph_vector_mix.py), [`tests/services/knowledge_graph/test_graph_index_service.py`](../../tests/services/knowledge_graph/test_graph_index_service.py), and [`tests/services/knowledge_graph/test_graph_lifecycle.py`](../../tests/services/knowledge_graph/test_graph_lifecycle.py).
 - **Design note:** [Lightweight GraphRAG](../rag/lightweight-graphrag.md).
+
+### Evidence Selection Before Support
+
+`_select_evidence_units()` in the Retrieval Layer calls
+[`qa.py`](../../app/services/qa.py)'s `select_evidence_units()` after loading
+persisted units with `load_citation_units_for_chunks()`. Generic selection uses
+`_select_generic_coverage_candidates()` with lexical-confidence and entity guards.
+Context chunks, selected citation units, and canonical final evidence remain
+separate. M3's responsibility aliases/binding live in
+[`query_analysis.py`](../../app/services/query_analysis.py), shared with support.
+See [`test_evidence_selection_coverage.py`](../../tests/services/test_evidence_selection_coverage.py)
+and the [controlled ablation](../rag/evidence-selection-ablation.md), including
+the rejected coverage-only variant and seven remaining forbidden-evidence cases.
 
 ## 9. Evidence Support Gate
 
@@ -119,7 +159,17 @@ Use this page to answer **where to inspect the code**. For design rationale, end
 - **Key entry points:** `run_generalization_cases()`, `load_cases()`, `evaluate_retrieval_result()`, `summarize_results()`, and `classify_failure_reasons()`.
 - **What to look for:** answerable/no-answer denominators are explicit, expected and forbidden phrases replace LLM-as-judge, failed cases remain visible, and sanitized committed snapshots exclude live ids and secrets.
 - **Related tests:** [`tests/eval/test_rag_eval_metrics.py`](../../tests/eval/test_rag_eval_metrics.py), [`tests/eval/test_generalization_case_quality.py`](../../tests/eval/test_generalization_case_quality.py), and [`tests/eval/test_rag_eval_baseline.py`](../../tests/eval/test_rag_eval_baseline.py).
-- **Design note:** [RAG Evaluation](../rag/rag-evaluation.md) and the [latest committed baseline](../../tests/eval/baselines/answer-policy-auto-block-aware/summary.md).
+- **Design note:** [RAG Evaluation](../rag/rag-evaluation.md), the preserved [historical baseline](../../tests/eval/baselines/answer-policy-auto-block-aware/summary.md), and the [final sanitized capture](../../tests/eval/baselines/portfolio-final-auto-block-aware/summary.md).
+
+The separate 24-case slice uses [`rag_format.py`](../../scripts/eval/rag_format.py)
+to generate existing format fixtures and the same internal runner. Public
+retrieval uses [`run_public_retrieval.py`](../../scripts/eval/run_public_retrieval.py)
+and [`public_retrieval.py`](../../scripts/eval/public_retrieval.py): official MTEB
+qrels, an independent Dense reference, production PureLink Dense/Hybrid, and
+TREC-compatible metrics. It bypasses QA, evidence selection, PDF, and citations.
+[`test_public_retrieval.py`](../../tests/eval/test_public_retrieval.py) uses tiny
+offline synthetic data. The recorded external run is six-task partial NanoBEIR;
+all Dense checks passed and Hybrid nDCG fell on all six. No public retuning follows.
 
 ## Continue with Design Deep Dives
 

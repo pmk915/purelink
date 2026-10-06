@@ -1,98 +1,93 @@
 # RAG Evaluation Talking Points
 
-## One Official Regression Suite
+Keep three experiments separate. [RAG Evaluation](../rag/rag-evaluation.md) owns
+metric definitions and reproduction; [Evidence Ablation](../rag/evidence-selection-ablation.md)
+owns the controlled results. The historical 20-case repository-doc suite is not
+the current interview regression story.
 
-The only current official interview regression suite is [`rag_generalization_cases.jsonl`](../../tests/eval/rag_generalization_cases.jsonl): 50 deterministic cases over nine small cross-domain documents, with 44 answerable and 6 no-answer cases. It exercises the real ingestion, indexing, routed retrieval, evidence selection, Evidence Support, Answer Policy, citation-readiness, and trace paths.
+## A. Internal 50-case Regression
 
-The earlier 20-case repository-doc comparison is historical. Its files remain for provenance, but its metrics and `make eval-rag-legacy-20` command are not the current interview result.
+44 answerable / six no-answer cases; AUTO, block-aware, local_hashed_bow /
+hashed_bow_v1, reranking disabled/noop. Retrieval/citation 43/44, expected evidence
+39/44, answerability 49/50, no-answer 6/6. The historical sanitized snapshot is
+[answer-policy-auto-block-aware](../../tests/eval/baselines/answer-policy-auto-block-aware/summary.md).
+Final closeout measurements are recorded in [Portfolio Verification](../development/portfolio-verification.md).
+This deterministic engineering suite detects regression, not public or
+production QA quality.
 
-## Why Two Snapshots Exist
+The normal Demo uses fixed chunking / Chinese FastEmbed. Its committed
+[runtime snapshot](../../tests/eval/baselines/runtime-fastembed-fixed/summary.md)
+is historical after the M4 provider correction. Provider-only checks keep
+retrieval/citation 44/44, expected evidence 36/44, answerability 47/50;
+Recall@3 changes 100% → 97.7% and MRR .9318 → .925. Keep the fix and fully rebuild
+old FastEmbed indexes. Do not silently overwrite that snapshot.
 
-### Deterministic Regression Baseline
+## B. Controlled Evidence-selection Ablation
 
-Configuration:
+24 format cases: six per format, 20 answerable / four no-answer. Candidate ranking,
+embedding, chunk strategy, corpus/cases, and Answer Policy stay fixed.
 
-```env
-CHUNK_STRATEGY=block_aware
-EMBEDDING_PROVIDER=local_hashed_bow
-EMBEDDING_MODEL=hashed_bow_v1
-RERANKER_ENABLED=false
-RERANKER_PROVIDER=noop
-```
+| Metric | M2 | Coverage-only (rejected) | M3 retained |
+|---|---:|---:|---:|
+| Recall@5 | 100% | 100% | 100% |
+| MRR | .925 | .925 | .925 |
+| Expected evidence hit | 18/20 | 16/20 | 20/20 |
+| Evidence recall | 90% | 80% | 100% |
+| Evidence precision | 29.6% (n=20) | 78.1% (n=16) | 72.5% (n=20) |
+| Answerability | 20/24 | 20/24 | 24/24 |
+| No-answer correctness | 4/4 | 4/4 | 4/4 |
 
-Question answered: “Did a system change cause regression?”
+The bottleneck was noisy selected evidence despite strong document recall.
+Generic incremental term coverage plus a separately diagnosed shared
+responsibility-matching fix improved the retained configuration. Selection alone
+lost recall and was rejected. Seven format cases still select forbidden evidence;
+archive/table/cross-document limits remain. Precision excludes unknown evidence,
+so the coverage-only applicability change is part of the interpretation.
 
-| Metric | Result |
-|---|---:|
-| retrieval_hit | 43 / 44 |
-| citation_hit | 43 / 44 |
-| expected_evidence_hit | 39 / 44 |
-| forbidden_evidence_clean | 9 / 9 |
-| mean_evidence_precision | 72.3% (n=42) |
-| router_accuracy | 50 / 50 |
-| answerability_accuracy | 49 / 50 |
-| trace_available | 50 / 50 |
+## C. Six-task Partial NanoBEIR External Validation
 
-Snapshot: [answer-policy-auto-block-aware](../../tests/eval/baselines/answer-policy-auto-block-aware/summary.md).
+300 queries across the first six predefined tasks; remaining seven explicitly
+unrun at the user runtime limit. BAAI/bge-small-en-v1.5, FastEmbed quantized ONNX,
+384 normalized dimensions, CPU, top-k=10, reranking disabled, official title/text
+and qrels held fixed.
 
-### Default Runtime Evaluation
+| Pipeline | nDCG@10 | Recall@10 | MRR@10 |
+|---|---:|---:|---:|
+| MTEB Dense reference | .6222 | .6710 | .6821 |
+| PureLink Dense | .6226 | .6710 | .6826 |
+| PureLink Hybrid | .5569 | .6340 | .6055 |
 
-Configuration:
+All Dense reference checks passed. Hybrid nDCG fell on all six tasks; this
+negative result was retained without public-task tuning. The separate NanoSciFact
+smoke is excluded from the macro. No full NanoBEIR, official leaderboard rank,
+or universal Hybrid superiority follows from this experiment.
 
-```env
-CHUNK_STRATEGY=fixed
-EMBEDDING_PROVIDER=fastembed
-EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
-RERANKER_ENABLED=false
-RERANKER_PROVIDER=noop
-```
+## Metric Boundaries
 
-Question answered: “How does the actual Demo default perform?”
+Document Recall@K/MRR measure candidate ranking; final-evidence phrase recall
+and precision measure selected support proxies; answerability measures the
+production gate against labels. Retrieval hit does not imply clean evidence,
+router accuracy does not imply answer accuracy, and a valid source marker does
+not prove semantic correctness. No LLM judge or combined score is used.
 
-| Metric | Result |
-|---|---:|
-| retrieval_hit | 44 / 44 |
-| citation_hit | 44 / 44 |
-| expected_evidence_hit | 36 / 44 |
-| forbidden_evidence_clean | 8 / 9 |
-| mean_evidence_precision | 70.6% (n=41) |
-| router_accuracy | 50 / 50 |
-| answerability_accuracy | 47 / 50 |
-| trace_available | 50 / 50 |
-
-Snapshot: [runtime-fastembed-fixed](../../tests/eval/baselines/runtime-fastembed-fixed/summary.md).
-
-Do not rank these as “simple versus advanced.” Hashed BoW is the repeatable regression fixture; FastEmbed describes the user-facing runtime. Both expose real failures.
-
-## What the Metrics Mean
-
-- `retrieval_hit`: final evidence contains an expected document.
-- `citation_hit`: final evidence from the expected document is citation-ready.
-- `expected_evidence_hit`: canonical final evidence contains an expected phrase.
-- `forbidden_evidence_clean`: no explicitly forbidden phrase reached final evidence.
-- `evidence_precision`: recognized relevant evidence divided by recognized relevant plus irrelevant evidence; unknown evidence is excluded.
-- `router_accuracy`: AUTO selected the labeled expected mode.
-- `answerability_accuracy`: the deterministic production support decision matched the case label.
-- `trace_available`: a retrieval trace was persisted.
-
-These are phrase/document heuristics, not semantic correctness or LLM-as-judge. Router accuracy is not answer quality, retrieval hit is not answerability, and 49/50 answerability does not imply 98% real-world QA accuracy.
-
-## Evidence Selection Result
-
-The final support-aware narrowing experiment applies only to explicit `entity_attribute`, `exact_technical`, and `entity_relation` support IDs. It preserves overview/generic breadth and keeps unsupported evidence available for diagnostics while Answer Policy skips the provider.
-
-Against the pre-change working tree, deterministic precision improved from 67.3% to 72.3% while retrieval/citation stayed 43/44, expected evidence stayed 39/44, forbidden clean stayed 9/9, router stayed 50/50, and answerability stayed 49/50. The independent 20-case holdout was unchanged: retrieval/citation 16/16, expected evidence 13/16, forbidden clean 12/12, router/answerability/trace 20/20, and precision 100% on 13 applicable cases.
-
-## Reproduce
+## Reproduce Without Replacing History
 
 ```bash
-make eval-rag-generalization
-make eval-rag-generalization-holdout
-make eval-rag-runtime
+make eval-rag-generalization GENERALIZATION_EVAL_OUTPUT_DIR=data/eval_runs/interview-check
+make eval-rag-format FORMAT_EVAL_OUTPUT_DIR=data/eval_runs/interview-check
+# Explicit external developer action; downloads optional dependencies/models/data:
+make eval-retrieval-nanobeir PUBLIC_EVAL_TASK_LIMIT=6
 ```
 
-`make eval-rag-runtime` requires FastEmbed and the model cache; first use may download the model. Generated local runs go under `data/eval_runs/`; committed snapshots are sanitized.
+Do not rerun the public benchmark for README-only changes. Do not use
+`make eval-rag-runtime` casually: it explicitly writes the historical snapshot.
+For fresh runtime measurements, invoke the runner without --baseline-snapshot-dir.
 
-## Interview Answer
+## Thirty-second Interview Answer
 
-> I use one 50-case cross-domain suite for the current interview regression story. The deterministic stack catches code regressions, while a separate run of the same cases records the real fixed/FastEmbed Demo defaults. The metrics deliberately separate retrieval, final evidence, forbidden leakage, routing, support-gate answerability, trace availability, and local latency. They reveal remaining selection and answerability failures rather than hiding them behind one accuracy number.
+“I separated document retrieval from evidence selection, answer support, and
+citations. High document recall exposed noisy evidence rather than a missing-doc
+problem. Controlled ablation improved evidence precision and recall while a
+lossy precision-only variant was rejected. An independent public reference
+validated the Dense plumbing and showed the current Hybrid fusion was worse on
+all six tasks. Those boundaries and negative results are part of the project.”

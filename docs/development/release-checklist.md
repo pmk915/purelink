@@ -4,6 +4,9 @@ Use this checklist before creating a demo branch, milestone tag, or interview
 recording. Do not create a tag until the repository state and checks are
 confirmed.
 
+The final portfolio closeout freezes features after M1–M4. It creates no tag or
+GitHub Release. Actual commands/results live in [Portfolio Verification](portfolio-verification.md).
+
 ## Git State
 
 - `git status --untracked-files=all` is clean.
@@ -16,8 +19,7 @@ Run:
 
 ```bash
 make test
-cd frontend && npm run lint
-cd frontend && npm run build
+(cd frontend && npm run lint && npm run build)
 make docs-check
 ```
 
@@ -33,7 +35,13 @@ the eval corpus changed:
 ```bash
 make eval-rag-generalization
 make eval-rag-generalization-holdout
+make eval-rag-format
 ```
+
+Use fresh ignored output directories for final internal captures; preserve
+historical snapshots. Reuse the recorded six-task partial NanoBEIR result for
+documentation-only changes. A retrieval/provider change requires new public
+validation before publishing those results.
 
 ## Docker
 

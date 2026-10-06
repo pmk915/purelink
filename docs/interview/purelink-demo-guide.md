@@ -1,141 +1,132 @@
-# PureLink 5-Minute Interview Demo
+# PureLink 3–5 Minute Interview Demo
 
-## Goal
+## Prepare Before Presenting
 
-Demonstrate one engineering story:
-
-```text
-Structured Ingestion
-→ Routed Retrieval
-→ Evidence Selection
-→ Evidence Support
-→ Answer Policy
-→ Backend-grounded Citations
-→ Retrieval Trace / Evaluation
-```
-
-PureLink is an engineering-focused RAG knowledge workspace. The main demo is deliberately limited to five steps; supporting features are available only for follow-up questions.
-
-## Before the Interview
+Use the default Chinese FastEmbed model, fixed chunking, heuristic answer
+provider, and disabled/noop reranking. Model download and indexing happen before
+the live demo. Keep existing environment files when they contain local settings;
+copy the example only in a fresh checkout.
 
 ```bash
 cp .env.example .env
 docker compose up -d --build db redis api worker frontend
 docker compose ps
+curl --noproxy '*' http://localhost:8000/api/v1/health
 ```
 
-Open `http://localhost:3000`, register a local user, and create a personal knowledge base. Use a real text document that contains the `CHUNK_STRATEGY`, `fixed`, and `block_aware` terms; [`docs/ingestion/document-blocks.md`](../ingestion/document-blocks.md) is suitable. Keep a second unsupported question ready whose answer is absent from the uploaded corpus.
+Expect db, redis, api, and frontend healthy; worker running. A created container
+alone does not establish readiness. If .env is already customized, use
+`docker compose --env-file .env.example up -d --build db redis api worker frontend`
+to rehearse the documented defaults without overwriting it.
 
-## Main Flow
-
-### Step 1 — Upload
-
-Upload the document and show the processing transition:
-
-```text
-processing → blocks → chunks → citation units → index
-```
-
-Say: “The system persists a parser-neutral `DocumentBlock` representation, then creates retrieval chunks and smaller citation units. Parsing policy can evolve separately from chunking and citation policy.”
-
-Trade-off: structured ingestion creates more rows and processing stages than flattening every file into one text stream.
-
-### Step 2 — Document Processing Inspector
-
-Open the document inspector and show:
-
-- RAG Ready
-- block count
-- chunk count
-- citation-unit count
-- vector index
-- graph index
-
-Say: “A user should not need worker logs to learn why a file is not searchable. Readiness and failure states are product-visible.”
-
-### Step 3 — Technical Question and Citations
-
-Ask:
-
-```text
-CHUNK_STRATEGY 支持哪些值？
-```
-
-Show `AUTO → hybrid_text`, the grounded answer, inline markers, and Citation Drawer.
-
-Say: “Semantic embeddings are not ideal for config keys, API paths, and CLI commands. The keyword channel adds observable exact-match candidates; the trade-off is a simple local scan rather than a production inverted index. Citation identities come from the backend, and provider markers are validated after generation.”
-
-### Step 4 — Retrieval Trace
-
-Show:
-
-- requested, selected, and effective mode
-- router reason
-- candidate and final-evidence scores
-- trace id
-- Evidence Support and Answer Policy metadata
-
-Say: “When an answer fails, I need to distinguish routing, retrieval, selection, evidence support, and answer-policy failures. A deterministic rule router is sufficient for this small explicit strategy space; an LLM router would add latency, cost, and nondeterminism.”
-
-### Step 5 — Unsupported Question
-
-Ask a question whose requested fact is absent from the uploaded corpus, for example a nonexistent author or default value.
-
-Show:
-
-```text
-Evidence Support rejects
-→ Answer Policy refuses
-→ provider skipped
-→ citations=[]
-```
-
-Say: “Retrieved relevance is not answerability. Semantically related evidence can still lack the requested fact, so generation is gated before the model sees context.”
-
-## Evaluation Talking Point
-
-The only current official regression suite is the [50-case deterministic generalization baseline](../../tests/eval/baselines/answer-policy-auto-block-aware/summary.md):
+Generate the **existing** format benchmark fixtures locally; this adds no dataset
+and commits no generated PDF/DOCX. Install the existing Python requirements in a
+local Python 3.12 virtualenv first (see [development setup](../development/dev-commands.md)).
 
 ```bash
-make eval-rag-generalization
-make eval-rag-generalization-holdout
+.venv/bin/python - <<'PYDEMO'
+from pathlib import Path
+from scripts.eval.rag_eval import load_cases
+from scripts.eval.rag_format import generate_format_corpus
+generate_format_corpus(
+    Path("tests/eval/format_corpus.json"),
+    Path("data/demo/format-corpus"),
+    load_cases(Path("tests/eval/rag_format_cases.jsonl")),
+)
+print("Upload data/demo/format-corpus/aspen-current.pdf")
+PYDEMO
 ```
 
-The [default Runtime snapshot](../../tests/eval/baselines/runtime-fastembed-fixed/summary.md) uses the same 50 cases with fixed chunking and FastEmbed:
+`aspen-current.pdf` has two native-text pages. Page 1 states the retry limit (6);
+page 2 states audit retention (14 days) and profile memory. These are synthetic
+runtime facts already used by the internal benchmark. Upload only this current
+PDF to a fresh demo KB; do not introduce archive distractors in the live flow.
+`examples/pdf/manual.pdf` is a single-page alternative and cannot demonstrate
+page-2 provenance.
+
+## 0:00–1:00 — Sign In, Upload, and Readiness
+
+Open http://localhost:3000. Register/sign in, create a personal knowledge base,
+and upload `aspen-current.pdf`. Wait for indexed/RAG Ready; use the Processing
+Inspector to show blocks, chunks, citation units, and vector-index readiness.
+Uploads are prepared asynchronously; the manual processing action is available
+if an existing document is not queued. Pre-create an indexed KB as a fallback.
+
+Say: “Parsing preserves physical PDF pages and source blocks. Retrieval uses
+chunks, while answer evidence uses smaller citation units with provenance.”
+
+## 1:00–2:00 — Stable Question and Supported Answer
+
+Ask in AUTO mode:
+
+```text
+How many days does the current Aspen runtime retain audit records?
+```
+
+The source fact is **14 days** on **physical page 2**. Show the grounded answer,
+its inline citation, and the supporting quote. Do not promise an exact answer
+sentence, fixed marker number, score, latency, or AUTO mode for this generic query.
+An optional technical question is:
+
+```text
+What is ASPEN_RETRY_LIMIT set to in the current Aspen runtime?
+```
+
+The source fact is **6 retries**, page 1. Inspect the actual route rather than
+claiming Hybrid must win. If the first question is unsupported in an unexpected
+runtime, inspect readiness and trace; use the rehearsed second question or the
+pre-indexed KB, and disclose the failed attempt.
+
+## 2:00–3:00 — Click Citation and Inspect Decisions
+
+Open the citation drawer. Show `source_type=pdf`, physical page 2, source locator,
+quote, and character range; open View source. Physical pages do not mean printed
+page labels, and bbox is block metadata rather than a sentence-highlight promise.
+
+Expand Retrieval Details / Retrieval Debug. Show the actual requested, selected,
+and effective modes, router reason, trace id, scored candidates, final evidence,
+and support/Answer Policy decision. UI summaries and persisted backend trace can
+expose different levels of detail; do not invent fields that are not displayed.
+
+Say: “A related candidate can be retrieved without becoming final evidence.
+The support decision gates generation, and citations come from backend evidence.”
+
+## 3:00–4:00 — Optional Refusal and Evaluation
+
+If time permits, ask a fact absent from the PDF:
+
+```text
+What is the release date of the Aspen runtime?
+```
+
+Check the actual no-answer decision: unsupported evidence, provider skipped,
+and no citations. Finish with the README's three evaluation stories: the 50-case
+regression, the retained/rejected evidence ablation, and the six-task partial
+NanoBEIR Dense/Hybrid result. Never start the hour-long public run during a demo.
+
+## Rehearsal and Troubleshooting
+
+The final closeout rehearsed these exact questions through the local API with
+the default Compose profile: 14 days/page 2, 6 retries/page 1, and a no-citation
+refusal all passed. The PDF produced 2 chunks and 11 citation units, and its
+authenticated original source returned HTTP 200. This verifies the backend
+contract; browser clicks still require presenter rehearsal. See the
+[actual verification record](../development/portfolio-verification.md).
 
 ```bash
-make eval-rag-runtime
+make KEEP_STACK_UP=1 smoke
+make eval-rag-generalization GENERALIZATION_EVAL_OUTPUT_DIR=data/eval_runs/demo-rehearsal
+make eval-rag-format FORMAT_EVAL_OUTPUT_DIR=data/eval_runs/demo-rehearsal
+docker compose logs --tail=100 api worker
 ```
 
-Frame them separately: deterministic evaluation detects regression; runtime evaluation describes the actual Demo defaults. Neither is an LLM-judge benchmark or a production-quality claim.
+Smoke exercises the existing personal upload/retrieve/ask/conversation path;
+it does not replace the PDF page check. Generated runs stay ignored. Do not run
+`make eval-rag-runtime` to capture fresh measurements without understanding that
+it overwrites the historical runtime snapshot; use the runner directly without
+`--baseline-snapshot-dir` as documented in [Evaluation](../rag/rag-evaluation.md).
+Existing FastEmbed indexes must be fully rebuilt after M4's API correction.
 
-## Optional / Follow-up Demo
-
-Only show these when the interviewer asks:
-
-- Graph Explorer and one-hop source provenance
-- team knowledge bases and review permissions
-- Processing Job Dashboard and retry
-- manual retrieval modes
-- optional reranker
-- graph lifecycle and export
-- production-like Docker Compose setup
-
-The graph is lightweight, one-hop/source-grounded, and PostgreSQL-backed. It is not multi-hop GraphRAG or a Neo4j-style analytics platform. The Python worker is the supported Compose path; `worker-go` is experimental and not feature-equivalent.
-
-## Honest Limits
-
-- The corpus is small and phrase/document metrics approximate evidence quality.
-- The rule-based router and Evidence Support Gate are deterministic heuristics.
-- Default FastEmbed still has expected-evidence and answerability failures recorded in its snapshot.
-- OCR, multimodal RAG, agent runtime, and multi-hop graph reasoning are outside the final Demo scope.
-- Public production deployment still needs environment-specific TLS, secrets, monitoring, backups, and capacity work.
-
-## Troubleshooting
-
-If a document is not ready, use the inspector before logs. If retrieval is surprising, check selected mode, trace id, candidate/final evidence, support reason, and index-provider compatibility. Docker commands:
-
-```bash
-docker compose logs --tail=200 api worker
-docker compose ps
-```
+Graph Explorer, teams/review, manual retrieval modes, jobs/retry, and optional
+rerankers are follow-up material. The Compose worker is Python; worker-go is
+experimental. Explain [limitations](limitations.md) confidently and factually.
