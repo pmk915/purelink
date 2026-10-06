@@ -1,0 +1,103 @@
+{
+  "case_category_counts": {
+    "distractor_sensitive": 4,
+    "factual_lookup": 4,
+    "no_answer": 4,
+    "section_scoped": 4,
+    "structured_fact": 4,
+    "technical": 4
+  },
+  "case_count": 24,
+  "dirty_worktree": true,
+  "requested_mode": "auto",
+  "commit_sha": "c25c7c3",
+  "pymupdf_version": "1.27.2.3",
+  "embedding_provider": "local_hashed_bow",
+  "corpus_spec": "tests/eval/format_corpus.json",
+  "suite": "format",
+  "corpus_spec_sha256": "6f4d0cea61a4f67aaedc6d349feb3656f12d0ca2fdeceb6774f9cfda61fd51f5",
+  "case_file": "tests/eval/rag_format_cases.jsonl",
+  "embedding_model": "hashed_bow_v1",
+  "corpus_manifest": [
+    {
+      "name": "cedar-current.txt",
+      "path": "cedar-current.txt",
+      "char_count": null,
+      "heading_count": null,
+      "sha256": "b178082cd28165b94ebe0405a945151ff9b1d353f7b7e6f62fad2f61947e5d19",
+      "format": "txt",
+      "size_bytes": 489
+    },
+    {
+      "name": "cedar-archive.txt",
+      "path": "cedar-archive.txt",
+      "char_count": null,
+      "heading_count": null,
+      "sha256": "3bf0d8c15488f521e6ded642beb35e8d552253a9a8363cb0f811797cc7899d24",
+      "format": "txt",
+      "size_bytes": 335
+    },
+    {
+      "name": "maple-current.md",
+      "path": "maple-current.md",
+      "char_count": null,
+      "heading_count": null,
+      "sha256": "66e2b5d2a0209c2696954af05bf602e3bb8344346864878a89a119f60c1ac32b",
+      "format": "markdown",
+      "size_bytes": 489
+    },
+    {
+      "name": "maple-archive.md",
+      "path": "maple-archive.md",
+      "char_count": null,
+      "heading_count": null,
+      "sha256": "97731d6a010ed6990ed0fea4659d2e92373093ba6f212ece6ee9ebeb5b9c1ac9",
+      "format": "markdown",
+      "size_bytes": 335
+    },
+    {
+      "name": "birch-current.docx",
+      "path": "birch-current.docx",
+      "char_count": null,
+      "heading_count": null,
+      "sha256": "f345450aa2d6df6b7ed40a8bc58f5b4b178347f82edbb91f4886dae8d43c8c55",
+      "format": "docx",
+      "size_bytes": 2087
+    },
+    {
+      "name": "birch-archive.docx",
+      "path": "birch-archive.docx",
+      "char_count": null,
+      "heading_count": null,
+      "sha256": "1576b6b3aa890df1ef225ee1af9bb14fe62d5cefe05561756d00f452fb66e975",
+      "format": "docx",
+      "size_bytes": 1717
+    },
+    {
+      "name": "aspen-current.pdf",
+      "path": "aspen-current.pdf",
+      "char_count": null,
+      "heading_count": null,
+      "sha256": "0855791c1961592167437e45019cc492e085e3eae776fe0f3a225271b821047b",
+      "format": "pdf",
+      "size_bytes": 3015
+    },
+    {
+      "name": "aspen-archive.pdf",
+      "path": "aspen-archive.pdf",
+      "char_count": null,
+      "heading_count": null,
+      "sha256": "f8ac72d6cdc0a31f06d4959505fe08eef5112f351d9032e012cc45f24d71f67c",
+      "format": "pdf",
+      "size_bytes": 1881
+    }
+  ],
+  "duration_ms": 662,
+  "run_id": "format-20261006-144009-auto-block_aware",
+  "python_version": "3.12.3",
+  "reranker_enabled": false,
+  "chunk_strategy": "block_aware",
+  "retrieval_min_score": 0.15,
+  "created_at": "2026-10-06T14:40:09.979401+00:00",
+  "reranker_provider": "noop"
+}

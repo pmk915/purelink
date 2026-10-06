@@ -1,0 +1,3083 @@
+{
+  "case_count": 24,
+  "cases": [
+    {
+      "failure_stage": "success",
+      "answerability_accuracy": true,
+      "final_evidence_count": 1,
+      "retrieval_latency_ms": 14,
+      "expected_page_numbers": [],
+      "document_recall_at_3": 1.0,
+      "matched_keywords": [
+        "CEDAR_RETRY_LIMIT defaults to 6 retries"
+      ],
+      "expected_document_in_final_selection": true,
+      "document_recall_at_5": 1.0,
+      "expected_document_in_raw_candidates": true,
+      "irrelevant_evidence_count": 0,
+      "expected_document_in_final_context": true,
+      "expected_evidence_in_final_selection": true,
+      "answer_allowed_markers": [
+        "S1"
+      ],
+      "evidence_precision": 1.0,
+      "answer_unknown_markers_removed": 0,
+      "page_provenance_hit": null,
+      "expected_mode": null,
+      "retrieval_hit": true,
+      "relevant_evidence_count": 1,
+      "expected_evidence_in_final_context": true,
+      "answer_external_knowledge_allowed": false,
+      "keyword_coverage": 1.0,
+      "retrieved_doc_names": [
+        "cedar-current.txt"
+      ],
+      "requested_mode": "auto",
+      "id": "txt_technical",
+      "document_mrr": 1.0,
+      "document_ranking_source": "initial_chunks",
+      "document_format": "txt",
+      "evidence_recall": 1.0,
+      "answer_policy_reason": "supported",
+      "answer_allowed_evidence_count": 1,
+      "forbidden_evidence_phrases": [
+        "CEDAR_RETRY_LIMIT defaults to 2 retries"
+      ],
+      "mode": "auto",
+      "citation_hit": true,
+      "missing_keywords": [],
+      "answer_provider_called": true,
+      "answer_citation_required": true,
+      "total_eval_latency_ms": 18,
+      "used_reranker": false,
+      "forbidden_evidence_hit": false,
+      "answer_policy_outcome": "answer",
+      "expected_doc_names": [
+        "cedar-current.txt"
+      ],
+      "expected_evidence_phrases": [
+        "CEDAR_RETRY_LIMIT defaults to 6 retries"
+      ],
+      "trace_available": true,
+      "unknown_evidence_count": 0,
+      "router_reason": "question contains exact technical identifier",
+      "failure_reasons": [],
+      "predicted_answerable": true,
+      "expected_evidence_hit": true,
+      "top_3_doc_hit": true,
+      "document_recall_at_1": 1.0,
+      "selected_mode": "hybrid_text",
+      "router_accuracy": null,
+      "expected_answerable": true,
+      "question": "What is CEDAR_RETRY_LIMIT set to in the current Cedar runtime?",
+      "category": "technical",
+      "top_1_doc_hit": true,
+      "expected_evidence_in_raw_candidates": true,
+      "top_documents": [
+        "cedar-current.txt"
+      ],
+      "ranked_retrieved_documents": [
+        {
+          "rank": 1,
+          "document_name": "cedar-current.txt",
+          "score": 0.9785714285714285
+        },
+        {
+          "rank": 2,
+          "document_name": "cedar-archive.txt",
+          "score": 0.8534204895259543
+        },
+        {
+          "rank": 3,
+          "document_name": "maple-current.md",
+          "score": 0.6281203007518796
+        },
+        {
+          "rank": 4,
+          "document_name": "birch-current.docx",
+          "score": 0.6281203007518796
+        }
+      ],
+      "final_evidence_units": [
+        {
+          "document_name": "cedar-current.txt",
+          "text": "This manual describes the current Cedar runtime. CEDAR_RETRY_LIMIT defaults to 6 retries in the current Cedar runtime.",
+          "score": 0.9785714285714285,
+          "vector_score": 0.7606087305741639,
+          "keyword_score": 1.0833333333333335,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "section:Cedar Current Runtime"
+        }
+      ]
+    },
+    {
+      "failure_stage": "success",
+      "answerability_accuracy": true,
+      "final_evidence_count": 2,
+      "retrieval_latency_ms": 8,
+      "expected_page_numbers": [],
+      "document_recall_at_3": 1.0,
+      "matched_keywords": [
+        "Cedar is maintained by Mira Chen"
+      ],
+      "expected_document_in_final_selection": true,
+      "document_recall_at_5": 1.0,
+      "expected_document_in_raw_candidates": true,
+      "irrelevant_evidence_count": 1,
+      "expected_document_in_final_context": true,
+      "expected_evidence_in_final_selection": true,
+      "answer_allowed_markers": [
+        "S1",
+        "S2"
+      ],
+      "evidence_precision": 0.5,
+      "answer_unknown_markers_removed": 0,
+      "page_provenance_hit": null,
+      "expected_mode": null,
+      "retrieval_hit": true,
+      "relevant_evidence_count": 1,
+      "expected_evidence_in_final_context": true,
+      "answer_external_knowledge_allowed": false,
+      "keyword_coverage": 1.0,
+      "retrieved_doc_names": [
+        "cedar-current.txt",
+        "cedar-archive.txt"
+      ],
+      "requested_mode": "auto",
+      "id": "txt_factual_lookup",
+      "document_mrr": 1.0,
+      "document_ranking_source": "initial_chunks",
+      "document_format": "txt",
+      "evidence_recall": 1.0,
+      "answer_policy_reason": "supported",
+      "answer_allowed_evidence_count": 2,
+      "forbidden_evidence_phrases": [
+        "Rowan Lee"
+      ],
+      "mode": "auto",
+      "citation_hit": true,
+      "missing_keywords": [],
+      "answer_provider_called": true,
+      "answer_citation_required": true,
+      "total_eval_latency_ms": 9,
+      "used_reranker": false,
+      "forbidden_evidence_hit": true,
+      "answer_policy_outcome": "answer",
+      "expected_doc_names": [
+        "cedar-current.txt"
+      ],
+      "expected_evidence_phrases": [
+        "Cedar is maintained by Mira Chen"
+      ],
+      "trace_available": true,
+      "unknown_evidence_count": 0,
+      "router_reason": "default factual question",
+      "failure_reasons": [
+        "forbidden_evidence_selected"
+      ],
+      "predicted_answerable": true,
+      "expected_evidence_hit": true,
+      "top_3_doc_hit": true,
+      "document_recall_at_1": 1.0,
+      "selected_mode": "chunk_only",
+      "router_accuracy": null,
+      "expected_answerable": true,
+      "question": "Who maintains the current Cedar runtime?",
+      "category": "factual_lookup",
+      "top_1_doc_hit": true,
+      "expected_evidence_in_raw_candidates": true,
+      "top_documents": [
+        "cedar-current.txt",
+        "cedar-archive.txt"
+      ],
+      "ranked_retrieved_documents": [
+        {
+          "rank": 1,
+          "document_name": "cedar-current.txt",
+          "score": 0.9650000000000001
+        },
+        {
+          "rank": 2,
+          "document_name": "cedar-archive.txt",
+          "score": 0.8435481991630301
+        },
+        {
+          "rank": 3,
+          "document_name": "maple-current.md",
+          "score": 0.6213888888888889
+        },
+        {
+          "rank": 4,
+          "document_name": "birch-current.docx",
+          "score": 0.6213888888888889
+        },
+        {
+          "rank": 5,
+          "document_name": "maple-archive.md",
+          "score": 0.5655111506400841
+        },
+        {
+          "rank": 6,
+          "document_name": "birch-archive.docx",
+          "score": 0.5655111506400841
+        }
+      ],
+      "final_evidence_units": [
+        {
+          "document_name": "cedar-current.txt",
+          "text": "Cedar is maintained by Mira Chen.",
+          "score": 0.9650000000000001,
+          "vector_score": 0.5883484054145521,
+          "keyword_score": 0.7106666666666667,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "section:Cedar Current Runtime"
+        },
+        {
+          "document_name": "cedar-archive.txt",
+          "text": "CEDAR_RETRY_LIMIT defaults to 2 retries in the archived Cedar runtime. Cedar was previously maintained by Rowan Lee.",
+          "score": 0.8435481991630301,
+          "vector_score": 0.4909902530309829,
+          "keyword_score": 0.6725490196078431,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "section:Cedar Archived Runtime"
+        }
+      ]
+    },
+    {
+      "failure_stage": "success",
+      "answerability_accuracy": true,
+      "final_evidence_count": 1,
+      "retrieval_latency_ms": 6,
+      "expected_page_numbers": [],
+      "document_recall_at_3": 1.0,
+      "matched_keywords": [
+        "stop the worker",
+        "restore the journal"
+      ],
+      "expected_document_in_final_selection": true,
+      "document_recall_at_5": 1.0,
+      "expected_document_in_raw_candidates": true,
+      "irrelevant_evidence_count": 0,
+      "expected_document_in_final_context": true,
+      "expected_evidence_in_final_selection": true,
+      "answer_allowed_markers": [
+        "S1"
+      ],
+      "evidence_precision": 1.0,
+      "answer_unknown_markers_removed": 0,
+      "page_provenance_hit": null,
+      "expected_mode": null,
+      "retrieval_hit": true,
+      "relevant_evidence_count": 1,
+      "expected_evidence_in_final_context": true,
+      "answer_external_knowledge_allowed": false,
+      "keyword_coverage": 1.0,
+      "retrieved_doc_names": [
+        "cedar-current.txt"
+      ],
+      "requested_mode": "auto",
+      "id": "txt_section_scoped",
+      "document_mrr": 0.5,
+      "document_ranking_source": "initial_chunks",
+      "document_format": "txt",
+      "evidence_recall": 1.0,
+      "answer_policy_reason": "supported",
+      "answer_allowed_evidence_count": 1,
+      "forbidden_evidence_phrases": [],
+      "mode": "auto",
+      "citation_hit": true,
+      "missing_keywords": [],
+      "answer_provider_called": true,
+      "answer_citation_required": true,
+      "total_eval_latency_ms": 7,
+      "used_reranker": false,
+      "forbidden_evidence_hit": null,
+      "answer_policy_outcome": "answer",
+      "expected_doc_names": [
+        "cedar-current.txt"
+      ],
+      "expected_evidence_phrases": [
+        "stop the worker",
+        "restore the journal"
+      ],
+      "trace_available": true,
+      "unknown_evidence_count": 0,
+      "router_reason": "default factual question",
+      "failure_reasons": [],
+      "predicted_answerable": true,
+      "expected_evidence_hit": true,
+      "top_3_doc_hit": true,
+      "document_recall_at_1": 0.0,
+      "selected_mode": "chunk_only",
+      "router_accuracy": null,
+      "expected_answerable": true,
+      "question": "What steps does Cedar Recovery specify?",
+      "category": "section_scoped",
+      "top_1_doc_hit": true,
+      "expected_evidence_in_raw_candidates": true,
+      "top_documents": [
+        "cedar-current.txt"
+      ],
+      "ranked_retrieved_documents": [
+        {
+          "rank": 1,
+          "document_name": "cedar-archive.txt",
+          "score": 0.8707029620358783
+        },
+        {
+          "rank": 2,
+          "document_name": "cedar-current.txt",
+          "score": 0.7825669871290752
+        },
+        {
+          "rank": 3,
+          "document_name": "maple-current.md",
+          "score": 0.39378349356453757
+        },
+        {
+          "rank": 4,
+          "document_name": "birch-current.docx",
+          "score": 0.39378349356453757
+        }
+      ],
+      "final_evidence_units": [
+        {
+          "document_name": "cedar-current.txt",
+          "text": "Cedar Recovery says to stop the worker and restore the journal before restarting.",
+          "score": 0.7825669871290752,
+          "vector_score": 0.21081851067789198,
+          "keyword_score": 0.4217948717948718,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "section:Cedar Recovery"
+        }
+      ]
+    },
+    {
+      "failure_stage": "success",
+      "answerability_accuracy": true,
+      "final_evidence_count": 2,
+      "retrieval_latency_ms": 29,
+      "expected_page_numbers": [],
+      "document_recall_at_3": 1.0,
+      "matched_keywords": [
+        "Cedar retains audit records for 14 days"
+      ],
+      "expected_document_in_final_selection": true,
+      "document_recall_at_5": 1.0,
+      "expected_document_in_raw_candidates": true,
+      "irrelevant_evidence_count": 1,
+      "expected_document_in_final_context": true,
+      "expected_evidence_in_final_selection": true,
+      "answer_allowed_markers": [
+        "S1",
+        "S2"
+      ],
+      "evidence_precision": 0.5,
+      "answer_unknown_markers_removed": 0,
+      "page_provenance_hit": null,
+      "expected_mode": null,
+      "retrieval_hit": true,
+      "relevant_evidence_count": 1,
+      "expected_evidence_in_final_context": true,
+      "answer_external_knowledge_allowed": false,
+      "keyword_coverage": 1.0,
+      "retrieved_doc_names": [
+        "cedar-current.txt",
+        "cedar-archive.txt"
+      ],
+      "requested_mode": "auto",
+      "id": "txt_distractor_sensitive",
+      "document_mrr": 1.0,
+      "document_ranking_source": "initial_chunks",
+      "document_format": "txt",
+      "evidence_recall": 1.0,
+      "answer_policy_reason": "supported",
+      "answer_allowed_evidence_count": 2,
+      "forbidden_evidence_phrases": [
+        "90 days"
+      ],
+      "mode": "auto",
+      "citation_hit": true,
+      "missing_keywords": [],
+      "answer_provider_called": true,
+      "answer_citation_required": true,
+      "total_eval_latency_ms": 31,
+      "used_reranker": false,
+      "forbidden_evidence_hit": false,
+      "answer_policy_outcome": "answer",
+      "expected_doc_names": [
+        "cedar-current.txt"
+      ],
+      "expected_evidence_phrases": [
+        "Cedar retains audit records for 14 days"
+      ],
+      "trace_available": true,
+      "unknown_evidence_count": 0,
+      "router_reason": "default factual question",
+      "failure_reasons": [],
+      "predicted_answerable": true,
+      "expected_evidence_hit": true,
+      "top_3_doc_hit": true,
+      "document_recall_at_1": 1.0,
+      "selected_mode": "chunk_only",
+      "router_accuracy": null,
+      "expected_answerable": true,
+      "question": "How many days does the current Cedar runtime retain audit records?",
+      "category": "distractor_sensitive",
+      "top_1_doc_hit": true,
+      "expected_evidence_in_raw_candidates": true,
+      "top_documents": [
+        "cedar-current.txt",
+        "cedar-archive.txt"
+      ],
+      "ranked_retrieved_documents": [
+        {
+          "rank": 1,
+          "document_name": "cedar-current.txt",
+          "score": 0.9147692574600972
+        },
+        {
+          "rank": 2,
+          "document_name": "cedar-archive.txt",
+          "score": 0.7524768050817341
+        },
+        {
+          "rank": 3,
+          "document_name": "maple-current.md",
+          "score": 0.7303521859819571
+        },
+        {
+          "rank": 4,
+          "document_name": "birch-current.docx",
+          "score": 0.7303521859819571
+        },
+        {
+          "rank": 5,
+          "document_name": "aspen-archive.pdf",
+          "score": 0.6866491759409491
+        },
+        {
+          "rank": 6,
+          "document_name": "aspen-current.pdf",
+          "score": 0.6203727538292001
+        }
+      ],
+      "final_evidence_units": [
+        {
+          "document_name": "cedar-current.txt",
+          "text": "The current Cedar retains audit records for 14 days.",
+          "score": 0.9147692574600972,
+          "vector_score": 0.5039526306789697,
+          "keyword_score": 0.6136363636363636,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "section:Cedar Audit Retention"
+        },
+        {
+          "document_name": "cedar-archive.txt",
+          "text": "This historical manual describes retired settings for Cedar; it does not describe the current runtime.",
+          "score": 0.7524768050817341,
+          "vector_score": 0.40089186286863654,
+          "keyword_score": 0.5187165775401069,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "section:Cedar Archived Runtime"
+        }
+      ]
+    },
+    {
+      "failure_stage": "success",
+      "answerability_accuracy": true,
+      "final_evidence_count": 1,
+      "retrieval_latency_ms": 5,
+      "expected_page_numbers": [],
+      "document_recall_at_3": 1.0,
+      "matched_keywords": [
+        "384 MiB"
+      ],
+      "expected_document_in_final_selection": true,
+      "document_recall_at_5": 1.0,
+      "expected_document_in_raw_candidates": true,
+      "irrelevant_evidence_count": 1,
+      "expected_document_in_final_context": true,
+      "expected_evidence_in_final_selection": true,
+      "answer_allowed_markers": [
+        "S1"
+      ],
+      "evidence_precision": 0.0,
+      "answer_unknown_markers_removed": 0,
+      "page_provenance_hit": null,
+      "expected_mode": null,
+      "retrieval_hit": true,
+      "relevant_evidence_count": 0,
+      "expected_evidence_in_final_context": true,
+      "answer_external_knowledge_allowed": false,
+      "keyword_coverage": 1.0,
+      "retrieved_doc_names": [
+        "cedar-current.txt"
+      ],
+      "requested_mode": "auto",
+      "id": "txt_structured_fact",
+      "document_mrr": 1.0,
+      "document_ranking_source": "initial_chunks",
+      "document_format": "txt",
+      "evidence_recall": 1.0,
+      "answer_policy_reason": "supported",
+      "answer_allowed_evidence_count": 1,
+      "forbidden_evidence_phrases": [
+        "768 MiB"
+      ],
+      "mode": "auto",
+      "citation_hit": true,
+      "missing_keywords": [],
+      "answer_provider_called": true,
+      "answer_citation_required": true,
+      "total_eval_latency_ms": 7,
+      "used_reranker": false,
+      "forbidden_evidence_hit": true,
+      "answer_policy_outcome": "answer",
+      "expected_doc_names": [
+        "cedar-current.txt"
+      ],
+      "expected_evidence_phrases": [
+        "384 MiB"
+      ],
+      "trace_available": true,
+      "unknown_evidence_count": 0,
+      "router_reason": "default factual question",
+      "failure_reasons": [
+        "forbidden_evidence_selected"
+      ],
+      "predicted_answerable": true,
+      "expected_evidence_hit": true,
+      "top_3_doc_hit": true,
+      "document_recall_at_1": 1.0,
+      "selected_mode": "chunk_only",
+      "router_accuracy": null,
+      "expected_answerable": true,
+      "question": "How much memory is reserved by the compact profile in Cedar?",
+      "category": "structured_fact",
+      "top_1_doc_hit": true,
+      "expected_evidence_in_raw_candidates": true,
+      "top_documents": [
+        "cedar-current.txt"
+      ],
+      "ranked_retrieved_documents": [
+        {
+          "rank": 1,
+          "document_name": "cedar-current.txt",
+          "score": 0.8839140686402935
+        },
+        {
+          "rank": 2,
+          "document_name": "aspen-current.pdf",
+          "score": 0.6807237646224449
+        },
+        {
+          "rank": 3,
+          "document_name": "cedar-archive.txt",
+          "score": 0.6421074784588975
+        },
+        {
+          "rank": 4,
+          "document_name": "maple-current.md",
+          "score": 0.6313544668587897
+        },
+        {
+          "rank": 5,
+          "document_name": "birch-current.docx",
+          "score": 0.6313544668587897
+        }
+      ],
+      "final_evidence_units": [
+        {
+          "document_name": "cedar-current.txt",
+          "text": "| Profile | Reserved memory | | --- | --- | | Cedar compact | 384 MiB | | Cedar standard | 768 MiB |",
+          "score": 0.8176495335382065,
+          "vector_score": 0.4670993664969138,
+          "keyword_score": 0.5363636363636364,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "section:Cedar Deployment Profiles"
+        }
+      ]
+    },
+    {
+      "failure_stage": "genuine_no_answer",
+      "answerability_accuracy": true,
+      "final_evidence_count": 0,
+      "retrieval_latency_ms": 8,
+      "expected_page_numbers": [],
+      "document_recall_at_3": null,
+      "matched_keywords": [],
+      "expected_document_in_final_selection": null,
+      "document_recall_at_5": null,
+      "expected_document_in_raw_candidates": null,
+      "irrelevant_evidence_count": 0,
+      "expected_document_in_final_context": null,
+      "expected_evidence_in_final_selection": null,
+      "answer_allowed_markers": [],
+      "evidence_precision": null,
+      "answer_unknown_markers_removed": 0,
+      "page_provenance_hit": null,
+      "expected_mode": null,
+      "retrieval_hit": null,
+      "relevant_evidence_count": 0,
+      "expected_evidence_in_final_context": null,
+      "answer_external_knowledge_allowed": false,
+      "keyword_coverage": 1.0,
+      "retrieved_doc_names": [],
+      "requested_mode": "auto",
+      "id": "txt_no_answer",
+      "document_mrr": null,
+      "document_ranking_source": "initial_chunks",
+      "document_format": "txt",
+      "evidence_recall": null,
+      "answer_policy_reason": "evidence_support_rejected",
+      "answer_allowed_evidence_count": 0,
+      "forbidden_evidence_phrases": [],
+      "mode": "auto",
+      "citation_hit": null,
+      "missing_keywords": [],
+      "answer_provider_called": false,
+      "answer_citation_required": false,
+      "total_eval_latency_ms": 13,
+      "used_reranker": false,
+      "forbidden_evidence_hit": null,
+      "answer_policy_outcome": "refuse",
+      "expected_doc_names": [],
+      "expected_evidence_phrases": [],
+      "trace_available": true,
+      "unknown_evidence_count": 0,
+      "router_reason": "default factual question",
+      "failure_reasons": [],
+      "predicted_answerable": false,
+      "expected_evidence_hit": null,
+      "top_3_doc_hit": null,
+      "document_recall_at_1": null,
+      "selected_mode": "chunk_only",
+      "router_accuracy": null,
+      "expected_answerable": false,
+      "question": "What is the release date of the Cedar runtime?",
+      "category": "no_answer",
+      "top_1_doc_hit": null,
+      "expected_evidence_in_raw_candidates": null,
+      "top_documents": [],
+      "ranked_retrieved_documents": [
+        {
+          "rank": 1,
+          "document_name": "cedar-current.txt",
+          "score": 0.9475
+        },
+        {
+          "rank": 2,
+          "document_name": "cedar-archive.txt",
+          "score": 0.7317535722072478
+        },
+        {
+          "rank": 3,
+          "document_name": "maple-current.md",
+          "score": 0.6914800469483569
+        },
+        {
+          "rank": 4,
+          "document_name": "birch-current.docx",
+          "score": 0.6914800469483569
+        },
+        {
+          "rank": 5,
+          "document_name": "aspen-current.pdf",
+          "score": 0.5541952334868105
+        }
+      ],
+      "final_evidence_units": []
+    },
+    {
+      "failure_stage": "success",
+      "answerability_accuracy": true,
+      "final_evidence_count": 1,
+      "retrieval_latency_ms": 7,
+      "expected_page_numbers": [],
+      "document_recall_at_3": 1.0,
+      "matched_keywords": [
+        "MAPLE_RETRY_LIMIT defaults to 6 retries"
+      ],
+      "expected_document_in_final_selection": true,
+      "document_recall_at_5": 1.0,
+      "expected_document_in_raw_candidates": true,
+      "irrelevant_evidence_count": 0,
+      "expected_document_in_final_context": true,
+      "expected_evidence_in_final_selection": true,
+      "answer_allowed_markers": [
+        "S1"
+      ],
+      "evidence_precision": 1.0,
+      "answer_unknown_markers_removed": 0,
+      "page_provenance_hit": null,
+      "expected_mode": null,
+      "retrieval_hit": true,
+      "relevant_evidence_count": 1,
+      "expected_evidence_in_final_context": true,
+      "answer_external_knowledge_allowed": false,
+      "keyword_coverage": 1.0,
+      "retrieved_doc_names": [
+        "maple-current.md"
+      ],
+      "requested_mode": "auto",
+      "id": "markdown_technical",
+      "document_mrr": 1.0,
+      "document_ranking_source": "initial_chunks",
+      "document_format": "markdown",
+      "evidence_recall": 1.0,
+      "answer_policy_reason": "supported",
+      "answer_allowed_evidence_count": 1,
+      "forbidden_evidence_phrases": [
+        "MAPLE_RETRY_LIMIT defaults to 2 retries"
+      ],
+      "mode": "auto",
+      "citation_hit": true,
+      "missing_keywords": [],
+      "answer_provider_called": true,
+      "answer_citation_required": true,
+      "total_eval_latency_ms": 9,
+      "used_reranker": false,
+      "forbidden_evidence_hit": false,
+      "answer_policy_outcome": "answer",
+      "expected_doc_names": [
+        "maple-current.md"
+      ],
+      "expected_evidence_phrases": [
+        "MAPLE_RETRY_LIMIT defaults to 6 retries"
+      ],
+      "trace_available": true,
+      "unknown_evidence_count": 0,
+      "router_reason": "question contains exact technical identifier",
+      "failure_reasons": [],
+      "predicted_answerable": true,
+      "expected_evidence_hit": true,
+      "top_3_doc_hit": true,
+      "document_recall_at_1": 1.0,
+      "selected_mode": "hybrid_text",
+      "router_accuracy": null,
+      "expected_answerable": true,
+      "question": "What is MAPLE_RETRY_LIMIT set to in the current Maple runtime?",
+      "category": "technical",
+      "top_1_doc_hit": true,
+      "expected_evidence_in_raw_candidates": true,
+      "top_documents": [
+        "maple-current.md"
+      ],
+      "ranked_retrieved_documents": [
+        {
+          "rank": 1,
+          "document_name": "maple-current.md",
+          "score": 0.9785714285714285
+        },
+        {
+          "rank": 2,
+          "document_name": "maple-archive.md",
+          "score": 0.83134439848943
+        },
+        {
+          "rank": 3,
+          "document_name": "cedar-current.txt",
+          "score": 0.6281203007518796
+        },
+        {
+          "rank": 4,
+          "document_name": "birch-current.docx",
+          "score": 0.6281203007518796
+        }
+      ],
+      "final_evidence_units": [
+        {
+          "document_name": "maple-current.md",
+          "text": "This manual describes the current Maple runtime. MAPLE_RETRY_LIMIT defaults to 6 retries in the current Maple runtime.",
+          "score": 0.9785714285714285,
+          "vector_score": 0.7606087305741639,
+          "keyword_score": 1.0833333333333335,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "heading:Maple Current Runtime"
+        }
+      ]
+    },
+    {
+      "failure_stage": "success",
+      "answerability_accuracy": true,
+      "final_evidence_count": 2,
+      "retrieval_latency_ms": 7,
+      "expected_page_numbers": [],
+      "document_recall_at_3": 1.0,
+      "matched_keywords": [
+        "Maple is maintained by Mira Chen"
+      ],
+      "expected_document_in_final_selection": true,
+      "document_recall_at_5": 1.0,
+      "expected_document_in_raw_candidates": true,
+      "irrelevant_evidence_count": 1,
+      "expected_document_in_final_context": true,
+      "expected_evidence_in_final_selection": true,
+      "answer_allowed_markers": [
+        "S1",
+        "S2"
+      ],
+      "evidence_precision": 0.5,
+      "answer_unknown_markers_removed": 0,
+      "page_provenance_hit": null,
+      "expected_mode": null,
+      "retrieval_hit": true,
+      "relevant_evidence_count": 1,
+      "expected_evidence_in_final_context": true,
+      "answer_external_knowledge_allowed": false,
+      "keyword_coverage": 1.0,
+      "retrieved_doc_names": [
+        "maple-current.md",
+        "maple-archive.md"
+      ],
+      "requested_mode": "auto",
+      "id": "markdown_factual_lookup",
+      "document_mrr": 1.0,
+      "document_ranking_source": "initial_chunks",
+      "document_format": "markdown",
+      "evidence_recall": 1.0,
+      "answer_policy_reason": "supported",
+      "answer_allowed_evidence_count": 2,
+      "forbidden_evidence_phrases": [
+        "Rowan Lee"
+      ],
+      "mode": "auto",
+      "citation_hit": true,
+      "missing_keywords": [],
+      "answer_provider_called": true,
+      "answer_citation_required": true,
+      "total_eval_latency_ms": 9,
+      "used_reranker": false,
+      "forbidden_evidence_hit": true,
+      "answer_policy_outcome": "answer",
+      "expected_doc_names": [
+        "maple-current.md"
+      ],
+      "expected_evidence_phrases": [
+        "Maple is maintained by Mira Chen"
+      ],
+      "trace_available": true,
+      "unknown_evidence_count": 0,
+      "router_reason": "default factual question",
+      "failure_reasons": [
+        "forbidden_evidence_selected"
+      ],
+      "predicted_answerable": true,
+      "expected_evidence_hit": true,
+      "top_3_doc_hit": true,
+      "document_recall_at_1": 1.0,
+      "selected_mode": "chunk_only",
+      "router_accuracy": null,
+      "expected_answerable": true,
+      "question": "Who maintains the current Maple runtime?",
+      "category": "factual_lookup",
+      "top_1_doc_hit": true,
+      "expected_evidence_in_raw_candidates": true,
+      "top_documents": [
+        "maple-current.md",
+        "maple-archive.md"
+      ],
+      "ranked_retrieved_documents": [
+        {
+          "rank": 1,
+          "document_name": "maple-current.md",
+          "score": 0.9650000000000001
+        },
+        {
+          "rank": 2,
+          "document_name": "maple-archive.md",
+          "score": 0.8252390601684525
+        },
+        {
+          "rank": 3,
+          "document_name": "cedar-current.txt",
+          "score": 0.6213888888888889
+        },
+        {
+          "rank": 4,
+          "document_name": "birch-current.docx",
+          "score": 0.6213888888888889
+        }
+      ],
+      "final_evidence_units": [
+        {
+          "document_name": "maple-current.md",
+          "text": "Maple is maintained by Mira Chen.",
+          "score": 0.9650000000000001,
+          "vector_score": 0.5883484054145521,
+          "keyword_score": 0.7106666666666667,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "heading:Maple Current Runtime"
+        },
+        {
+          "document_name": "maple-archive.md",
+          "text": "MAPLE_RETRY_LIMIT defaults to 2 retries in the archived Maple runtime. Maple was previously maintained by Rowan Lee.",
+          "score": 0.8252390601684525,
+          "vector_score": 0.4714045207910318,
+          "keyword_score": 0.6725490196078431,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "heading:Maple Archived Runtime"
+        }
+      ]
+    },
+    {
+      "failure_stage": "success",
+      "answerability_accuracy": true,
+      "final_evidence_count": 1,
+      "retrieval_latency_ms": 5,
+      "expected_page_numbers": [],
+      "document_recall_at_3": 1.0,
+      "matched_keywords": [
+        "stop the worker",
+        "restore the journal"
+      ],
+      "expected_document_in_final_selection": true,
+      "document_recall_at_5": 1.0,
+      "expected_document_in_raw_candidates": true,
+      "irrelevant_evidence_count": 0,
+      "expected_document_in_final_context": true,
+      "expected_evidence_in_final_selection": true,
+      "answer_allowed_markers": [
+        "S1"
+      ],
+      "evidence_precision": 1.0,
+      "answer_unknown_markers_removed": 0,
+      "page_provenance_hit": null,
+      "expected_mode": null,
+      "retrieval_hit": true,
+      "relevant_evidence_count": 1,
+      "expected_evidence_in_final_context": true,
+      "answer_external_knowledge_allowed": false,
+      "keyword_coverage": 1.0,
+      "retrieved_doc_names": [
+        "maple-current.md"
+      ],
+      "requested_mode": "auto",
+      "id": "markdown_section_scoped",
+      "document_mrr": 0.5,
+      "document_ranking_source": "initial_chunks",
+      "document_format": "markdown",
+      "evidence_recall": 1.0,
+      "answer_policy_reason": "supported",
+      "answer_allowed_evidence_count": 1,
+      "forbidden_evidence_phrases": [],
+      "mode": "auto",
+      "citation_hit": true,
+      "missing_keywords": [],
+      "answer_provider_called": true,
+      "answer_citation_required": true,
+      "total_eval_latency_ms": 6,
+      "used_reranker": false,
+      "forbidden_evidence_hit": null,
+      "answer_policy_outcome": "answer",
+      "expected_doc_names": [
+        "maple-current.md"
+      ],
+      "expected_evidence_phrases": [
+        "stop the worker",
+        "restore the journal"
+      ],
+      "trace_available": true,
+      "unknown_evidence_count": 0,
+      "router_reason": "default factual question",
+      "failure_reasons": [],
+      "predicted_answerable": true,
+      "expected_evidence_hit": true,
+      "top_3_doc_hit": true,
+      "document_recall_at_1": 0.0,
+      "selected_mode": "chunk_only",
+      "router_accuracy": null,
+      "expected_answerable": true,
+      "question": "What steps does Maple Recovery specify?",
+      "category": "section_scoped",
+      "top_1_doc_hit": true,
+      "expected_evidence_in_raw_candidates": true,
+      "top_documents": [
+        "maple-current.md"
+      ],
+      "ranked_retrieved_documents": [
+        {
+          "rank": 1,
+          "document_name": "maple-archive.md",
+          "score": 0.8707029620358783
+        },
+        {
+          "rank": 2,
+          "document_name": "maple-current.md",
+          "score": 0.8218812973732963
+        },
+        {
+          "rank": 3,
+          "document_name": "cedar-current.txt",
+          "score": 0.4134406486866481
+        },
+        {
+          "rank": 4,
+          "document_name": "birch-current.docx",
+          "score": 0.4134406486866481
+        }
+      ],
+      "final_evidence_units": [
+        {
+          "document_name": "maple-current.md",
+          "text": "Maple Recovery says to stop the worker and restore the journal before restarting.",
+          "score": 0.8218812973732963,
+          "vector_score": 0.21081851067789198,
+          "keyword_score": 0.4217948717948718,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "heading:Maple Recovery"
+        }
+      ]
+    },
+    {
+      "failure_stage": "success",
+      "answerability_accuracy": true,
+      "final_evidence_count": 2,
+      "retrieval_latency_ms": 5,
+      "expected_page_numbers": [],
+      "document_recall_at_3": 1.0,
+      "matched_keywords": [
+        "Maple retains audit records for 14 days"
+      ],
+      "expected_document_in_final_selection": true,
+      "document_recall_at_5": 1.0,
+      "expected_document_in_raw_candidates": true,
+      "irrelevant_evidence_count": 0,
+      "expected_document_in_final_context": true,
+      "expected_evidence_in_final_selection": true,
+      "answer_allowed_markers": [
+        "S1",
+        "S2"
+      ],
+      "evidence_precision": 1.0,
+      "answer_unknown_markers_removed": 0,
+      "page_provenance_hit": null,
+      "expected_mode": null,
+      "retrieval_hit": true,
+      "relevant_evidence_count": 1,
+      "expected_evidence_in_final_context": true,
+      "answer_external_knowledge_allowed": false,
+      "keyword_coverage": 1.0,
+      "retrieved_doc_names": [
+        "maple-current.md"
+      ],
+      "requested_mode": "auto",
+      "id": "markdown_distractor_sensitive",
+      "document_mrr": 1.0,
+      "document_ranking_source": "initial_chunks",
+      "document_format": "markdown",
+      "evidence_recall": 1.0,
+      "answer_policy_reason": "supported",
+      "answer_allowed_evidence_count": 2,
+      "forbidden_evidence_phrases": [
+        "90 days"
+      ],
+      "mode": "auto",
+      "citation_hit": true,
+      "missing_keywords": [],
+      "answer_provider_called": true,
+      "answer_citation_required": true,
+      "total_eval_latency_ms": 6,
+      "used_reranker": false,
+      "forbidden_evidence_hit": false,
+      "answer_policy_outcome": "answer",
+      "expected_doc_names": [
+        "maple-current.md"
+      ],
+      "expected_evidence_phrases": [
+        "Maple retains audit records for 14 days"
+      ],
+      "trace_available": true,
+      "unknown_evidence_count": 1,
+      "router_reason": "default factual question",
+      "failure_reasons": [],
+      "predicted_answerable": true,
+      "expected_evidence_hit": true,
+      "top_3_doc_hit": true,
+      "document_recall_at_1": 1.0,
+      "selected_mode": "chunk_only",
+      "router_accuracy": null,
+      "expected_answerable": true,
+      "question": "How many days does the current Maple runtime retain audit records?",
+      "category": "distractor_sensitive",
+      "top_1_doc_hit": true,
+      "expected_evidence_in_raw_candidates": true,
+      "top_documents": [
+        "maple-current.md"
+      ],
+      "ranked_retrieved_documents": [
+        {
+          "rank": 1,
+          "document_name": "maple-current.md",
+          "score": 0.9147692574600972
+        },
+        {
+          "rank": 2,
+          "document_name": "maple-archive.md",
+          "score": 0.7367158223455934
+        },
+        {
+          "rank": 3,
+          "document_name": "cedar-current.txt",
+          "score": 0.7303521859819571
+        },
+        {
+          "rank": 4,
+          "document_name": "birch-current.docx",
+          "score": 0.7303521859819571
+        },
+        {
+          "rank": 5,
+          "document_name": "aspen-archive.pdf",
+          "score": 0.6525770452808437
+        },
+        {
+          "rank": 6,
+          "document_name": "aspen-current.pdf",
+          "score": 0.6203727538292001
+        }
+      ],
+      "final_evidence_units": [
+        {
+          "document_name": "maple-current.md",
+          "text": "The current Maple retains audit records for 14 days.",
+          "score": 0.9147692574600972,
+          "vector_score": 0.5039526306789697,
+          "keyword_score": 0.6136363636363636,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "heading:Maple Audit Retention"
+        },
+        {
+          "document_name": "maple-current.md",
+          "text": "This manual describes the current Maple runtime. MAPLE_RETRY_LIMIT defaults to 6 retries in the current Maple runtime.",
+          "score": 0.8111555188072439,
+          "vector_score": 0.48038446141526137,
+          "keyword_score": 0.4530909090909091,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "heading:Maple Current Runtime"
+        }
+      ]
+    },
+    {
+      "failure_stage": "success",
+      "answerability_accuracy": true,
+      "final_evidence_count": 1,
+      "retrieval_latency_ms": 5,
+      "expected_page_numbers": [],
+      "document_recall_at_3": 1.0,
+      "matched_keywords": [
+        "384 MiB"
+      ],
+      "expected_document_in_final_selection": true,
+      "document_recall_at_5": 1.0,
+      "expected_document_in_raw_candidates": true,
+      "irrelevant_evidence_count": 1,
+      "expected_document_in_final_context": true,
+      "expected_evidence_in_final_selection": true,
+      "answer_allowed_markers": [
+        "S1"
+      ],
+      "evidence_precision": 0.0,
+      "answer_unknown_markers_removed": 0,
+      "page_provenance_hit": null,
+      "expected_mode": null,
+      "retrieval_hit": true,
+      "relevant_evidence_count": 0,
+      "expected_evidence_in_final_context": true,
+      "answer_external_knowledge_allowed": false,
+      "keyword_coverage": 1.0,
+      "retrieved_doc_names": [
+        "maple-current.md"
+      ],
+      "requested_mode": "auto",
+      "id": "markdown_structured_fact",
+      "document_mrr": 1.0,
+      "document_ranking_source": "initial_chunks",
+      "document_format": "markdown",
+      "evidence_recall": 1.0,
+      "answer_policy_reason": "supported",
+      "answer_allowed_evidence_count": 1,
+      "forbidden_evidence_phrases": [
+        "768 MiB"
+      ],
+      "mode": "auto",
+      "citation_hit": true,
+      "missing_keywords": [],
+      "answer_provider_called": true,
+      "answer_citation_required": true,
+      "total_eval_latency_ms": 7,
+      "used_reranker": false,
+      "forbidden_evidence_hit": true,
+      "answer_policy_outcome": "answer",
+      "expected_doc_names": [
+        "maple-current.md"
+      ],
+      "expected_evidence_phrases": [
+        "384 MiB"
+      ],
+      "trace_available": true,
+      "unknown_evidence_count": 0,
+      "router_reason": "default factual question",
+      "failure_reasons": [
+        "forbidden_evidence_selected"
+      ],
+      "predicted_answerable": true,
+      "expected_evidence_hit": true,
+      "top_3_doc_hit": true,
+      "document_recall_at_1": 1.0,
+      "selected_mode": "chunk_only",
+      "router_accuracy": null,
+      "expected_answerable": true,
+      "question": "How much memory is reserved by the compact profile in Maple?",
+      "category": "structured_fact",
+      "top_1_doc_hit": true,
+      "expected_evidence_in_raw_candidates": true,
+      "top_documents": [
+        "maple-current.md"
+      ],
+      "ranked_retrieved_documents": [
+        {
+          "rank": 1,
+          "document_name": "maple-current.md",
+          "score": 0.8839140686402935
+        },
+        {
+          "rank": 2,
+          "document_name": "aspen-current.pdf",
+          "score": 0.6807237646224449
+        },
+        {
+          "rank": 3,
+          "document_name": "cedar-current.txt",
+          "score": 0.6313544668587897
+        },
+        {
+          "rank": 4,
+          "document_name": "birch-current.docx",
+          "score": 0.6313544668587897
+        },
+        {
+          "rank": 5,
+          "document_name": "maple-archive.md",
+          "score": 0.6271272738269704
+        }
+      ],
+      "final_evidence_units": [
+        {
+          "document_name": "maple-current.md",
+          "text": "| Profile | Reserved memory | | --- | --- | | Maple compact | 384 MiB | | Maple standard | 768 MiB |",
+          "score": 0.8176495335382065,
+          "vector_score": 0.4670993664969138,
+          "keyword_score": 0.5363636363636364,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "heading:Maple Deployment Profiles"
+        }
+      ]
+    },
+    {
+      "failure_stage": "genuine_no_answer",
+      "answerability_accuracy": true,
+      "final_evidence_count": 0,
+      "retrieval_latency_ms": 8,
+      "expected_page_numbers": [],
+      "document_recall_at_3": null,
+      "matched_keywords": [],
+      "expected_document_in_final_selection": null,
+      "document_recall_at_5": null,
+      "expected_document_in_raw_candidates": null,
+      "irrelevant_evidence_count": 0,
+      "expected_document_in_final_context": null,
+      "expected_evidence_in_final_selection": null,
+      "answer_allowed_markers": [],
+      "evidence_precision": null,
+      "answer_unknown_markers_removed": 0,
+      "page_provenance_hit": null,
+      "expected_mode": null,
+      "retrieval_hit": null,
+      "relevant_evidence_count": 0,
+      "expected_evidence_in_final_context": null,
+      "answer_external_knowledge_allowed": false,
+      "keyword_coverage": 1.0,
+      "retrieved_doc_names": [],
+      "requested_mode": "auto",
+      "id": "markdown_no_answer",
+      "document_mrr": null,
+      "document_ranking_source": "initial_chunks",
+      "document_format": "markdown",
+      "evidence_recall": null,
+      "answer_policy_reason": "evidence_support_rejected",
+      "answer_allowed_evidence_count": 0,
+      "forbidden_evidence_phrases": [],
+      "mode": "auto",
+      "citation_hit": null,
+      "missing_keywords": [],
+      "answer_provider_called": false,
+      "answer_citation_required": false,
+      "total_eval_latency_ms": 14,
+      "used_reranker": false,
+      "forbidden_evidence_hit": null,
+      "answer_policy_outcome": "refuse",
+      "expected_doc_names": [],
+      "expected_evidence_phrases": [],
+      "trace_available": true,
+      "unknown_evidence_count": 0,
+      "router_reason": "default factual question",
+      "failure_reasons": [],
+      "predicted_answerable": false,
+      "expected_evidence_hit": null,
+      "top_3_doc_hit": null,
+      "document_recall_at_1": null,
+      "selected_mode": "chunk_only",
+      "router_accuracy": null,
+      "expected_answerable": false,
+      "question": "What is the release date of the Maple runtime?",
+      "category": "no_answer",
+      "top_1_doc_hit": null,
+      "expected_evidence_in_raw_candidates": null,
+      "top_documents": [],
+      "ranked_retrieved_documents": [
+        {
+          "rank": 1,
+          "document_name": "maple-current.md",
+          "score": 0.9475
+        },
+        {
+          "rank": 2,
+          "document_name": "maple-archive.md",
+          "score": 0.7241509966543719
+        },
+        {
+          "rank": 3,
+          "document_name": "cedar-current.txt",
+          "score": 0.6914800469483569
+        },
+        {
+          "rank": 4,
+          "document_name": "birch-current.docx",
+          "score": 0.6914800469483569
+        },
+        {
+          "rank": 5,
+          "document_name": "aspen-current.pdf",
+          "score": 0.5541952334868105
+        }
+      ],
+      "final_evidence_units": []
+    },
+    {
+      "failure_stage": "success",
+      "answerability_accuracy": true,
+      "final_evidence_count": 1,
+      "retrieval_latency_ms": 7,
+      "expected_page_numbers": [],
+      "document_recall_at_3": 1.0,
+      "matched_keywords": [
+        "BIRCH_RETRY_LIMIT defaults to 6 retries"
+      ],
+      "expected_document_in_final_selection": true,
+      "document_recall_at_5": 1.0,
+      "expected_document_in_raw_candidates": true,
+      "irrelevant_evidence_count": 0,
+      "expected_document_in_final_context": true,
+      "expected_evidence_in_final_selection": true,
+      "answer_allowed_markers": [
+        "S1"
+      ],
+      "evidence_precision": 1.0,
+      "answer_unknown_markers_removed": 0,
+      "page_provenance_hit": null,
+      "expected_mode": null,
+      "retrieval_hit": true,
+      "relevant_evidence_count": 1,
+      "expected_evidence_in_final_context": true,
+      "answer_external_knowledge_allowed": false,
+      "keyword_coverage": 1.0,
+      "retrieved_doc_names": [
+        "birch-current.docx"
+      ],
+      "requested_mode": "auto",
+      "id": "docx_technical",
+      "document_mrr": 1.0,
+      "document_ranking_source": "initial_chunks",
+      "document_format": "docx",
+      "evidence_recall": 1.0,
+      "answer_policy_reason": "supported",
+      "answer_allowed_evidence_count": 1,
+      "forbidden_evidence_phrases": [
+        "BIRCH_RETRY_LIMIT defaults to 2 retries"
+      ],
+      "mode": "auto",
+      "citation_hit": true,
+      "missing_keywords": [],
+      "answer_provider_called": true,
+      "answer_citation_required": true,
+      "total_eval_latency_ms": 9,
+      "used_reranker": false,
+      "forbidden_evidence_hit": false,
+      "answer_policy_outcome": "answer",
+      "expected_doc_names": [
+        "birch-current.docx"
+      ],
+      "expected_evidence_phrases": [
+        "BIRCH_RETRY_LIMIT defaults to 6 retries"
+      ],
+      "trace_available": true,
+      "unknown_evidence_count": 0,
+      "router_reason": "question contains exact technical identifier",
+      "failure_reasons": [],
+      "predicted_answerable": true,
+      "expected_evidence_hit": true,
+      "top_3_doc_hit": true,
+      "document_recall_at_1": 1.0,
+      "selected_mode": "hybrid_text",
+      "router_accuracy": null,
+      "expected_answerable": true,
+      "question": "What is BIRCH_RETRY_LIMIT set to in the current Birch runtime?",
+      "category": "technical",
+      "top_1_doc_hit": true,
+      "expected_evidence_in_raw_candidates": true,
+      "top_documents": [
+        "birch-current.docx"
+      ],
+      "ranked_retrieved_documents": [
+        {
+          "rank": 1,
+          "document_name": "birch-current.docx",
+          "score": 0.9785714285714285
+        },
+        {
+          "rank": 2,
+          "document_name": "birch-archive.docx",
+          "score": 0.83134439848943
+        },
+        {
+          "rank": 3,
+          "document_name": "cedar-current.txt",
+          "score": 0.6281203007518796
+        },
+        {
+          "rank": 4,
+          "document_name": "maple-current.md",
+          "score": 0.6281203007518796
+        }
+      ],
+      "final_evidence_units": [
+        {
+          "document_name": "birch-current.docx",
+          "text": "BIRCH_RETRY_LIMIT defaults to 6 retries in the current Birch runtime.",
+          "score": 0.9785714285714285,
+          "vector_score": 0.7606087305741639,
+          "keyword_score": 1.0833333333333335,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "section:Birch Current Runtime"
+        }
+      ]
+    },
+    {
+      "failure_stage": "success",
+      "answerability_accuracy": true,
+      "final_evidence_count": 2,
+      "retrieval_latency_ms": 7,
+      "expected_page_numbers": [],
+      "document_recall_at_3": 1.0,
+      "matched_keywords": [
+        "Birch is maintained by Mira Chen"
+      ],
+      "expected_document_in_final_selection": true,
+      "document_recall_at_5": 1.0,
+      "expected_document_in_raw_candidates": true,
+      "irrelevant_evidence_count": 1,
+      "expected_document_in_final_context": true,
+      "expected_evidence_in_final_selection": true,
+      "answer_allowed_markers": [
+        "S1",
+        "S2"
+      ],
+      "evidence_precision": 0.5,
+      "answer_unknown_markers_removed": 0,
+      "page_provenance_hit": null,
+      "expected_mode": null,
+      "retrieval_hit": true,
+      "relevant_evidence_count": 1,
+      "expected_evidence_in_final_context": true,
+      "answer_external_knowledge_allowed": false,
+      "keyword_coverage": 1.0,
+      "retrieved_doc_names": [
+        "birch-current.docx",
+        "birch-archive.docx"
+      ],
+      "requested_mode": "auto",
+      "id": "docx_factual_lookup",
+      "document_mrr": 1.0,
+      "document_ranking_source": "initial_chunks",
+      "document_format": "docx",
+      "evidence_recall": 1.0,
+      "answer_policy_reason": "supported",
+      "answer_allowed_evidence_count": 2,
+      "forbidden_evidence_phrases": [
+        "Rowan Lee"
+      ],
+      "mode": "auto",
+      "citation_hit": true,
+      "missing_keywords": [],
+      "answer_provider_called": true,
+      "answer_citation_required": true,
+      "total_eval_latency_ms": 8,
+      "used_reranker": false,
+      "forbidden_evidence_hit": true,
+      "answer_policy_outcome": "answer",
+      "expected_doc_names": [
+        "birch-current.docx"
+      ],
+      "expected_evidence_phrases": [
+        "Birch is maintained by Mira Chen"
+      ],
+      "trace_available": true,
+      "unknown_evidence_count": 0,
+      "router_reason": "default factual question",
+      "failure_reasons": [
+        "forbidden_evidence_selected"
+      ],
+      "predicted_answerable": true,
+      "expected_evidence_hit": true,
+      "top_3_doc_hit": true,
+      "document_recall_at_1": 1.0,
+      "selected_mode": "chunk_only",
+      "router_accuracy": null,
+      "expected_answerable": true,
+      "question": "Who maintains the current Birch runtime?",
+      "category": "factual_lookup",
+      "top_1_doc_hit": true,
+      "expected_evidence_in_raw_candidates": true,
+      "top_documents": [
+        "birch-current.docx",
+        "birch-archive.docx"
+      ],
+      "ranked_retrieved_documents": [
+        {
+          "rank": 1,
+          "document_name": "birch-current.docx",
+          "score": 0.9650000000000001
+        },
+        {
+          "rank": 2,
+          "document_name": "birch-archive.docx",
+          "score": 0.8252390601684525
+        },
+        {
+          "rank": 3,
+          "document_name": "cedar-current.txt",
+          "score": 0.6213888888888889
+        },
+        {
+          "rank": 4,
+          "document_name": "maple-current.md",
+          "score": 0.6213888888888889
+        }
+      ],
+      "final_evidence_units": [
+        {
+          "document_name": "birch-current.docx",
+          "text": "Birch is maintained by Mira Chen.",
+          "score": 0.9650000000000001,
+          "vector_score": 0.5883484054145521,
+          "keyword_score": 0.7106666666666667,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "section:Birch Current Runtime"
+        },
+        {
+          "document_name": "birch-archive.docx",
+          "text": "Birch was previously maintained by Rowan Lee.",
+          "score": 0.8252390601684525,
+          "vector_score": 0.4714045207910318,
+          "keyword_score": 0.6725490196078431,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "section:Birch Archived Runtime"
+        }
+      ]
+    },
+    {
+      "failure_stage": "success",
+      "answerability_accuracy": true,
+      "final_evidence_count": 1,
+      "retrieval_latency_ms": 6,
+      "expected_page_numbers": [],
+      "document_recall_at_3": 1.0,
+      "matched_keywords": [
+        "stop the worker",
+        "restore the journal"
+      ],
+      "expected_document_in_final_selection": true,
+      "document_recall_at_5": 1.0,
+      "expected_document_in_raw_candidates": true,
+      "irrelevant_evidence_count": 0,
+      "expected_document_in_final_context": true,
+      "expected_evidence_in_final_selection": true,
+      "answer_allowed_markers": [
+        "S1"
+      ],
+      "evidence_precision": 1.0,
+      "answer_unknown_markers_removed": 0,
+      "page_provenance_hit": null,
+      "expected_mode": null,
+      "retrieval_hit": true,
+      "relevant_evidence_count": 1,
+      "expected_evidence_in_final_context": true,
+      "answer_external_knowledge_allowed": false,
+      "keyword_coverage": 1.0,
+      "retrieved_doc_names": [
+        "birch-current.docx"
+      ],
+      "requested_mode": "auto",
+      "id": "docx_section_scoped",
+      "document_mrr": 0.5,
+      "document_ranking_source": "initial_chunks",
+      "document_format": "docx",
+      "evidence_recall": 1.0,
+      "answer_policy_reason": "supported",
+      "answer_allowed_evidence_count": 1,
+      "forbidden_evidence_phrases": [],
+      "mode": "auto",
+      "citation_hit": true,
+      "missing_keywords": [],
+      "answer_provider_called": true,
+      "answer_citation_required": true,
+      "total_eval_latency_ms": 7,
+      "used_reranker": false,
+      "forbidden_evidence_hit": null,
+      "answer_policy_outcome": "answer",
+      "expected_doc_names": [
+        "birch-current.docx"
+      ],
+      "expected_evidence_phrases": [
+        "stop the worker",
+        "restore the journal"
+      ],
+      "trace_available": true,
+      "unknown_evidence_count": 0,
+      "router_reason": "default factual question",
+      "failure_reasons": [],
+      "predicted_answerable": true,
+      "expected_evidence_hit": true,
+      "top_3_doc_hit": true,
+      "document_recall_at_1": 0.0,
+      "selected_mode": "chunk_only",
+      "router_accuracy": null,
+      "expected_answerable": true,
+      "question": "What steps does Birch Recovery specify?",
+      "category": "section_scoped",
+      "top_1_doc_hit": true,
+      "expected_evidence_in_raw_candidates": true,
+      "top_documents": [
+        "birch-current.docx"
+      ],
+      "ranked_retrieved_documents": [
+        {
+          "rank": 1,
+          "document_name": "birch-archive.docx",
+          "score": 0.8707029620358783
+        },
+        {
+          "rank": 2,
+          "document_name": "birch-current.docx",
+          "score": 0.8218812973732963
+        },
+        {
+          "rank": 3,
+          "document_name": "cedar-current.txt",
+          "score": 0.4134406486866481
+        },
+        {
+          "rank": 4,
+          "document_name": "maple-current.md",
+          "score": 0.4134406486866481
+        }
+      ],
+      "final_evidence_units": [
+        {
+          "document_name": "birch-current.docx",
+          "text": "Birch Recovery says to stop the worker and restore the journal before restarting.",
+          "score": 0.8218812973732963,
+          "vector_score": 0.21081851067789198,
+          "keyword_score": 0.4217948717948718,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "section:Birch Recovery"
+        }
+      ]
+    },
+    {
+      "failure_stage": "success",
+      "answerability_accuracy": true,
+      "final_evidence_count": 2,
+      "retrieval_latency_ms": 5,
+      "expected_page_numbers": [],
+      "document_recall_at_3": 1.0,
+      "matched_keywords": [
+        "Birch retains audit records for 14 days"
+      ],
+      "expected_document_in_final_selection": true,
+      "document_recall_at_5": 1.0,
+      "expected_document_in_raw_candidates": true,
+      "irrelevant_evidence_count": 0,
+      "expected_document_in_final_context": true,
+      "expected_evidence_in_final_selection": true,
+      "answer_allowed_markers": [
+        "S1",
+        "S2"
+      ],
+      "evidence_precision": 1.0,
+      "answer_unknown_markers_removed": 0,
+      "page_provenance_hit": null,
+      "expected_mode": null,
+      "retrieval_hit": true,
+      "relevant_evidence_count": 1,
+      "expected_evidence_in_final_context": true,
+      "answer_external_knowledge_allowed": false,
+      "keyword_coverage": 1.0,
+      "retrieved_doc_names": [
+        "birch-current.docx"
+      ],
+      "requested_mode": "auto",
+      "id": "docx_distractor_sensitive",
+      "document_mrr": 1.0,
+      "document_ranking_source": "initial_chunks",
+      "document_format": "docx",
+      "evidence_recall": 1.0,
+      "answer_policy_reason": "supported",
+      "answer_allowed_evidence_count": 2,
+      "forbidden_evidence_phrases": [
+        "90 days"
+      ],
+      "mode": "auto",
+      "citation_hit": true,
+      "missing_keywords": [],
+      "answer_provider_called": true,
+      "answer_citation_required": true,
+      "total_eval_latency_ms": 7,
+      "used_reranker": false,
+      "forbidden_evidence_hit": false,
+      "answer_policy_outcome": "answer",
+      "expected_doc_names": [
+        "birch-current.docx"
+      ],
+      "expected_evidence_phrases": [
+        "Birch retains audit records for 14 days"
+      ],
+      "trace_available": true,
+      "unknown_evidence_count": 1,
+      "router_reason": "default factual question",
+      "failure_reasons": [],
+      "predicted_answerable": true,
+      "expected_evidence_hit": true,
+      "top_3_doc_hit": true,
+      "document_recall_at_1": 1.0,
+      "selected_mode": "chunk_only",
+      "router_accuracy": null,
+      "expected_answerable": true,
+      "question": "How many days does the current Birch runtime retain audit records?",
+      "category": "distractor_sensitive",
+      "top_1_doc_hit": true,
+      "expected_evidence_in_raw_candidates": true,
+      "top_documents": [
+        "birch-current.docx"
+      ],
+      "ranked_retrieved_documents": [
+        {
+          "rank": 1,
+          "document_name": "birch-current.docx",
+          "score": 0.9147692574600972
+        },
+        {
+          "rank": 2,
+          "document_name": "birch-archive.docx",
+          "score": 0.7367158223455934
+        },
+        {
+          "rank": 3,
+          "document_name": "cedar-current.txt",
+          "score": 0.7303521859819571
+        },
+        {
+          "rank": 4,
+          "document_name": "maple-current.md",
+          "score": 0.7303521859819571
+        },
+        {
+          "rank": 5,
+          "document_name": "aspen-archive.pdf",
+          "score": 0.6525770452808437
+        },
+        {
+          "rank": 6,
+          "document_name": "aspen-current.pdf",
+          "score": 0.6203727538292001
+        }
+      ],
+      "final_evidence_units": [
+        {
+          "document_name": "birch-current.docx",
+          "text": "The current Birch retains audit records for 14 days.",
+          "score": 0.9147692574600972,
+          "vector_score": 0.5039526306789697,
+          "keyword_score": 0.6136363636363636,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "section:Birch Audit Retention"
+        },
+        {
+          "document_name": "birch-current.docx",
+          "text": "This manual describes the current Birch runtime.",
+          "score": 0.8111555188072439,
+          "vector_score": 0.48038446141526137,
+          "keyword_score": 0.4530909090909091,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "section:Birch Current Runtime"
+        }
+      ]
+    },
+    {
+      "failure_stage": "success",
+      "answerability_accuracy": true,
+      "final_evidence_count": 1,
+      "retrieval_latency_ms": 5,
+      "expected_page_numbers": [],
+      "document_recall_at_3": 1.0,
+      "matched_keywords": [
+        "384 MiB"
+      ],
+      "expected_document_in_final_selection": true,
+      "document_recall_at_5": 1.0,
+      "expected_document_in_raw_candidates": true,
+      "irrelevant_evidence_count": 0,
+      "expected_document_in_final_context": true,
+      "expected_evidence_in_final_selection": true,
+      "answer_allowed_markers": [
+        "S1"
+      ],
+      "evidence_precision": 1.0,
+      "answer_unknown_markers_removed": 0,
+      "page_provenance_hit": null,
+      "expected_mode": null,
+      "retrieval_hit": true,
+      "relevant_evidence_count": 1,
+      "expected_evidence_in_final_context": true,
+      "answer_external_knowledge_allowed": false,
+      "keyword_coverage": 1.0,
+      "retrieved_doc_names": [
+        "birch-current.docx"
+      ],
+      "requested_mode": "auto",
+      "id": "docx_structured_fact",
+      "document_mrr": 1.0,
+      "document_ranking_source": "initial_chunks",
+      "document_format": "docx",
+      "evidence_recall": 1.0,
+      "answer_policy_reason": "supported",
+      "answer_allowed_evidence_count": 1,
+      "forbidden_evidence_phrases": [
+        "768 MiB"
+      ],
+      "mode": "auto",
+      "citation_hit": true,
+      "missing_keywords": [],
+      "answer_provider_called": true,
+      "answer_citation_required": true,
+      "total_eval_latency_ms": 7,
+      "used_reranker": false,
+      "forbidden_evidence_hit": false,
+      "answer_policy_outcome": "answer",
+      "expected_doc_names": [
+        "birch-current.docx"
+      ],
+      "expected_evidence_phrases": [
+        "384 MiB"
+      ],
+      "trace_available": true,
+      "unknown_evidence_count": 0,
+      "router_reason": "default factual question",
+      "failure_reasons": [],
+      "predicted_answerable": true,
+      "expected_evidence_hit": true,
+      "top_3_doc_hit": true,
+      "document_recall_at_1": 1.0,
+      "selected_mode": "chunk_only",
+      "router_accuracy": null,
+      "expected_answerable": true,
+      "question": "How much memory is reserved by the compact profile in Birch?",
+      "category": "structured_fact",
+      "top_1_doc_hit": true,
+      "expected_evidence_in_raw_candidates": true,
+      "top_documents": [
+        "birch-current.docx"
+      ],
+      "ranked_retrieved_documents": [
+        {
+          "rank": 1,
+          "document_name": "birch-current.docx",
+          "score": 0.8839140686402935
+        },
+        {
+          "rank": 2,
+          "document_name": "aspen-current.pdf",
+          "score": 0.6807237646224449
+        },
+        {
+          "rank": 3,
+          "document_name": "cedar-current.txt",
+          "score": 0.6313544668587897
+        },
+        {
+          "rank": 4,
+          "document_name": "maple-current.md",
+          "score": 0.6313544668587897
+        },
+        {
+          "rank": 5,
+          "document_name": "birch-archive.docx",
+          "score": 0.6271272738269704
+        }
+      ],
+      "final_evidence_units": [
+        {
+          "document_name": "birch-current.docx",
+          "text": "Birch compact profile memory: 384 MiB.",
+          "score": 0.779795035013705,
+          "vector_score": 0.47193990372426947,
+          "keyword_score": 0.4590909090909091,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "section:Birch Deployment Profiles"
+        }
+      ]
+    },
+    {
+      "failure_stage": "genuine_no_answer",
+      "answerability_accuracy": true,
+      "final_evidence_count": 0,
+      "retrieval_latency_ms": 8,
+      "expected_page_numbers": [],
+      "document_recall_at_3": null,
+      "matched_keywords": [],
+      "expected_document_in_final_selection": null,
+      "document_recall_at_5": null,
+      "expected_document_in_raw_candidates": null,
+      "irrelevant_evidence_count": 0,
+      "expected_document_in_final_context": null,
+      "expected_evidence_in_final_selection": null,
+      "answer_allowed_markers": [],
+      "evidence_precision": null,
+      "answer_unknown_markers_removed": 0,
+      "page_provenance_hit": null,
+      "expected_mode": null,
+      "retrieval_hit": null,
+      "relevant_evidence_count": 0,
+      "expected_evidence_in_final_context": null,
+      "answer_external_knowledge_allowed": false,
+      "keyword_coverage": 1.0,
+      "retrieved_doc_names": [],
+      "requested_mode": "auto",
+      "id": "docx_no_answer",
+      "document_mrr": null,
+      "document_ranking_source": "initial_chunks",
+      "document_format": "docx",
+      "evidence_recall": null,
+      "answer_policy_reason": "evidence_support_rejected",
+      "answer_allowed_evidence_count": 0,
+      "forbidden_evidence_phrases": [],
+      "mode": "auto",
+      "citation_hit": null,
+      "missing_keywords": [],
+      "answer_provider_called": false,
+      "answer_citation_required": false,
+      "total_eval_latency_ms": 13,
+      "used_reranker": false,
+      "forbidden_evidence_hit": null,
+      "answer_policy_outcome": "refuse",
+      "expected_doc_names": [],
+      "expected_evidence_phrases": [],
+      "trace_available": true,
+      "unknown_evidence_count": 0,
+      "router_reason": "default factual question",
+      "failure_reasons": [],
+      "predicted_answerable": false,
+      "expected_evidence_hit": null,
+      "top_3_doc_hit": null,
+      "document_recall_at_1": null,
+      "selected_mode": "chunk_only",
+      "router_accuracy": null,
+      "expected_answerable": false,
+      "question": "What is the release date of the Birch runtime?",
+      "category": "no_answer",
+      "top_1_doc_hit": null,
+      "expected_evidence_in_raw_candidates": null,
+      "top_documents": [],
+      "ranked_retrieved_documents": [
+        {
+          "rank": 1,
+          "document_name": "birch-current.docx",
+          "score": 0.9475
+        },
+        {
+          "rank": 2,
+          "document_name": "birch-archive.docx",
+          "score": 0.7241509966543719
+        },
+        {
+          "rank": 3,
+          "document_name": "cedar-current.txt",
+          "score": 0.6914800469483569
+        },
+        {
+          "rank": 4,
+          "document_name": "maple-current.md",
+          "score": 0.6914800469483569
+        },
+        {
+          "rank": 5,
+          "document_name": "aspen-current.pdf",
+          "score": 0.5541952334868105
+        }
+      ],
+      "final_evidence_units": []
+    },
+    {
+      "failure_stage": "success",
+      "answerability_accuracy": true,
+      "final_evidence_count": 1,
+      "retrieval_latency_ms": 8,
+      "expected_page_numbers": [],
+      "document_recall_at_3": 1.0,
+      "matched_keywords": [
+        "ASPEN_RETRY_LIMIT defaults to 6 retries"
+      ],
+      "expected_document_in_final_selection": true,
+      "document_recall_at_5": 1.0,
+      "expected_document_in_raw_candidates": true,
+      "irrelevant_evidence_count": 0,
+      "expected_document_in_final_context": true,
+      "expected_evidence_in_final_selection": true,
+      "answer_allowed_markers": [
+        "S1"
+      ],
+      "evidence_precision": 1.0,
+      "answer_unknown_markers_removed": 0,
+      "page_provenance_hit": null,
+      "expected_mode": null,
+      "retrieval_hit": true,
+      "relevant_evidence_count": 1,
+      "expected_evidence_in_final_context": true,
+      "answer_external_knowledge_allowed": false,
+      "keyword_coverage": 1.0,
+      "retrieved_doc_names": [
+        "aspen-current.pdf"
+      ],
+      "requested_mode": "auto",
+      "id": "pdf_technical",
+      "document_mrr": 1.0,
+      "document_ranking_source": "initial_chunks",
+      "document_format": "pdf",
+      "evidence_recall": 1.0,
+      "answer_policy_reason": "supported",
+      "answer_allowed_evidence_count": 1,
+      "forbidden_evidence_phrases": [
+        "ASPEN_RETRY_LIMIT defaults to 2 retries"
+      ],
+      "mode": "auto",
+      "citation_hit": true,
+      "missing_keywords": [],
+      "answer_provider_called": true,
+      "answer_citation_required": true,
+      "total_eval_latency_ms": 9,
+      "used_reranker": false,
+      "forbidden_evidence_hit": false,
+      "answer_policy_outcome": "answer",
+      "expected_doc_names": [
+        "aspen-current.pdf"
+      ],
+      "expected_evidence_phrases": [
+        "ASPEN_RETRY_LIMIT defaults to 6 retries"
+      ],
+      "trace_available": true,
+      "unknown_evidence_count": 0,
+      "router_reason": "question contains exact technical identifier",
+      "failure_reasons": [],
+      "predicted_answerable": true,
+      "expected_evidence_hit": true,
+      "top_3_doc_hit": true,
+      "document_recall_at_1": 1.0,
+      "selected_mode": "hybrid_text",
+      "router_accuracy": null,
+      "expected_answerable": true,
+      "question": "What is ASPEN_RETRY_LIMIT set to in the current Aspen runtime?",
+      "category": "technical",
+      "top_1_doc_hit": true,
+      "expected_evidence_in_raw_candidates": true,
+      "top_documents": [
+        "aspen-current.pdf"
+      ],
+      "ranked_retrieved_documents": [
+        {
+          "rank": 1,
+          "document_name": "aspen-current.pdf",
+          "score": 0.9785714285714285
+        },
+        {
+          "rank": 2,
+          "document_name": "aspen-archive.pdf",
+          "score": 0.8682684768530602
+        },
+        {
+          "rank": 3,
+          "document_name": "cedar-current.txt",
+          "score": 0.6681596404711478
+        },
+        {
+          "rank": 4,
+          "document_name": "maple-current.md",
+          "score": 0.6681596404711478
+        },
+        {
+          "rank": 5,
+          "document_name": "birch-current.docx",
+          "score": 0.6681596404711478
+        }
+      ],
+      "final_evidence_units": [
+        {
+          "document_name": "aspen-current.pdf",
+          "text": "ASPEN_RETRY_LIMIT defaults to 6 retries in the current Aspen runtime.",
+          "score": 0.9785714285714285,
+          "vector_score": 0.6922186552431729,
+          "keyword_score": 1.0833333333333335,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "page:1"
+        }
+      ]
+    },
+    {
+      "failure_stage": "success",
+      "answerability_accuracy": true,
+      "final_evidence_count": 2,
+      "retrieval_latency_ms": 9,
+      "expected_page_numbers": [],
+      "document_recall_at_3": 1.0,
+      "matched_keywords": [
+        "Aspen is maintained by Mira Chen"
+      ],
+      "expected_document_in_final_selection": true,
+      "document_recall_at_5": 1.0,
+      "expected_document_in_raw_candidates": true,
+      "irrelevant_evidence_count": 1,
+      "expected_document_in_final_context": true,
+      "expected_evidence_in_final_selection": true,
+      "answer_allowed_markers": [
+        "S1",
+        "S2"
+      ],
+      "evidence_precision": 0.5,
+      "answer_unknown_markers_removed": 0,
+      "page_provenance_hit": null,
+      "expected_mode": null,
+      "retrieval_hit": true,
+      "relevant_evidence_count": 1,
+      "expected_evidence_in_final_context": true,
+      "answer_external_knowledge_allowed": false,
+      "keyword_coverage": 1.0,
+      "retrieved_doc_names": [
+        "aspen-current.pdf",
+        "aspen-archive.pdf"
+      ],
+      "requested_mode": "auto",
+      "id": "pdf_factual_lookup",
+      "document_mrr": 1.0,
+      "document_ranking_source": "initial_chunks",
+      "document_format": "pdf",
+      "evidence_recall": 1.0,
+      "answer_policy_reason": "supported",
+      "answer_allowed_evidence_count": 2,
+      "forbidden_evidence_phrases": [
+        "Rowan Lee"
+      ],
+      "mode": "auto",
+      "citation_hit": true,
+      "missing_keywords": [],
+      "answer_provider_called": true,
+      "answer_citation_required": true,
+      "total_eval_latency_ms": 10,
+      "used_reranker": false,
+      "forbidden_evidence_hit": true,
+      "answer_policy_outcome": "answer",
+      "expected_doc_names": [
+        "aspen-current.pdf"
+      ],
+      "expected_evidence_phrases": [
+        "Aspen is maintained by Mira Chen"
+      ],
+      "trace_available": true,
+      "unknown_evidence_count": 0,
+      "router_reason": "default factual question",
+      "failure_reasons": [
+        "forbidden_evidence_selected"
+      ],
+      "predicted_answerable": true,
+      "expected_evidence_hit": true,
+      "top_3_doc_hit": true,
+      "document_recall_at_1": 1.0,
+      "selected_mode": "chunk_only",
+      "router_accuracy": null,
+      "expected_answerable": true,
+      "question": "Who maintains the current Aspen runtime?",
+      "category": "factual_lookup",
+      "top_1_doc_hit": true,
+      "expected_evidence_in_raw_candidates": true,
+      "top_documents": [
+        "aspen-current.pdf",
+        "aspen-archive.pdf"
+      ],
+      "ranked_retrieved_documents": [
+        {
+          "rank": 1,
+          "document_name": "aspen-current.pdf",
+          "score": 0.9187265135699374
+        },
+        {
+          "rank": 2,
+          "document_name": "aspen-archive.pdf",
+          "score": 0.8435503522742349
+        },
+        {
+          "rank": 3,
+          "document_name": "cedar-current.txt",
+          "score": 0.6502463972694535
+        },
+        {
+          "rank": 4,
+          "document_name": "maple-current.md",
+          "score": 0.6502463972694535
+        },
+        {
+          "rank": 5,
+          "document_name": "birch-current.docx",
+          "score": 0.6502463972694535
+        }
+      ],
+      "final_evidence_units": [
+        {
+          "document_name": "aspen-current.pdf",
+          "text": "Aspen is maintained by Mira Chen.",
+          "score": 0.9187265135699374,
+          "vector_score": 0.5897678246195887,
+          "keyword_score": 0.618095238095238,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "page:1"
+        },
+        {
+          "document_name": "aspen-archive.pdf",
+          "text": "Aspen was previously maintained by Rowan Lee.",
+          "score": 0.8435503522742349,
+          "vector_score": 0.49706742338621723,
+          "keyword_score": 0.6386666666666666,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "page:1"
+        }
+      ]
+    },
+    {
+      "failure_stage": "success",
+      "answerability_accuracy": true,
+      "final_evidence_count": 1,
+      "retrieval_latency_ms": 5,
+      "expected_page_numbers": [],
+      "document_recall_at_3": 1.0,
+      "matched_keywords": [
+        "stop the worker",
+        "restore the journal"
+      ],
+      "expected_document_in_final_selection": true,
+      "document_recall_at_5": 1.0,
+      "expected_document_in_raw_candidates": true,
+      "irrelevant_evidence_count": 0,
+      "expected_document_in_final_context": true,
+      "expected_evidence_in_final_selection": true,
+      "answer_allowed_markers": [
+        "S1"
+      ],
+      "evidence_precision": 1.0,
+      "answer_unknown_markers_removed": 0,
+      "page_provenance_hit": null,
+      "expected_mode": null,
+      "retrieval_hit": true,
+      "relevant_evidence_count": 1,
+      "expected_evidence_in_final_context": true,
+      "answer_external_knowledge_allowed": false,
+      "keyword_coverage": 1.0,
+      "retrieved_doc_names": [
+        "aspen-current.pdf"
+      ],
+      "requested_mode": "auto",
+      "id": "pdf_section_scoped",
+      "document_mrr": 1.0,
+      "document_ranking_source": "initial_chunks",
+      "document_format": "pdf",
+      "evidence_recall": 1.0,
+      "answer_policy_reason": "supported",
+      "answer_allowed_evidence_count": 1,
+      "forbidden_evidence_phrases": [],
+      "mode": "auto",
+      "citation_hit": true,
+      "missing_keywords": [],
+      "answer_provider_called": true,
+      "answer_citation_required": true,
+      "total_eval_latency_ms": 6,
+      "used_reranker": false,
+      "forbidden_evidence_hit": null,
+      "answer_policy_outcome": "answer",
+      "expected_doc_names": [
+        "aspen-current.pdf"
+      ],
+      "expected_evidence_phrases": [
+        "stop the worker",
+        "restore the journal"
+      ],
+      "trace_available": true,
+      "unknown_evidence_count": 0,
+      "router_reason": "default factual question",
+      "failure_reasons": [],
+      "predicted_answerable": true,
+      "expected_evidence_hit": true,
+      "top_3_doc_hit": true,
+      "document_recall_at_1": 1.0,
+      "selected_mode": "chunk_only",
+      "router_accuracy": null,
+      "expected_answerable": true,
+      "question": "What steps does Aspen Recovery specify?",
+      "category": "section_scoped",
+      "top_1_doc_hit": true,
+      "expected_evidence_in_raw_candidates": true,
+      "top_documents": [
+        "aspen-current.pdf"
+      ],
+      "ranked_retrieved_documents": [
+        {
+          "rank": 1,
+          "document_name": "aspen-current.pdf",
+          "score": 0.9187265135699374
+        },
+        {
+          "rank": 2,
+          "document_name": "aspen-archive.pdf",
+          "score": 0.8690201518497424
+        },
+        {
+          "rank": 3,
+          "document_name": "cedar-current.txt",
+          "score": 0.44133424134730237
+        },
+        {
+          "rank": 4,
+          "document_name": "maple-current.md",
+          "score": 0.44133424134730237
+        },
+        {
+          "rank": 5,
+          "document_name": "birch-current.docx",
+          "score": 0.44133424134730237
+        },
+        {
+          "rank": 6,
+          "document_name": "maple-archive.md",
+          "score": 0.3084878811419296
+        },
+        {
+          "rank": 7,
+          "document_name": "birch-archive.docx",
+          "score": 0.3084878811419296
+        },
+        {
+          "rank": 8,
+          "document_name": "cedar-archive.txt",
+          "score": 0.30149985017232805
+        }
+      ],
+      "final_evidence_units": [
+        {
+          "document_name": "aspen-current.pdf",
+          "text": "Aspen Recovery says to stop the worker and restore the journal before restarting.",
+          "score": 0.9187265135699374,
+          "vector_score": 0.34403123102809335,
+          "keyword_score": 0.309047619047619,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "page:1"
+        }
+      ]
+    },
+    {
+      "failure_stage": "success",
+      "answerability_accuracy": true,
+      "final_evidence_count": 2,
+      "retrieval_latency_ms": 6,
+      "expected_page_numbers": [
+        2
+      ],
+      "document_recall_at_3": 1.0,
+      "matched_keywords": [
+        "Aspen retains audit records for 14 days"
+      ],
+      "expected_document_in_final_selection": true,
+      "document_recall_at_5": 1.0,
+      "expected_document_in_raw_candidates": true,
+      "irrelevant_evidence_count": 1,
+      "expected_document_in_final_context": true,
+      "expected_evidence_in_final_selection": true,
+      "answer_allowed_markers": [
+        "S1",
+        "S2"
+      ],
+      "evidence_precision": 0.5,
+      "answer_unknown_markers_removed": 0,
+      "page_provenance_hit": true,
+      "expected_mode": null,
+      "retrieval_hit": true,
+      "relevant_evidence_count": 1,
+      "expected_evidence_in_final_context": true,
+      "answer_external_knowledge_allowed": false,
+      "keyword_coverage": 1.0,
+      "retrieved_doc_names": [
+        "aspen-current.pdf",
+        "aspen-archive.pdf"
+      ],
+      "requested_mode": "auto",
+      "id": "pdf_distractor_sensitive",
+      "document_mrr": 1.0,
+      "document_ranking_source": "initial_chunks",
+      "document_format": "pdf",
+      "evidence_recall": 1.0,
+      "answer_policy_reason": "supported",
+      "answer_allowed_evidence_count": 2,
+      "forbidden_evidence_phrases": [
+        "90 days"
+      ],
+      "mode": "auto",
+      "citation_hit": true,
+      "missing_keywords": [],
+      "answer_provider_called": true,
+      "answer_citation_required": true,
+      "total_eval_latency_ms": 7,
+      "used_reranker": false,
+      "forbidden_evidence_hit": false,
+      "answer_policy_outcome": "answer",
+      "expected_doc_names": [
+        "aspen-current.pdf"
+      ],
+      "expected_evidence_phrases": [
+        "Aspen retains audit records for 14 days"
+      ],
+      "trace_available": true,
+      "unknown_evidence_count": 0,
+      "router_reason": "default factual question",
+      "failure_reasons": [],
+      "predicted_answerable": true,
+      "expected_evidence_hit": true,
+      "top_3_doc_hit": true,
+      "document_recall_at_1": 1.0,
+      "selected_mode": "chunk_only",
+      "router_accuracy": null,
+      "expected_answerable": true,
+      "question": "How many days does the current Aspen runtime retain audit records?",
+      "category": "distractor_sensitive",
+      "top_1_doc_hit": true,
+      "expected_evidence_in_raw_candidates": true,
+      "top_documents": [
+        "aspen-current.pdf",
+        "aspen-archive.pdf"
+      ],
+      "ranked_retrieved_documents": [
+        {
+          "rank": 1,
+          "document_name": "aspen-current.pdf",
+          "score": 0.8697185114503817
+        },
+        {
+          "rank": 2,
+          "document_name": "aspen-archive.pdf",
+          "score": 0.855436258742805
+        },
+        {
+          "rank": 3,
+          "document_name": "cedar-current.txt",
+          "score": 0.6663960708260083
+        },
+        {
+          "rank": 4,
+          "document_name": "maple-current.md",
+          "score": 0.6663960708260083
+        },
+        {
+          "rank": 5,
+          "document_name": "birch-current.docx",
+          "score": 0.6663960708260083
+        },
+        {
+          "rank": 6,
+          "document_name": "cedar-archive.txt",
+          "score": 0.5030018305853703
+        },
+        {
+          "rank": 7,
+          "document_name": "maple-archive.md",
+          "score": 0.5030018305853703
+        },
+        {
+          "rank": 8,
+          "document_name": "birch-archive.docx",
+          "score": 0.5030018305853703
+        }
+      ],
+      "final_evidence_units": [
+        {
+          "document_name": "aspen-current.pdf",
+          "text": "The current Aspen retains audit records for 14 days.",
+          "score": 0.8697185114503817,
+          "vector_score": 0.5417363388859614,
+          "keyword_score": 0.6309090909090909,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "page:2"
+        },
+        {
+          "document_name": "aspen-archive.pdf",
+          "text": "This historical manual describes retired settings for Aspen; it does not describe the current runtime.",
+          "score": 0.855436258742805,
+          "vector_score": 0.468292905790847,
+          "keyword_score": 0.7621818181818182,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "page:1"
+        }
+      ]
+    },
+    {
+      "failure_stage": "success",
+      "answerability_accuracy": true,
+      "final_evidence_count": 2,
+      "retrieval_latency_ms": 6,
+      "expected_page_numbers": [
+        2
+      ],
+      "document_recall_at_3": 1.0,
+      "matched_keywords": [
+        "384 MiB"
+      ],
+      "expected_document_in_final_selection": true,
+      "document_recall_at_5": 1.0,
+      "expected_document_in_raw_candidates": true,
+      "irrelevant_evidence_count": 1,
+      "expected_document_in_final_context": true,
+      "expected_evidence_in_final_selection": true,
+      "answer_allowed_markers": [
+        "S1",
+        "S2"
+      ],
+      "evidence_precision": 0.5,
+      "answer_unknown_markers_removed": 0,
+      "page_provenance_hit": true,
+      "expected_mode": null,
+      "retrieval_hit": true,
+      "relevant_evidence_count": 1,
+      "expected_evidence_in_final_context": true,
+      "answer_external_knowledge_allowed": false,
+      "keyword_coverage": 1.0,
+      "retrieved_doc_names": [
+        "aspen-current.pdf",
+        "cedar-current.txt"
+      ],
+      "requested_mode": "auto",
+      "id": "pdf_structured_fact",
+      "document_mrr": 1.0,
+      "document_ranking_source": "initial_chunks",
+      "document_format": "pdf",
+      "evidence_recall": 1.0,
+      "answer_policy_reason": "supported",
+      "answer_allowed_evidence_count": 2,
+      "forbidden_evidence_phrases": [
+        "768 MiB"
+      ],
+      "mode": "auto",
+      "citation_hit": true,
+      "missing_keywords": [],
+      "answer_provider_called": true,
+      "answer_citation_required": true,
+      "total_eval_latency_ms": 7,
+      "used_reranker": false,
+      "forbidden_evidence_hit": true,
+      "answer_policy_outcome": "answer",
+      "expected_doc_names": [
+        "aspen-current.pdf"
+      ],
+      "expected_evidence_phrases": [
+        "384 MiB"
+      ],
+      "trace_available": true,
+      "unknown_evidence_count": 0,
+      "router_reason": "default factual question",
+      "failure_reasons": [
+        "forbidden_evidence_selected"
+      ],
+      "predicted_answerable": true,
+      "expected_evidence_hit": true,
+      "top_3_doc_hit": true,
+      "document_recall_at_1": 1.0,
+      "selected_mode": "chunk_only",
+      "router_accuracy": null,
+      "expected_answerable": true,
+      "question": "How much memory is reserved by the compact profile in Aspen?",
+      "category": "structured_fact",
+      "top_1_doc_hit": true,
+      "expected_evidence_in_raw_candidates": true,
+      "top_documents": [
+        "aspen-current.pdf",
+        "cedar-current.txt"
+      ],
+      "ranked_retrieved_documents": [
+        {
+          "rank": 1,
+          "document_name": "aspen-current.pdf",
+          "score": 0.93
+        },
+        {
+          "rank": 2,
+          "document_name": "cedar-current.txt",
+          "score": 0.6596126509004542
+        },
+        {
+          "rank": 3,
+          "document_name": "maple-current.md",
+          "score": 0.6596126509004542
+        },
+        {
+          "rank": 4,
+          "document_name": "birch-current.docx",
+          "score": 0.6380612342962294
+        },
+        {
+          "rank": 5,
+          "document_name": "aspen-archive.pdf",
+          "score": 0.5100839582736322
+        }
+      ],
+      "final_evidence_units": [
+        {
+          "document_name": "aspen-current.pdf",
+          "text": "Aspen compact profile memory: 384 MiB.",
+          "score": 0.93,
+          "vector_score": 0.5263166562644551,
+          "keyword_score": 0.721038961038961,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "page:2"
+        },
+        {
+          "document_name": "cedar-current.txt",
+          "text": "| Profile | Reserved memory | | --- | --- | | Cedar compact | 384 MiB | | Cedar standard | 768 MiB |",
+          "score": 0.6596126509004542,
+          "vector_score": 0.38924947208076155,
+          "keyword_score": 0.4590909090909091,
+          "graph_score": null,
+          "rerank_score": null,
+          "source_locator": "section:Cedar Deployment Profiles"
+        }
+      ]
+    },
+    {
+      "failure_stage": "genuine_no_answer",
+      "answerability_accuracy": true,
+      "final_evidence_count": 0,
+      "retrieval_latency_ms": 10,
+      "expected_page_numbers": [],
+      "document_recall_at_3": null,
+      "matched_keywords": [],
+      "expected_document_in_final_selection": null,
+      "document_recall_at_5": null,
+      "expected_document_in_raw_candidates": null,
+      "irrelevant_evidence_count": 0,
+      "expected_document_in_final_context": null,
+      "expected_evidence_in_final_selection": null,
+      "answer_allowed_markers": [],
+      "evidence_precision": null,
+      "answer_unknown_markers_removed": 0,
+      "page_provenance_hit": null,
+      "expected_mode": null,
+      "retrieval_hit": null,
+      "relevant_evidence_count": 0,
+      "expected_evidence_in_final_context": null,
+      "answer_external_knowledge_allowed": false,
+      "keyword_coverage": 1.0,
+      "retrieved_doc_names": [],
+      "requested_mode": "auto",
+      "id": "pdf_no_answer",
+      "document_mrr": null,
+      "document_ranking_source": "initial_chunks",
+      "document_format": "pdf",
+      "evidence_recall": null,
+      "answer_policy_reason": "evidence_support_rejected",
+      "answer_allowed_evidence_count": 0,
+      "forbidden_evidence_phrases": [],
+      "mode": "auto",
+      "citation_hit": null,
+      "missing_keywords": [],
+      "answer_provider_called": false,
+      "answer_citation_required": false,
+      "total_eval_latency_ms": 16,
+      "used_reranker": false,
+      "forbidden_evidence_hit": null,
+      "answer_policy_outcome": "refuse",
+      "expected_doc_names": [],
+      "expected_evidence_phrases": [],
+      "trace_available": true,
+      "unknown_evidence_count": 0,
+      "router_reason": "default factual question",
+      "failure_reasons": [],
+      "predicted_answerable": false,
+      "expected_evidence_hit": null,
+      "top_3_doc_hit": null,
+      "document_recall_at_1": null,
+      "selected_mode": "chunk_only",
+      "router_accuracy": null,
+      "expected_answerable": false,
+      "question": "What is the release date of the Aspen runtime?",
+      "category": "no_answer",
+      "top_1_doc_hit": null,
+      "expected_evidence_in_raw_candidates": null,
+      "top_documents": [],
+      "ranked_retrieved_documents": [
+        {
+          "rank": 1,
+          "document_name": "aspen-current.pdf",
+          "score": 0.93
+        },
+        {
+          "rank": 2,
+          "document_name": "aspen-archive.pdf",
+          "score": 0.7711376319225047
+        },
+        {
+          "rank": 3,
+          "document_name": "cedar-current.txt",
+          "score": 0.7634456897861647
+        },
+        {
+          "rank": 4,
+          "document_name": "maple-current.md",
+          "score": 0.7634456897861647
+        },
+        {
+          "rank": 5,
+          "document_name": "birch-current.docx",
+          "score": 0.7634456897861647
+        }
+      ],
+      "final_evidence_units": []
+    }
+  ],
+  "stage_metrics": {
+    "document_recall_at_1": {
+      "mean": 0.85,
+      "applicable": 20
+    },
+    "document_recall_at_3": {
+      "mean": 1.0,
+      "applicable": 20
+    },
+    "document_recall_at_5": {
+      "mean": 1.0,
+      "applicable": 20
+    },
+    "document_mrr": {
+      "mean": 0.925,
+      "applicable": 20
+    },
+    "evidence_recall": {
+      "mean": 1.0,
+      "applicable": 20
+    },
+    "evidence_precision": {
+      "mean": 0.725,
+      "applicable": 20
+    },
+    "retrieval_hit": {
+      "passed": 20,
+      "applicable": 20,
+      "rate": 1.0
+    },
+    "expected_evidence_hit": {
+      "passed": 20,
+      "applicable": 20,
+      "rate": 1.0
+    },
+    "citation_hit": {
+      "passed": 20,
+      "applicable": 20,
+      "rate": 1.0
+    },
+    "answerability_accuracy": {
+      "passed": 24,
+      "applicable": 24,
+      "rate": 1.0
+    },
+    "page_provenance_hit": {
+      "passed": 2,
+      "applicable": 2,
+      "rate": 1.0
+    }
+  },
+  "by_format": {
+    "docx": {
+      "cases": 6,
+      "document_recall_at_1": {
+        "mean": 0.8,
+        "applicable": 5
+      },
+      "document_recall_at_3": {
+        "mean": 1.0,
+        "applicable": 5
+      },
+      "document_recall_at_5": {
+        "mean": 1.0,
+        "applicable": 5
+      },
+      "document_mrr": {
+        "mean": 0.9,
+        "applicable": 5
+      },
+      "evidence_recall": {
+        "mean": 1.0,
+        "applicable": 5
+      },
+      "evidence_precision": {
+        "mean": 0.9,
+        "applicable": 5
+      },
+      "retrieval_hit": {
+        "passed": 5,
+        "applicable": 5,
+        "rate": 1.0
+      },
+      "expected_evidence_hit": {
+        "passed": 5,
+        "applicable": 5,
+        "rate": 1.0
+      },
+      "citation_hit": {
+        "passed": 5,
+        "applicable": 5,
+        "rate": 1.0
+      },
+      "answerability_accuracy": {
+        "passed": 6,
+        "applicable": 6,
+        "rate": 1.0
+      },
+      "page_provenance_hit": {
+        "passed": 0,
+        "applicable": 0,
+        "rate": null
+      }
+    },
+    "markdown": {
+      "cases": 6,
+      "document_recall_at_1": {
+        "mean": 0.8,
+        "applicable": 5
+      },
+      "document_recall_at_3": {
+        "mean": 1.0,
+        "applicable": 5
+      },
+      "document_recall_at_5": {
+        "mean": 1.0,
+        "applicable": 5
+      },
+      "document_mrr": {
+        "mean": 0.9,
+        "applicable": 5
+      },
+      "evidence_recall": {
+        "mean": 1.0,
+        "applicable": 5
+      },
+      "evidence_precision": {
+        "mean": 0.7,
+        "applicable": 5
+      },
+      "retrieval_hit": {
+        "passed": 5,
+        "applicable": 5,
+        "rate": 1.0
+      },
+      "expected_evidence_hit": {
+        "passed": 5,
+        "applicable": 5,
+        "rate": 1.0
+      },
+      "citation_hit": {
+        "passed": 5,
+        "applicable": 5,
+        "rate": 1.0
+      },
+      "answerability_accuracy": {
+        "passed": 6,
+        "applicable": 6,
+        "rate": 1.0
+      },
+      "page_provenance_hit": {
+        "passed": 0,
+        "applicable": 0,
+        "rate": null
+      }
+    },
+    "pdf": {
+      "cases": 6,
+      "document_recall_at_1": {
+        "mean": 1.0,
+        "applicable": 5
+      },
+      "document_recall_at_3": {
+        "mean": 1.0,
+        "applicable": 5
+      },
+      "document_recall_at_5": {
+        "mean": 1.0,
+        "applicable": 5
+      },
+      "document_mrr": {
+        "mean": 1.0,
+        "applicable": 5
+      },
+      "evidence_recall": {
+        "mean": 1.0,
+        "applicable": 5
+      },
+      "evidence_precision": {
+        "mean": 0.7,
+        "applicable": 5
+      },
+      "retrieval_hit": {
+        "passed": 5,
+        "applicable": 5,
+        "rate": 1.0
+      },
+      "expected_evidence_hit": {
+        "passed": 5,
+        "applicable": 5,
+        "rate": 1.0
+      },
+      "citation_hit": {
+        "passed": 5,
+        "applicable": 5,
+        "rate": 1.0
+      },
+      "answerability_accuracy": {
+        "passed": 6,
+        "applicable": 6,
+        "rate": 1.0
+      },
+      "page_provenance_hit": {
+        "passed": 2,
+        "applicable": 2,
+        "rate": 1.0
+      }
+    },
+    "txt": {
+      "cases": 6,
+      "document_recall_at_1": {
+        "mean": 0.8,
+        "applicable": 5
+      },
+      "document_recall_at_3": {
+        "mean": 1.0,
+        "applicable": 5
+      },
+      "document_recall_at_5": {
+        "mean": 1.0,
+        "applicable": 5
+      },
+      "document_mrr": {
+        "mean": 0.9,
+        "applicable": 5
+      },
+      "evidence_recall": {
+        "mean": 1.0,
+        "applicable": 5
+      },
+      "evidence_precision": {
+        "mean": 0.6,
+        "applicable": 5
+      },
+      "retrieval_hit": {
+        "passed": 5,
+        "applicable": 5,
+        "rate": 1.0
+      },
+      "expected_evidence_hit": {
+        "passed": 5,
+        "applicable": 5,
+        "rate": 1.0
+      },
+      "citation_hit": {
+        "passed": 5,
+        "applicable": 5,
+        "rate": 1.0
+      },
+      "answerability_accuracy": {
+        "passed": 6,
+        "applicable": 6,
+        "rate": 1.0
+      },
+      "page_provenance_hit": {
+        "passed": 0,
+        "applicable": 0,
+        "rate": null
+      }
+    }
+  },
+  "failure_stage_counts": {
+    "success": 20,
+    "genuine_no_answer": 4
+  },
+  "retrieval_latency_summary": {
+    "mean": 7.875,
+    "p50": 7,
+    "p95": 13,
+    "max": 29
+  },
+  "total_eval_latency_summary": {
+    "mean": 10.083333333333334,
+    "p50": 8,
+    "p95": 18,
+    "max": 31
+  }
+}
